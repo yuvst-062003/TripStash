@@ -55,8 +55,8 @@ class TripCreate(ApiModel):
     name: str = Field(min_length=1, max_length=160)
     start_date: date | None = None
     end_date: date | None = None
-    base_currency: str = Field(default="USD", min_length=3, max_length=3)
-    total_budget: float | None = Field(default=None, ge=0)
+    base_currency: str = Field(default="USD", pattern=r"^[A-Za-z]{3}$")
+    total_budget: float | None = Field(default=None, ge=0, le=1_000_000_000)
     interests: list[str] = Field(default_factory=list)
 
 

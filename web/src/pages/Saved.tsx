@@ -185,8 +185,10 @@ function InboxView({
   const filterName = sourceFilter ? (names.get(sourceFilter) ?? 'this source') : null
 
   if (candidates.length === 0) {
+    const nothingCaptured = sources.data?.length === 0
     return sourceFilter ? (
       <Empty
+        animateIn={fresh}
         stamp="All clear"
         title={`Nothing left from ${filterName}`}
         body="Every item from it has been decided."
@@ -196,13 +198,25 @@ function InboxView({
           </button>
         }
       />
+    ) : nothingCaptured ? (
+      <Empty
+        animateIn={fresh}
+        title="Nothing to review yet"
+        body="Save a link, a screenshot or a video. What it finds lands here first — nothing reaches the map unconfirmed."
+        action={
+          <button className="btn btn--ink" onClick={onSave}>
+            Save something
+          </button>
+        }
+      />
     ) : (
       <Empty
+        animateIn={fresh}
         stamp="All clear"
         title="Nothing waiting"
         body="Everything captured has been reviewed. New items land here first — nothing reaches the map unconfirmed."
         action={
-          <button className="btn btn--coral" onClick={onSave}>
+          <button className="btn btn--ink" onClick={onSave}>
             Save something
           </button>
         }
@@ -285,7 +299,7 @@ function InboxView({
 }
 
 function PlacesView({ fresh }: { fresh: boolean }) {
-  const { position } = useApp()
+  const { position, openSave } = useApp()
   const [query, setQuery] = useState('')
   // One request per pause in typing, not per keystroke.
   const [q, setQ] = useState('')
@@ -302,6 +316,7 @@ function PlacesView({ fresh }: { fresh: boolean }) {
 
   return (
     <>
+      {(q || (places.data?.length ?? 0) > 0) && (
       <div className="pad" style={{ paddingBlock: 'var(--s-4) var(--s-3)' }}>
         <div className="searchbar searchbar--flat" style={{ marginInline: 0 }}>
           <Search size={17} className="dimmer" />
@@ -327,6 +342,7 @@ function PlacesView({ fresh }: { fresh: boolean }) {
           )}
         </div>
       </div>
+      )}
 
       <CacheNote visible={places.fromCache} />
       {places.loading && !places.data && <SkeletonRows rows={5} />}
@@ -345,9 +361,14 @@ function PlacesView({ fresh }: { fresh: boolean }) {
           />
         ) : (
           <Empty
-            stamp="No pins"
-            title="No confirmed places yet"
-            body="Stamp something in Inbox and it appears here and on the map."
+            animateIn={fresh}
+            title="No places yet"
+            body="Save a link, a screenshot or a video, confirm what it found in Inbox, and the place lands here and on the map."
+            action={
+              <button className="btn btn--ink" onClick={openSave}>
+                Save something
+              </button>
+            }
           />
         ))}
 
@@ -417,6 +438,7 @@ const isPast = (item: KnowledgeItem, todayMs: number) =>
   item.type === 'event' && item.happens_on != null && dayStart(item.ends_on ?? item.happens_on) < todayMs
 
 function KnowledgeView({ fresh }: { fresh: boolean }) {
+  const { openSave } = useApp()
   const [type, setType] = useState<string | null>(null)
   const archivedView = type === 'archived'
   const knowledge = useAsync(
@@ -483,8 +505,10 @@ function KnowledgeView({ fresh }: { fresh: boolean }) {
     })
   }, [knowledge.data, type, archivedView, todayMs])
 
+  const nothingAtAll = type === null && knowledge.data?.length === 0
   return (
     <>
+      {!nothingAtAll && (
       <div className="rail" style={{ paddingBlock: 'var(--s-4) var(--s-3)' }}>
         <Pill on={type === null} onClick={() => setType(null)}>
           All
@@ -498,17 +522,29 @@ function KnowledgeView({ fresh }: { fresh: boolean }) {
           Archived
         </Pill>
       </div>
+      )}
 
       {knowledge.loading && !knowledge.data && <SkeletonRows rows={4} />}
       {knowledge.error && <ErrorNote message={knowledge.error} onRetry={knowledge.reload} />}
       {knowledge.data && items.length === 0 && (
         <Empty
-          stamp={archivedView ? 'Nothing archived' : 'Nothing here'}
-          title={archivedView ? 'Nothing put away' : 'No saved knowledge yet'}
+          animateIn={fresh}
+          title={archivedView ? 'Nothing put away' : type ? `No ${KNOWLEDGE_LABEL[type]?.toLowerCase() ?? type} notes yet` : 'No notes yet'}
           body={
             archivedView
               ? 'Archive a tip and it waits here in case you need it back.'
-              : 'Not everything is a map pin. Safety warnings, transport tips, prices and packing advice live here, each with its source.'
+              : 'Not everything is a pin. Safety warnings, transport tips, prices and packing advice land here, each with its source.'
+          }
+          action={
+            nothingAtAll ? (
+              <button className="btn btn--ink" onClick={openSave}>
+                Save something
+              </button>
+            ) : type ? (
+              <button className="btn btn--ghost" onClick={() => setType(null)}>
+                Show everything
+              </button>
+            ) : undefined
           }
         />
       )}
@@ -613,6 +649,7 @@ function KnowledgeView({ fresh }: { fresh: boolean }) {
 }
 
 function SourcesView({ fresh }: { fresh: boolean }) {
+  const { openSave } = useApp()
   const sources = useAsync(() => api.sources(), [], true, 'saved:sources')
 
   if (sources.loading && !sources.data) return <SkeletonRows rows={4} />
@@ -620,9 +657,14 @@ function SourcesView({ fresh }: { fresh: boolean }) {
   if (sources.data?.length === 0) {
     return (
       <Empty
-        stamp="No sources"
+        animateIn={fresh}
         title="Nothing captured yet"
-        body="Every link, screenshot and video you capture is kept here, whatever the extraction managed to do with it."
+        body="Every link, screenshot and video you save is kept here, whatever the extraction managed to do with it."
+        action={
+          <button className="btn btn--ink" onClick={openSave}>
+            Save something
+          </button>
+        }
       />
     )
   }

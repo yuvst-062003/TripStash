@@ -34,19 +34,19 @@ export function useAsync<T>(
   )
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<number | null>(null)
-  const [loading, setLoading] = useState(enabled)
   const [fromCache, setFromCache] = useState(false)
   const [nonce, setNonce] = useState(0)
   const loaderRef = useRef(loader)
   loaderRef.current = loader
+  // The request that is due now, and the one that last answered: loading is
+  // the difference, known in the same render the inputs change.
+  const due = `${JSON.stringify(deps)}|${nonce}|${enabled}`
+  const [answered, setAnswered] = useState<string | null>(null)
+  const loading = enabled && answered !== due
 
   useEffect(() => {
-    if (!enabled) {
-      setLoading(false)
-      return
-    }
+    if (!enabled) return
     let cancelled = false
-    setLoading(true)
     loaderRef
       .current()
       .then((result) => {
@@ -62,12 +62,12 @@ export function useAsync<T>(
         setError(err instanceof ApiError ? err.message : 'Could not reach TripStash.')
         setStatus(err instanceof ApiError ? err.status : null)
       })
-      .finally(() => !cancelled && setLoading(false))
+      .finally(() => !cancelled && setAnswered(due))
     return () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, nonce, enabled])
+  }, [due])
 
   return { data, error, status, loading, fromCache, reload: () => setNonce((n) => n + 1) }
 }
@@ -104,7 +104,16 @@ export function useLocation() {
           status: 'granted',
           position: { lat: pos.coords.latitude, lon: pos.coords.longitude },
         }),
-      (err) => setState({ status: 'denied', message: err.message || 'Location was refused.' }),
+      (err) =>
+        setState({
+          status: 'denied',
+          message:
+            err.code === 1
+              ? 'Location was refused.'
+              : err.code === 3
+                ? 'Couldn’t get a fix — try again outside.'
+                : 'Location is unavailable right now.',
+        }),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
     )
   }, [])

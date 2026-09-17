@@ -116,7 +116,8 @@ export default function Home() {
     <div className="screen">
       <header className="hero">
         <div className="hero__top">
-          <span className="t-small dim clamp-1">{trip?.name}</span>
+          {/* The eyebrow names the trip only when the headline is a place. */}
+          <span className="t-small dim clamp-1">{data.current_destination ? trip?.name : 'Your trip'}</span>
           <HeroActions />
         </div>
         <motion.h1
@@ -128,7 +129,11 @@ export default function Home() {
           {headline}
         </motion.h1>
         <div className="hero__line">
-          {day !== null ? <span>Day {day}</span> : <span>{PHASE_LABEL[data.phase]}</span>}
+          {day !== null ? (
+            <span>Day {day}</span>
+          ) : (
+            <span>{!trip?.start_date && !trip?.end_date ? 'No dates yet' : PHASE_LABEL[data.phase]}</span>
+          )}
           {data.weather && (
             <span className="hero__chip">
               <CloudSun size={14} strokeWidth={2.4} />
@@ -137,7 +142,15 @@ export default function Home() {
                 ` · ${Math.round(data.weather.precipitation_probability * 100)}% rain`}
             </span>
           )}
-          {data.countdown_days !== null && <span>{data.countdown_days} days to go</span>}
+          {data.countdown_days !== null && (
+            <span>
+              {data.countdown_days === 0
+                ? 'Leaving today'
+                : data.countdown_days === 1
+                  ? 'Tomorrow'
+                  : `${data.countdown_days} days to go`}
+            </span>
+          )}
           {location.status !== 'granted' && (
             <button className="chip" onClick={requestLocation}>
               <Crosshair size={13} strokeWidth={2.4} />
@@ -215,11 +228,11 @@ export default function Home() {
       <SectionLabel>Brought back for you</SectionLabel>
       {data.resurfaced.length === 0 ? (
         <Empty
-          stamp="Nothing yet"
-          title="Your stash is empty"
-          body="Save a link, a screenshot or a downloaded video and TripStash brings it back when it becomes relevant."
+          animateIn={fresh}
+          title="Nothing saved yet"
+          body="Save a link, a screenshot or a video and TripStash brings it back when it becomes relevant."
           action={
-            <button className="btn btn--coral" onClick={openSave}>
+            <button className="btn btn--ink" onClick={openSave}>
               Save something
             </button>
           }

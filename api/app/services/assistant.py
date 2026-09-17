@@ -252,12 +252,16 @@ def _sources_for_place(session: Session, trip_id: str, place_id: str) -> list[di
 
 def _answer_nearby(session, trip, question, context, on, focus, intent) -> Answer:
     if context.lat is None or context.lon is None:
+        saved_any = session.execute(
+            select(TripPlace.id).where(TripPlace.trip_id == trip.id)
+        ).first()
         return Answer(
             text=(
-                "I do not have your location, so I cannot rank saves by distance. "
-                "Pick a destination or drop a pin and ask again."
+                "I don't know where you are, so I can't sort your saves by distance. "
+                "Tap Use my location, or mark a stop as here now on Trip."
+                if saved_any
+                else "You haven't saved anything yet. Save a link or a screenshot and ask again."
             ),
-            disclaimers=["Location unavailable - answer limited to saved records."],
             tools_used=["places:none"],
         )
 
@@ -463,7 +467,15 @@ def _answer_budget(session, trip, question, context, on, focus, intent) -> Answe
 
 def _answer_stay(session, trip, question, context, on, focus, intent) -> Answer:
     destination = _current_destination(session, trip, context)
-    where = destination.name if destination else (trip.name or "your destination")
+    if destination is None and not trip.destinations:
+        return Answer(
+            text=(
+                "You haven't added a stop yet, so I can't search stays. "
+                "Add one on Trip and ask again."
+            ),
+            tools_used=["places:none"],
+        )
+    where = destination.name if destination else trip.destinations[0].name
 
     saved = list(
         session.execute(

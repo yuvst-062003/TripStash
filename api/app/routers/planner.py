@@ -118,9 +118,12 @@ def home(
     daily_budget = None
     if trip.total_budget is not None:
         remaining_budget = trip.total_budget - spent_total
+        # The days the money has to cover: from today or the start, whichever
+        # is later, to the end. Days before the trip are not trip days.
+        first = max(trip.start_date, today) if trip.start_date else today
         days_left = (
-            max((trip.end_date - today).days + 1, 1)
-            if trip.end_date and trip.end_date >= today
+            max((trip.end_date - first).days + 1, 1)
+            if trip.end_date and trip.end_date >= first
             else None
         )
         daily_budget = {

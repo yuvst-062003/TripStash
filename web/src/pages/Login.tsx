@@ -115,7 +115,7 @@ export default function Login({ onAuthenticated }: { onAuthenticated: () => void
       write(LAST_EMAIL, email.trim().toLowerCase())
       // Let the form slip away before the app appears behind it.
       setLeaving(true)
-      window.setTimeout(onAuthenticated, reduced ? 0 : 200)
+      window.setTimeout(onAuthenticated, 200)
     } catch (err) {
       setError(
         err instanceof ApiError

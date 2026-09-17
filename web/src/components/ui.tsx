@@ -362,19 +362,32 @@ export function Banner({
   )
 }
 
+/**
+ * An empty state is an invitation: a heading, one line, one action. It
+ * arrives the way a row would. A stamp appears only when the state was
+ * earned ("All clear" after a queue was actually cleared), never as a label.
+ */
 export function Empty({
   title,
   body,
   action,
   stamp,
+  animateIn = true,
 }: {
   title: string
   body?: string
   action?: ReactNode
   stamp?: string
+  animateIn?: boolean
 }) {
+  const { reduced, spring } = useMotionPrefs()
   return (
-    <div className="empty">
+    <motion.div
+      className="empty"
+      initial={!animateIn ? false : reduced ? { opacity: 0 } : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={spring}
+    >
       {stamp && (
         <div style={{ marginBottom: 'var(--s-4)' }}>
           <Stamp tone="muted" size="lg" rotate={-8}>
@@ -382,20 +395,21 @@ export function Empty({
           </Stamp>
         </div>
       )}
-      <p className="empty__title">{title}</p>
+      <h2 className="empty__title">{title}</h2>
       {body && (
         <p className="t-small" style={{ marginTop: 8, maxWidth: '34ch', marginInline: 'auto' }}>
           {body}
         </p>
       )}
       {action && <div style={{ marginTop: 'var(--s-5)' }}>{action}</div>}
-    </div>
+    </motion.div>
   )
 }
 
+/** Rows that stand in for a list; held 150 ms so a fast answer never flashes them. */
 export function SkeletonRows({ rows = 4 }: { rows?: number }) {
   return (
-    <ul className="list" aria-hidden>
+    <ul className="list skeleton-hold" aria-hidden>
       {Array.from({ length: rows }).map((_, index) => (
         <li key={index}>
           <div className="item item--static">

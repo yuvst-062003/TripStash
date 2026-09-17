@@ -34,6 +34,8 @@ code { font: inherit; font-weight: 600; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  /* A skeleton's hold is a timing gate, not motion: it stays. */
+  .screen--loading, .skeleton-hold { animation-delay: 150ms !important; animation-duration: 0s !important; }
   /* Sheets drop their slide but keep a short fade (an animation, so the
      presence layer waits for it), so a change is still seen. */
   .drawer, .drawer-overlay { animation-duration: 150ms !important; animation-timing-function: linear !important; }
@@ -691,8 +693,8 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
 /* The Save form fills the sheet; its primary sits on the same line whatever the kind. */
 .save__form { display: flex; flex-direction: column; min-height: 100%; }
 .save__foot { margin-top: auto; padding-top: var(--s-5); position: sticky; bottom: 0; background: var(--paper); padding-bottom: var(--s-2); }
-/* A quiet disabled primary: coral only when it can be pressed. */
-.btn--coral:disabled { opacity: 1; background: var(--paper-2); color: var(--ink-3); }
+/* A quiet disabled primary: colour only when it can be pressed. */
+.btn--coral:disabled, .btn--ink:disabled:not([aria-busy='true']) { opacity: 1; background: var(--paper-2); color: var(--ink-3); }
 /* The media dropzone: a real boundary, a state for a drag, a state once files are chosen. */
 .dropzone {
   display: flex;
@@ -1186,11 +1188,11 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
 }
 @keyframes shimmer { to { transform: translateX(100%); } }
 /* A skeleton that shows for one frame is a flash, not a state: hold it 150 ms. */
-.screen--loading { animation: appear 0s 150ms both; }
+.screen--loading, .skeleton-hold { animation: appear 0s 150ms both; }
 @keyframes appear { from { visibility: hidden; } }
 
 .empty {
-  padding: var(--s-10) var(--s-4);
+  padding: var(--s-10) var(--s-4) calc(var(--s-10) + 52px); /* the FAB never covers the action */
   text-align: center;
   color: var(--ink-3);
 }

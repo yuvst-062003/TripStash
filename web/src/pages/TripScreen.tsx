@@ -5,6 +5,7 @@ import { ApiError, api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import { EXIT, FADE, useMotionPrefs } from '../lib/motion'
+import { useColdLoad } from '../App'
 import { tick } from '../lib/haptics'
 import { currentLocale } from '../lib/prefs'
 import type { GlobePoint } from '../components/Globe'
@@ -89,6 +90,7 @@ export default function TripScreen() {
     setParams(next === 'plan' ? {} : { section: next }, { replace: true })
   }
   const { reduced, spring } = useMotionPrefs()
+  const fresh = useColdLoad()
   useScreenContext({ surface: 'trip' })
   // The first section is on screen as the page arrives; only later ones enter.
   const mounted = useRef(false)
@@ -142,7 +144,12 @@ export default function TripScreen() {
               : 'The last stop on the route',
       }
     }
-    if (!trip?.start_date) return { eyebrow: 'No fixed start', line: 'Add a stop and a date when you know' }
+    if (!trip?.start_date) {
+      return {
+        eyebrow: 'No dates',
+        line: destinations.length ? 'Tap a stop to say you’re there' : 'Add your first stop',
+      }
+    }
     if (trip.phase === 'before' || (toStart !== null && toStart > 0)) {
       return {
         eyebrow: 'Getting close',
@@ -167,7 +174,7 @@ export default function TripScreen() {
         </div>
         <motion.h1
           className="t-display hero__title"
-          initial={reduced ? false : { opacity: 0, y: 10 }}
+          initial={!fresh ? false : reduced ? { opacity: 0 } : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={spring}
         >
@@ -191,7 +198,7 @@ export default function TripScreen() {
       <div className="pad">
         <motion.section
           className="journey night"
-          initial={reduced ? false : { opacity: 0, y: 14 }}
+          initial={!fresh ? false : reduced ? { opacity: 0 } : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ ...spring, delay: 0.08 }}
           aria-label="Your route on the globe"
@@ -366,15 +373,17 @@ function PlanSection() {
         {status}
       </p>
 
-      <SectionLabel>Day plan</SectionLabel>
-      {itinerary.loading && !itinerary.data && <SkeletonRows rows={3} />}
-      {itinerary.error && <ErrorNote message={itinerary.error} onRetry={itinerary.reload} />}
-      {itinerary.data && rows.length === 0 && (
-        <Empty
-          stamp="Open day"
-          title="Nothing scheduled"
-          body="Add a place to a day from its page, or ask the assistant whether now is a good moment."
-        />
+      {destinations.length > 0 && (
+        <>
+          <SectionLabel>Day plan</SectionLabel>
+          {itinerary.loading && !itinerary.data && <SkeletonRows rows={3} />}
+          {itinerary.error && <ErrorNote message={itinerary.error} onRetry={itinerary.reload} />}
+          {itinerary.data && rows.length === 0 && (
+            <p className="pad t-small dim">
+              Nothing scheduled. Add a place to a day from its page, or ask whether now is a good moment.
+            </p>
+          )}
+        </>
       )}
 
       {Object.entries(byDate).map(([date, items]) => {
@@ -504,7 +513,7 @@ function BookingsSection() {
 
       {bookings.data && rows.length === 0 && (
         <Empty
-          stamp="Nothing booked"
+          animateIn={false}
           title="No confirmations yet"
           body="TripStash never books anything itself. Reserve with the provider, then bring the code back here so it sits on your route."
         />
@@ -712,6 +721,11 @@ function MoneySection() {
           <div className="card card--ink" style={{ display: 'flex', gap: 'var(--s-4)', alignItems: 'center' }}>
             <div className="grow" aria-live="polite">
               <MoneyFigure amount={total} currency={base} />
+              {total === 0 && (
+                <p className="t-small dimmer" style={{ marginTop: 8 }}>
+                  Nothing spent yet
+                </p>
+              )}
               {budget != null && (
                 <p className="t-small dimmer num" style={{ marginTop: 8 }}>
                   of {money(budget, base)}

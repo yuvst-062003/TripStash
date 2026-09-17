@@ -144,6 +144,7 @@ export default function Journey() {
     current?.lat != null && current?.lon != null ? [current.lat, current.lon] : stops[stops.length - 1]
   // A route that spans a region gets the camera close enough to read it.
   const zoom = useMemo(() => {
+    if (stops.length === 0) return 3.4
     if (stops.length < 2) return 2.4
     const lats = stops.map((s) => s[0])
     const lons = stops.map((s) => s[1])
@@ -481,6 +482,11 @@ export default function Journey() {
           )}
         </AnimatePresence>
 
+        {destinations.length === 0 && !showList && (
+          <h2 className="t-title" style={{ marginBottom: 'var(--s-3)' }}>
+            Where does it start?
+          </h2>
+        )}
         <div className="searchbar searchbar--space" style={{ marginInline: 0 }}>
           <Search size={17} className="dimmer" />
           <input
@@ -495,7 +501,7 @@ export default function Journey() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onFocus={() => setPicked(null)}
-            placeholder={destinations.length ? 'Add the next stop — a city' : 'Where does it start? A city'}
+            placeholder={destinations.length ? 'Add the next stop — a city' : 'A city, like Antigua or Cusco'}
             aria-label="Search for a city to add"
             autoComplete="off"
             onKeyDown={(event) => {

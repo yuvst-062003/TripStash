@@ -52,7 +52,9 @@ function describeDetail(detail: unknown): string | null {
       if (field === 'email') return 'Enter a valid email address.'
       if (field === 'password') return 'Use at least 10 characters.'
       if (field === 'amount') return 'Enter an amount above 0.'
-      if (field === 'currency') return 'Use a 3-letter code like GTQ.'
+      if (field === 'total_budget') return 'Enter the budget as a number, like 2500.'
+      if (field === 'name') return 'Give the trip a name.'
+      if (field === 'currency' || field === 'base_currency') return 'Use a 3-letter code like GTQ.'
       if (field === 'start_time' || field === 'end_time') return 'Use a time like 09:30.'
       if (field === 'on_date' || field === 'spent_on') return 'Use a date like 2026-09-17.'
       return entry.msg?.replace(/^Value error, /, '') ?? null

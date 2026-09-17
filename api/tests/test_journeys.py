@@ -944,3 +944,48 @@ def test_export_rows_can_be_joined_back_together(client, auth, trip):
     for row in export["evidence"]:
         assert row["place_id"] in place_ids
         assert row["source_id"] in source_ids
+
+
+# ------------------------------------------------------------ a fresh trip
+
+
+def test_daily_budget_counts_only_the_days_of_the_trip(client, auth):
+    from datetime import date, timedelta
+
+    start = date.today() + timedelta(days=30)
+    end = start + timedelta(days=7)
+    created = client.post(
+        "/api/v1/trips",
+        headers=auth,
+        json={
+            "name": "Andes, slowly",
+            "base_currency": "USD",
+            "total_budget": 1000,
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+        },
+    )
+    assert created.status_code == 201, created.text
+    money = client.get("/api/v1/home", headers=auth).json()["money"]
+    assert money["daily"]["days_left"] == 8
+    assert money["daily"]["per_day"] == 125.0
+
+
+def test_a_trip_needs_a_real_currency_and_a_sane_budget(client, auth):
+    bad_code = client.post(
+        "/api/v1/trips", headers=auth, json={"name": "Trip", "base_currency": "123"}
+    )
+    assert bad_code.status_code == 422
+    absurd = client.post(
+        "/api/v1/trips", headers=auth, json={"name": "Trip", "total_budget": 1e300}
+    )
+    assert absurd.status_code == 422
+
+
+def test_ask_without_a_stop_does_not_search_the_trip_name(client, auth, trip):
+    for d in client.get("/api/v1/trips/current", headers=auth).json()["destinations"]:
+        client.delete(f"/api/v1/trips/current/destinations/{d['id']}", headers=auth)
+    answer = client.post("/api/v1/ask", headers=auth, json={"question": "Where can I stay?"}).json()
+    assert answer["cards"] == []
+    assert "Central America" not in answer["answer"]
+    assert "stop" in answer["answer"].lower()

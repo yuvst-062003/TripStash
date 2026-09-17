@@ -11,7 +11,7 @@ import { AnimatePresence, motion, type Variants } from 'motion/react'
 import { api, token } from './lib/api'
 import { AppContext, type AskSeed, type ScreenContext } from './lib/context'
 import { forget, useAsync, useLocation, useOnlineStatus } from './lib/hooks'
-import { useMotionPrefs } from './lib/motion'
+import { EXIT, useMotionPrefs } from './lib/motion'
 import { tick } from './lib/haptics'
 import AskSheet from './components/AskSheet'
 import SaveSheet from './components/SaveSheet'
@@ -24,7 +24,7 @@ import MapScreen from './pages/MapScreen'
 import Saved from './pages/Saved'
 import TripScreen from './pages/TripScreen'
 import Place from './pages/Place'
-import { Note, SkeletonRows } from './components/ui'
+import { ErrorNote, Note, SkeletonRows } from './components/ui'
 import { Globe } from './components/icons'
 import {
   BookmarkIcon,
@@ -76,6 +76,10 @@ export function useColdLoad(): boolean {
     booted = true
   }, [])
   return cold
+}
+/** The next first screen (a new account, a new trip) gets the cold-load entrance again. */
+export function resetColdLoad(): void {
+  booted = false
 }
 
 /**
@@ -145,6 +149,7 @@ export default function App() {
     // Nothing of this account waits for the next one.
     forget()
     forgetHome()
+    resetColdLoad()
     setProfileOpen(false)
     setSaveOpen(false)
     setAskSeed(null)
@@ -202,19 +207,41 @@ export default function App() {
     )
   }
 
-  if (tripState.loading && !tripState.data) {
+  // A 404 here means the account has no active trip yet, not a broken app —
+  // and New trip stays up through its own reload, so nothing flashes between.
+  if (tripState.status === 404 && !tripState.data) {
     return (
-      <div className="screen">
-        <div className="hero">
-          <div className="skeleton" style={{ height: 44, width: '60%' }} />
+      <NewTrip
+        onCreated={() => {
+          resetColdLoad()
+          tripState.reload()
+        }}
+        onSignOut={signOut}
+      />
+    )
+  }
+  if (!tripState.data) {
+    if (tripState.error && !tripState.loading) {
+      return (
+        <div className="screen">
+          <ErrorNote message={tripState.error} onRetry={tripState.reload} />
         </div>
-        <SkeletonRows rows={5} />
+      )
+    }
+    return (
+      <div className="screen screen--loading" aria-busy>
+        <div className="hero">
+          <div className="skeleton" style={{ height: 14, width: '40%' }} />
+          <div className="skeleton" style={{ height: 52, width: '70%', marginTop: 'var(--s-3)' }} />
+          <div className="skeleton" style={{ height: 32, width: '55%', marginTop: 'var(--s-3)', borderRadius: 999 }} />
+        </div>
+        <div className="pad">
+          <div className="skeleton" style={{ height: 96, borderRadius: 'var(--r-lg)' }} />
+        </div>
+        <SkeletonRows rows={3} />
       </div>
     )
   }
-
-  // A 404 here means the account has no active trip yet, not a broken app.
-  if (!tripState.data) return <NewTrip onCreated={tripState.reload} onSignOut={signOut} />
 
   return (
     <AppContext.Provider value={value}>
@@ -250,10 +277,13 @@ export default function App() {
 
         {/* Save is the one action worth floating; Ask lives in each screen's
             header, where the context it inherits is visible. */}
+        <AnimatePresence initial={false}>
         {!immersive && (
         <motion.button
+          key="fab"
           className="fab"
           whileTap={{ scale: 0.97 }}
+          exit={{ opacity: 0, transition: EXIT }}
           onClick={() => setSaveOpen(true)}
           onPointerEnter={() => plusRef.current?.startAnimation()}
           onPointerLeave={() => plusRef.current?.stopAnimation()}
@@ -262,9 +292,11 @@ export default function App() {
           Save
         </motion.button>
         )}
+        </AnimatePresence>
 
+        <AnimatePresence initial={false}>
         {!immersive && (
-        <nav className="tabbar" aria-label="Main">
+        <motion.nav key="tabbar" className="tabbar" aria-label="Main" exit={{ opacity: 0, transition: EXIT }}>
           <div className="tabbar__inner">
             {TABS.map(({ to, label, Icon }) => (
               <NavLink key={to} to={to} end={to === '/'} className="tabbar__item" onClick={() => tick()}>
@@ -291,8 +323,9 @@ export default function App() {
               </NavLink>
             ))}
           </div>
-        </nav>
+        </motion.nav>
         )}
+        </AnimatePresence>
 
         {askSeed && <AskSheet seed={askSeed} onClose={() => setAskSeed(null)} />}
         {saveOpen && <SaveSheet onClose={() => setSaveOpen(false)} />}

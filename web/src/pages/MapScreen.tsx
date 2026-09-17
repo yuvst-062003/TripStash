@@ -104,7 +104,7 @@ function clusterIcon(count: number): L.DivIcon {
 
 /** The traveller's own saves on a familiar base map. */
 export default function MapScreen() {
-  const { position, location, requestLocation } = useApp()
+  const { position, location, requestLocation, trip, openSave } = useApp()
   const [statuses, setStatuses] = useState<PlaceStatus[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [selected, setSelected] = useState<MapFeature | null>(null)
@@ -196,10 +196,18 @@ export default function MapScreen() {
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
+    // Nothing is invented: the first view is where you are, else the current
+    // stop, else the first stop with a pin, else the world.
+    const stop = trip?.destinations.find((d) => d.is_current && d.lat != null) ?? trip?.destinations.find((d) => d.lat != null)
+    const first: [number, number] | null = position
+      ? [position.lat, position.lon]
+      : stop?.lat != null && stop.lon != null
+        ? [stop.lat, stop.lon]
+        : null
     const map = L.map(containerRef.current, {
       zoomControl: false,
       attributionControl: true,
-    }).setView([14.5586, -90.7295], 12)
+    }).setView(first ?? [20, 0], first ? 11 : 2)
     // Attribution is required. It sits bottom-right, opposite the locate
     // control and above the sheet, so nothing overlaps it.
     map.attributionControl.setPosition('bottomright').setPrefix('')
@@ -442,7 +450,9 @@ export default function MapScreen() {
             <div className="banner banner--warn" style={{ boxShadow: 'var(--shadow-float)' }}>
               <Crosshair size={15} strokeWidth={2.2} />
               <div className="grow">
-                Location off — distances and walking times stay hidden until you allow it.
+                {location.message === 'Location was refused.'
+                  ? 'Location off — distances and walking times stay hidden until you allow it.'
+                  : location.message}
               </div>
             </div>
           </div>
@@ -480,6 +490,8 @@ export default function MapScreen() {
         onClearFilters={clearFilters}
         onClearSearch={() => setQuery('')}
         onHeight={onHeight}
+        onSave={openSave}
+        tripName={trip?.name}
       />
     </div>
   )
@@ -502,6 +514,8 @@ function MapSheet({
   searching,
   onClearFilters,
   onClearSearch,
+  onSave,
+  tripName,
   onHeight,
 }: {
   snap: Snap
@@ -520,6 +534,8 @@ function MapSheet({
   searching: boolean
   onClearFilters: () => void
   onClearSearch: () => void
+  onSave: () => void
+  tripName?: string
   onHeight: (px: number) => void
 }) {
   const { reduced, spring } = useMotionPrefs()
@@ -529,7 +545,9 @@ function MapSheet({
   const topRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const [contentPx, setContentPx] = useState(0)
-  const contentSized = Boolean(selected) && snap !== 'full'
+  // A selected card and a fresh account's empty state are both content-sized.
+  const nothingYet = total === 0 && !loading && !error && !searching && !hasFilters
+  const contentSized = (Boolean(selected) || nothingYet) && snap !== 'full'
 
   // A selected place's card is as tall as its content (measured live) up to
   // CARD_MAX; the list uses the snap points. One motion value drives both.
@@ -624,7 +642,9 @@ function MapSheet({
       ? 'Loading your places…'
       : searching || hasFilters
         ? `${features.length} of ${total} match`
-        : `${features.length} saved place${features.length === 1 ? '' : 's'}`
+        : total === 0
+          ? (tripName ?? 'Saved places')
+          : `${features.length} saved place${features.length === 1 ? '' : 's'}`
 
   return (
     <motion.section ref={sectionRef} className="map-sheet" style={{ height }} aria-label="Saved places">
@@ -657,7 +677,6 @@ function MapSheet({
         ) : features.length === 0 && !loading && !error ? (
           searching ? (
             <Empty
-              stamp="No match"
               title={`Nothing saved matches "${query.trim()}"`}
               body={`${total} place${total === 1 ? '' : 's'} on your map. Try part of the name.`}
               action={
@@ -668,7 +687,6 @@ function MapSheet({
             />
           ) : hasFilters ? (
             <Empty
-              stamp="No match"
               title="No places match these filters"
               body={`${total} place${total === 1 ? '' : 's'} on your map, none in this combination.`}
               action={
@@ -679,9 +697,13 @@ function MapSheet({
             />
           ) : (
             <Empty
-              stamp="Empty map"
-              title="Nothing pinned yet"
-              body="Save a link, a screenshot or a downloaded video, confirm what it found, and the pins land here."
+              title="No pins yet"
+              body="Save something, confirm it in Inbox, and the pin lands here."
+              action={
+                <button className="btn btn--ink" onClick={onSave}>
+                  Save something
+                </button>
+              }
             />
           )
         ) : (
