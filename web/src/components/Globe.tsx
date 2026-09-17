@@ -37,6 +37,7 @@ export default function Globe({
   size = 320,
   spin = 0.004,
   interactive = true,
+  vivid = false,
   className,
   style,
 }: {
@@ -46,6 +47,8 @@ export default function Globe({
   size?: number
   spin?: number
   interactive?: boolean
+  /** Saturated teal seas and a gold glow — for the sign-in globe. */
+  vivid?: boolean
   className?: string
   style?: React.CSSProperties
 }) {
@@ -77,13 +80,19 @@ export default function Globe({
       phi,
       theta: focusTheta,
       dark: dark ? 1 : 0,
-      diffuse: dark ? 1.4 : 1.1,
+      diffuse: vivid ? 1.6 : dark ? 1.4 : 1.1,
       mapSamples: 18000,
-      mapBrightness: dark ? 5 : 3.2,
-      mapBaseBrightness: dark ? 0.06 : 0.12,
-      baseColor: dark ? [0.16, 0.3, 0.29] : [0.6, 0.76, 0.68],
+      mapBrightness: vivid ? (dark ? 7 : 5.5) : dark ? 5 : 3.2,
+      mapBaseBrightness: vivid ? 0.16 : dark ? 0.06 : 0.12,
+      baseColor: vivid
+        ? dark
+          ? [0.22, 0.62, 0.52]
+          : [0.31, 0.72, 0.6]
+        : dark
+          ? [0.16, 0.3, 0.29]
+          : [0.6, 0.76, 0.68],
       markerColor: [1, 0.42, 0.24],
-      glowColor: dark ? [0.04, 0.09, 0.09] : [0.9, 0.94, 0.9],
+      glowColor: vivid ? (dark ? [0.4, 0.3, 0.08] : [1, 0.86, 0.45]) : dark ? [0.04, 0.09, 0.09] : [0.9, 0.94, 0.9],
       markers,
       arcs,
       arcColor: [1, 0.42, 0.24],
@@ -121,7 +130,7 @@ export default function Globe({
     }
     // Points and route change identity every render; compare by content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(points), JSON.stringify(route), focus?.[0], focus?.[1], size, spin, reduced])
+  }, [JSON.stringify(points), JSON.stringify(route), focus?.[0], focus?.[1], size, spin, reduced, vivid])
 
   return (
     <canvas

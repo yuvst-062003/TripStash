@@ -1098,3 +1098,16 @@ textarea.input { min-height: 84px; resize: vertical; }
   margin: -12px -8px 0 0;
   cursor: grab;
 }
+.login__intro {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(40vh + 110px);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  pointer-events: none;
+}
