@@ -67,6 +67,7 @@ async function request<T>(
   path: string,
   init: RequestInit = {},
   query?: Record<string, unknown>,
+  as: 'json' | 'blob' = 'json',
 ): Promise<Fetched<T>> {
   const url = new URL(path, window.location.origin)
   for (const [key, value] of Object.entries(query ?? {})) {
@@ -90,6 +91,7 @@ async function request<T>(
     throw new ApiError(401, 'Your session expired. Sign in again.')
   }
   if (response.status === 204) return { data: undefined as T, fromCache }
+  if (as === 'blob' && response.ok) return { data: (await response.blob()) as T, fromCache }
   if (!response.ok) {
     let detail = `Request failed (${response.status})`
     try {
@@ -216,11 +218,7 @@ export const api = {
   exportUrl: '/api/v1/export',
   /** The export needs the bearer token, which a plain link cannot carry. */
   exportBlob: async (): Promise<Blob> => {
-    const headers = new Headers()
-    const accessToken = token.get()
-    if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
-    const response = await fetch('/api/v1/export', { headers })
-    if (!response.ok) throw new ApiError(response.status, `Request failed (${response.status})`)
-    return response.blob()
+    const { data } = await request<Blob>('/api/v1/export', {}, undefined, 'blob')
+    return data
   },
 }

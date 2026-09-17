@@ -10,7 +10,7 @@ import {
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import { api, token } from './lib/api'
 import { AppContext, type AskSeed, type ScreenContext } from './lib/context'
-import { useAsync, useLocation, useOnlineStatus } from './lib/hooks'
+import { forget, useAsync, useLocation, useOnlineStatus } from './lib/hooks'
 import { useMotionPrefs } from './lib/motion'
 import { tick } from './lib/haptics'
 import AskSheet from './components/AskSheet'
@@ -19,7 +19,7 @@ import ProfileSheet from './components/ProfileSheet'
 import Journey from './pages/Journey'
 import Login from './pages/Login'
 import NewTrip from './pages/NewTrip'
-import Home from './pages/Home'
+import Home, { forgetHome } from './pages/Home'
 import MapScreen from './pages/MapScreen'
 import Saved from './pages/Saved'
 import TripScreen from './pages/TripScreen'
@@ -127,7 +127,9 @@ export default function App() {
   const scrolls = useRef(new Map<string, number>())
   const prevKey = useRef(route.key)
   if (prevPath.current !== route.pathname) {
-    dir.current = direction(prevPath.current, route.pathname)
+    // Forward is towards the reading direction: mirrored under RTL.
+    const rtl = document.documentElement.dir === 'rtl'
+    dir.current = (direction(prevPath.current, route.pathname) * (rtl ? -1 : 1)) as 1 | -1
     scrolls.current.set(prevKey.current, window.scrollY)
     prevPath.current = route.pathname
     prevKey.current = route.key
@@ -137,8 +139,15 @@ export default function App() {
 
   const tripState = useAsync(() => api.currentTrip(), [authed], authed)
 
+  const meState = useAsync(() => api.me(), [authed], authed)
   const signOut = useCallback(() => {
     token.clear()
+    // Nothing of this account waits for the next one.
+    forget()
+    forgetHome()
+    setProfileOpen(false)
+    setSaveOpen(false)
+    setAskSeed(null)
     setAuthed(false)
   }, [])
 
@@ -147,6 +156,7 @@ export default function App() {
 
   const value = useMemo(
     () => ({
+      me: meState.data,
       trip: tripState.data,
       reloadTrip: tripState.reload,
       location,
@@ -172,6 +182,7 @@ export default function App() {
       signOut,
     }),
     [
+      meState.data,
       tripState.data,
       tripState.reload,
       location,
@@ -183,7 +194,13 @@ export default function App() {
     ],
   )
 
-  if (!authed) return <Login onAuthenticated={() => setAuthed(true)} />
+  if (!authed) {
+    return (
+      <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
+        <Login onAuthenticated={() => setAuthed(true)} />
+      </motion.div>
+    )
+  }
 
   if (tripState.loading && !tripState.data) {
     return (

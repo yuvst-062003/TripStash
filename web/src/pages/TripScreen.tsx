@@ -6,6 +6,7 @@ import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import { EXIT, FADE, useMotionPrefs } from '../lib/motion'
 import { tick } from '../lib/haptics'
+import { currentLocale } from '../lib/prefs'
 import type { GlobePoint } from '../components/Globe'
 import Planet from '../components/Planet'
 import Starfield from '../components/Starfield'
@@ -65,7 +66,7 @@ const BOOKING_LABEL: Record<string, string> = {
 }
 
 const money = (amount: number, currency: string) =>
-  `${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currency}`
+  `${amount.toLocaleString(currentLocale(), { maximumFractionDigits: 0 })} ${currency}`
 
 /** A number typed with a comma decimal still counts. */
 const parseAmount = (text: string): number => Number(text.trim().replace(',', '.'))

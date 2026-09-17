@@ -183,6 +183,8 @@ def export_trip(
         ],
         "places": [
             {
+                "id": tp.place.id,
+                "trip_place_id": tp.id,
                 "name": tp.place.name,
                 "category": tp.place.category,
                 "lat": tp.place.lat,
@@ -213,6 +215,7 @@ def export_trip(
         ],
         "sources": [
             {
+                "id": s.id,
                 "kind": str(s.kind),
                 "url": s.url,
                 "title": s.title,

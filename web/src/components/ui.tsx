@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { motion } from 'motion/react'
 import { cn } from '../lib/cn'
 import { STAGGER_LIST, STAGGER_ROW, useMotionPrefs } from '../lib/motion'
+import { currentLocale } from '../lib/prefs'
 import type { PlaceStatus } from '../lib/types'
 import Drawer from './Drawer'
 import Segmented from './Segmented'
@@ -111,7 +112,7 @@ export function fmtDay(value: string | null | undefined): string | null {
   const date = value.length === 10 ? new Date(`${value}T00:00:00`) : parseIso(value)
   if (Number.isNaN(date.getTime())) return null
   const sameYear = date.getFullYear() === new Date().getFullYear()
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(currentLocale(), {
     day: 'numeric',
     month: 'short',
     year: sameYear ? undefined : 'numeric',
@@ -187,7 +188,8 @@ export function eventWhen(happensOn: string | null | undefined, endsOn?: string 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const days = Math.round((start.getTime() - today.getTime()) / 86_400_000)
-  const fmt = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  const fmt = (value: string) =>
+    new Date(`${value}T00:00:00`).toLocaleDateString(currentLocale(), { day: 'numeric', month: 'short' })
   const range = endsOn && endsOn !== happensOn ? `${fmt(happensOn)} – ${fmt(endsOn)}` : fmt(happensOn)
   if (days < 0) return endsOn && new Date(`${endsOn}T00:00:00`) >= today ? `On now · ${range}` : `Past · ${range}`
   if (days === 0) return `Today · ${range}`

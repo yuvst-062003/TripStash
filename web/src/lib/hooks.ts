@@ -13,6 +13,10 @@ export interface AsyncState<T> {
 
 /** Last good payloads by key, so a screen revisited in one session opens on what it showed. */
 const remembered = new Map<string, unknown>()
+/** On sign-out: nothing remembered may greet the next account. */
+export function forget(): void {
+  remembered.clear()
+}
 
 /**
  * Runs a request, keeps the last good data, and surfaces cache provenance.

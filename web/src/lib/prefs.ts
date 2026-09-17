@@ -41,12 +41,31 @@ const listeners = new Set<() => void>()
 
 export function applyPrefs(next: Prefs = prefs) {
   const root = document.documentElement
+  // While the tokens flip, no control eases its own colour: one cut, not a smear.
+  root.dataset.themeSwitching = ''
   if (next.theme === 'auto') delete root.dataset.theme
   else root.dataset.theme = next.theme
   const lang = LANGS.find((entry) => entry.value === next.lang) ?? LANGS[0]
   root.lang = lang.value
   root.dir = lang.dir
+  void getComputedStyle(root).opacity
+  requestAnimationFrame(() => requestAnimationFrame(() => delete root.dataset.themeSwitching))
+  // The browser chrome follows the chosen scheme, not only the OS one.
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]:not([media])')
+  if (next.theme === 'auto') {
+    meta?.remove()
+  } else {
+    if (!meta) {
+      meta = document.createElement('meta')
+      meta.name = 'theme-color'
+      document.head.prepend(meta)
+    }
+    meta.content = next.theme === 'dark' ? '#0a1c1f' : '#f3faf6'
+  }
 }
+
+/** The locale for dates and numbers, outside React (formatters live in plain functions). */
+export const currentLocale = () => LANGS.find((entry) => entry.value === prefs.lang)?.locale ?? 'en-GB'
 
 function write(next: Partial<Prefs>) {
   prefs = { ...prefs, ...next }

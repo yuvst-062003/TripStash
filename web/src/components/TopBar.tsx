@@ -3,8 +3,6 @@ import { useApp } from '../lib/context'
 import { cn } from '../lib/cn'
 import { SparklesIcon, type SparklesIconHandle } from './motion'
 import { Avatar } from './ProfileSheet'
-import { api } from '../lib/api'
-import { useAsync } from '../lib/hooks'
 
 /**
  * Compact sticky title bar for inner screens.
@@ -64,11 +62,10 @@ export function AskButton({ tone = 'ink' }: { tone?: 'ink' | 'ghost' }) {
 
 /** The account: a disc with your initial that opens the profile drawer. */
 export function ProfileButton() {
-  const { openProfile } = useApp()
-  const me = useAsync(() => api.me(), [])
+  const { openProfile, me } = useApp()
   return (
     <button className="avatar-btn" onClick={openProfile} aria-label="Your account and settings">
-      <Avatar email={me.data?.email} size={40} />
+      <Avatar email={me?.email} size={40} />
     </button>
   )
 }

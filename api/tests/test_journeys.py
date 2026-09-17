@@ -932,3 +932,15 @@ def test_a_bad_file_in_a_batch_stores_nothing(client, auth, trip):
     assert response.status_code == 415
     assert "bad.svg" in response.json()["detail"]
     assert client.get("/api/v1/sources", headers=auth).json() == []
+
+
+def test_export_rows_can_be_joined_back_together(client, auth, trip):
+    capture_reel(client, auth)
+    approve_all_places(client, auth)
+    export = client.get("/api/v1/export", headers=auth).json()
+    place_ids = {p["id"] for p in export["places"]}
+    source_ids = {s["id"] for s in export["sources"]}
+    assert place_ids and source_ids
+    for row in export["evidence"]:
+        assert row["place_id"] in place_ids
+        assert row["source_id"] in source_ids

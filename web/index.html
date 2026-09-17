@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#f3faf6" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0a1c1f" media="(prefers-color-scheme: dark)" />
+    <script>
+      // The chosen scheme and direction, before anything paints: no flash of the other.
+      try {
+        var t = localStorage.getItem('tripstash.theme'), l = localStorage.getItem('tripstash.lang'), r = document.documentElement
+        if (t === 'light' || t === 'dark') r.dataset.theme = t
+        if (l === 'he') { r.lang = 'he'; r.dir = 'rtl' } else if (l === 'es') r.lang = 'es'
+      } catch (e) {}
+    </script>
     <meta
       name="description"
       content="Save places from anywhere, see them around you, and bring them back when the moment is right."

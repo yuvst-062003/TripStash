@@ -40,6 +40,10 @@ import type { HomePayload } from '../lib/types'
 
 /** The last dashboard, kept across visits so a return renders at once and refreshes behind. */
 let lastHome: HomePayload | null = null
+/** On sign-out: the last account's home never shows for the next. */
+export function forgetHome(): void {
+  lastHome = null
+}
 
 /** Today in the traveller's own timezone, as the API expects it (YYYY-MM-DD). */
 const localToday = () => new Date().toLocaleDateString('en-CA')

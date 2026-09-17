@@ -1,7 +1,7 @@
 import { useId, useRef } from 'react'
 import { motion } from 'motion/react'
 import { tick } from '../lib/haptics'
-import { useMotionPrefs } from '../lib/motion'
+import { INSTANT, useMotionPrefs } from '../lib/motion'
 
 /**
  * Segmented control. One ink pill slides between options; the label text
@@ -16,17 +16,30 @@ export default function Segmented<T extends string>({
   options,
   label,
   name,
+  even,
+  kind = 'tabs',
 }: {
   value: T
   onChange: (next: T) => void
-  options: { value: T; label: string; badge?: number }[]
+  options: { value: T; label: string; badge?: number; lang?: string }[]
   label: string
   name?: string
+  /** Equal thirds for a settings control; the default lets labels size a scrolling one. */
+  even?: boolean
+  /** Tabs switch content; radios choose a setting. Screen readers say which. */
+  kind?: 'tabs' | 'radio'
 }) {
   const id = useId()
   const base = name ?? id
   const { spring } = useMotionPrefs()
   const tabs = useRef<Map<T, HTMLButtonElement>>(new Map())
+  // When the page's direction just flipped (a language change), the pill's old
+  // position only exists because of the mirror: it snaps with everything else.
+  const dir = typeof document === 'undefined' ? 'ltr' : document.documentElement.dir || 'ltr'
+  const lastDir = useRef(dir)
+  const flipped = lastDir.current !== dir
+  lastDir.current = dir
+  const rtl = dir === 'rtl'
   const choose = (next: T) => {
     if (next === value) return
     tick()
@@ -34,7 +47,9 @@ export default function Segmented<T extends string>({
   }
 
   function onKeyDown(event: React.KeyboardEvent) {
-    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+    const forward = rtl ? 'ArrowLeft' : 'ArrowRight'
+    const back = rtl ? 'ArrowRight' : 'ArrowLeft'
+    const step = event.key === forward ? 1 : event.key === back ? -1 : 0
     if (!step) return
     event.preventDefault()
     const at = options.findIndex((option) => option.value === value)
@@ -44,7 +59,12 @@ export default function Segmented<T extends string>({
   }
 
   return (
-    <div className="seg" role="tablist" aria-label={label} onKeyDown={onKeyDown}>
+    <div
+      className={`seg${even ? ' seg--even' : ''}`}
+      role={kind === 'radio' ? 'radiogroup' : 'tablist'}
+      aria-label={label}
+      onKeyDown={onKeyDown}
+    >
       {options.map((option) => {
         const selected = value === option.value
         return (
@@ -55,11 +75,12 @@ export default function Segmented<T extends string>({
               else tabs.current.delete(option.value)
             }}
             id={`${base}-tab-${option.value}`}
-            role="tab"
+            role={kind === 'radio' ? 'radio' : 'tab'}
             type="button"
             className="seg__item"
-            aria-selected={selected}
-            aria-controls={name ? `${name}-panel-${option.value}` : undefined}
+            aria-selected={kind === 'tabs' ? selected : undefined}
+            aria-checked={kind === 'radio' ? selected : undefined}
+            aria-controls={name && kind === 'tabs' ? `${name}-panel-${option.value}` : undefined}
             tabIndex={selected ? 0 : -1}
             onClick={() => choose(option.value)}
           >
@@ -67,12 +88,12 @@ export default function Segmented<T extends string>({
               <motion.span
                 className="seg__pill"
                 layoutId={`seg-${id}`}
-                transition={spring}
+                transition={flipped ? INSTANT : spring}
                 style={{ borderRadius: 19 }}
                 aria-hidden
               />
             )}
-            <span className="seg__label">
+            <span className="seg__label" lang={option.lang}>
               {option.label}
               {option.badge ? <span className="seg__badge">{option.badge}</span> : null}
             </span>

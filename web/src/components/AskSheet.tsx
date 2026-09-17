@@ -5,6 +5,7 @@ import { ApiError, api } from '../lib/api'
 import { useApp, type AskSeed } from '../lib/context'
 import { STAGGER_LIST, STAGGER_ROW, useMotionPrefs } from '../lib/motion'
 import { STAMP_PATTERN, tick } from '../lib/haptics'
+import { currentLocale } from '../lib/prefs'
 import type { AskCard, AskResponse, ProposedAction } from '../lib/types'
 import { StampDrop } from './Stamp'
 import {
@@ -52,7 +53,7 @@ function starters(seed: AskSeed): string[] {
 }
 
 const money = (amount: number, currency: string) =>
-  `${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currency}`
+  `${amount.toLocaleString(currentLocale(), { maximumFractionDigits: 0 })} ${currency}`
 const norm = (text: string | null | undefined) =>
   (text ?? '')
     .trim()

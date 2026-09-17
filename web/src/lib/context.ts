@@ -22,7 +22,15 @@ export interface ScreenContext {
   label?: string
 }
 
+export interface Me {
+  id: string
+  email: string
+  display_name: string | null
+}
+
 export interface AppContextValue {
+  /** The account, once known; null while it loads. */
+  me: Me | null
   trip: Trip | null
   reloadTrip: () => void
   location: LocationState

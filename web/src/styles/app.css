@@ -41,8 +41,19 @@ code { font: inherit; font-weight: 600; }
   .drawer[data-state='open'] { animation-name: fadeIn !important; }
   .drawer[data-state='closed'] { animation-name: fadeOut !important; }
 }
-/* vaul's default slide is 500 ms; the app's ceiling is 400. */
-[data-vaul-drawer], [data-vaul-overlay] { animation-duration: 400ms; transition-duration: 400ms; }
+/* vaul injects its own 500 ms rules at runtime; the app's ceiling is 400. */
+.drawer[data-vaul-drawer], .drawer-overlay[data-vaul-overlay] { animation-duration: 400ms !important; transition-duration: 400ms !important; }
+.drawer-overlay { transition-property: opacity; }
+
+/* Right-to-left: the chrome mirrors, but every sentence keeps the direction
+   of its own first letter, so English copy stays readable until it is
+   translated and Hebrew copy flips itself when it arrives. */
+p, h1, h2, h3, .t, .t-small, .t-head, .t-title, .t-display, .meta, .stamp, .chip, .btn, input, textarea { unicode-bidi: plaintext; }
+.num { unicode-bidi: isolate; direction: ltr; }
+[dir='rtl'] :is(.lucide-chevron-right, .lucide-arrow-left, .lucide-arrow-right, .lucide-log-out, .lucide-arrow-up-right, .lucide-send, .lucide-navigation) { transform: scaleX(-1); }
+
+/* A theme switch is one cut: no control eases its own colour after the paper has flipped. */
+:root[data-theme-switching] *, :root[data-theme-switching] *::before, :root[data-theme-switching] *::after { transition: none !important; }
 
 /* ---------------------------------------------------------------------------
    Type
@@ -188,7 +199,7 @@ code { font: inherit; font-weight: 600; }
   font-variation-settings: 'opsz' 32, 'wdth' 92;
   letter-spacing: -0.015em;
 }
-.section__count { color: var(--ink-3); font: var(--small); margin-left: 6px; }
+.section__count { color: var(--ink-3); font: var(--small); margin-inline-start: 6px; }
 
 .rail {
   display: flex;
@@ -218,7 +229,7 @@ code { font: inherit; font-weight: 600; }
   gap: var(--s-3);
   width: 100%;
   padding: var(--s-4) var(--s-4);
-  text-align: left;
+  text-align: start;
   background: none;
   border: 0;
   color: inherit;
@@ -293,7 +304,7 @@ code { font: inherit; font-weight: 600; }
   background: var(--card);
   border: 1px solid var(--line);
   color: inherit;
-  text-align: left;
+  text-align: start;
   transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 @media (hover: hover) {
@@ -442,7 +453,10 @@ code { font: inherit; font-weight: 600; }
   z-index: 1;
   transition: color var(--dur) var(--ease);
 }
-.seg__item[aria-selected='true'] { color: var(--on-teal); }
+.seg__item[aria-selected='true'], .seg__item[aria-checked='true'] { color: var(--on-teal); }
+/* In a drawer the group label is quieter than the account it sits under. */
+.drawer__group { margin-top: var(--s-6); margin-bottom: var(--s-2); font: var(--head); color: var(--ink-2); }
+.seg--even .seg__item { flex: 1 1 0; }
 .seg__item:active { transform: scale(0.97); transition-duration: 0ms; }
 .seg__label { position: relative; z-index: 1; }
 .seg__pill {
@@ -452,7 +466,7 @@ code { font: inherit; font-weight: 600; }
   background: var(--primary-gradient);
   z-index: 0;
 }
-.seg__badge { margin-left: 5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.seg__badge { margin-inline-start: 5px; font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* ---------------------------------------------------------------------------
    Sequences — a timeline for the day, a stepper for the route. Both really
@@ -617,7 +631,7 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
 
 .fab {
   position: fixed;
-  right: var(--s-4);
+  inset-inline-end: var(--s-4);
   bottom: calc(var(--nav-h) + var(--s-3));
   translate: 0 calc(-1 * var(--fab-lift, 0px));
   z-index: 45;
@@ -625,7 +639,8 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   align-items: center;
   gap: var(--s-2);
   min-height: 52px;
-  padding: 0 var(--s-5) 0 var(--s-4);
+  padding-block: 0;
+  padding-inline: var(--s-4) var(--s-5);
   border: 0;
   border-radius: var(--r-pill);
   background: var(--coral);
@@ -701,20 +716,20 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
 .thumbs { display: flex; gap: var(--s-2); overflow-x: auto; scrollbar-width: none; padding: 2px; }
 .thumb { position: relative; flex: none; width: 56px; height: 56px; border-radius: 10px; background: var(--paper-2); overflow: hidden; display: grid; place-items: center; color: var(--ink-3); }
 .thumb img { width: 100%; height: 100%; object-fit: cover; }
-.thumb__x { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; border: 0; border-radius: 50%; background: var(--ink); color: var(--paper); display: grid; place-items: center; cursor: pointer; }
+.thumb__x { position: absolute; top: 2px; inset-inline-end: 2px; width: 22px; height: 22px; border: 0; border-radius: 50%; background: var(--ink); color: var(--paper); display: grid; place-items: center; cursor: pointer; }
 /* The capture, shown as what it is, with the stamp landing on its corner. */
 .capture { position: relative; margin-top: var(--s-4); padding: var(--s-8) var(--s-4) var(--s-4); border-radius: var(--r-md); background: var(--card); border: 1px solid var(--line); }
-.capture__stamp { position: absolute; top: -22px; right: var(--s-3); }
-.capture .t-head { padding-right: var(--s-4); }
+.capture__stamp { position: absolute; top: -22px; inset-inline-end: var(--s-3); }
+.capture .t-head { padding-inline-end: var(--s-4); }
 input[type='date'].input { height: 48px; }
 input[type='date'].input:invalid::-webkit-datetime-edit { color: var(--ink-3); }
 .field + .btn, .stack > .btn--block { margin-top: var(--s-2); }
 
 /* The assistant's field and its send disc. */
-textarea.ask__field { min-height: 48px; max-height: 160px; padding-right: 56px; resize: none; field-sizing: content; overflow: auto; }
+textarea.ask__field { min-height: 48px; max-height: 160px; padding-inline-end: 56px; resize: none; field-sizing: content; overflow: auto; }
 .ask__send {
   position: absolute;
-  right: 4px;
+  inset-inline-end: 4px;
   bottom: 2px;
   color: var(--ink-3);
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
@@ -733,7 +748,8 @@ textarea.ask__field { min-height: 48px; max-height: 160px; padding-right: 56px; 
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+  padding-block: var(--s-2);
+  padding-inline: var(--s-4) var(--s-2);
 }
 .drawer__title {
   font: var(--title);
@@ -845,7 +861,7 @@ textarea.ask__field { min-height: 48px; max-height: 160px; padding-right: 56px; 
 
 .map-side {
   position: absolute;
-  left: var(--s-4);
+  inset-inline-start: var(--s-4);
   bottom: calc(var(--nav-h) + var(--s-3));
   translate: 0 calc(-1 * var(--fab-lift, 0px));
   z-index: 500;
@@ -958,7 +974,7 @@ textarea.ask__field { min-height: 48px; max-height: 160px; padding-right: 56px; 
   border: 0;
   background: transparent;
   color: inherit;
-  text-align: left;
+  text-align: start;
   cursor: grab;
   touch-action: none;
 }
@@ -993,7 +1009,7 @@ textarea.ask__field { min-height: 48px; max-height: 160px; padding-right: 56px; 
 }
 .hero-map__coords {
   position: absolute;
-  right: var(--s-4);
+  inset-inline-end: var(--s-4);
   bottom: var(--s-3);
   z-index: 401;
   color: var(--ink-3);
@@ -1003,7 +1019,7 @@ textarea.ask__field { min-height: 48px; max-height: 160px; padding-right: 56px; 
 .hero-map__stamp {
   position: absolute;
   top: calc(var(--s-4) + env(safe-area-inset-top));
-  right: var(--s-4);
+  inset-inline-end: var(--s-4);
   z-index: 401;
 }
 .place-title {
@@ -1471,12 +1487,11 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
   display: inline-grid;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--coral) 0%, var(--teal) 100%);
-  color: #ffffff;
+  background: var(--ink);
+  color: var(--paper);
   font-weight: 800;
   font-variation-settings: 'wdth' 90;
   letter-spacing: -0.02em;
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
   flex: none;
 }
 .avatar-btn {
@@ -1567,7 +1582,7 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   color: var(--ink);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
@@ -1605,7 +1620,7 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
   border: 0;
   background: none;
   color: var(--ink);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .suggest__row:hover { background: rgba(255, 255, 255, 0.06); }
@@ -1615,7 +1630,7 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
 .journey__open {
   position: absolute;
   top: var(--s-3);
-  right: var(--s-3);
+  inset-inline-end: var(--s-3);
   z-index: 2;
   display: inline-flex;
   align-items: center;
