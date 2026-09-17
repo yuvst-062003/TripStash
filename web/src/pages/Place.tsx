@@ -285,10 +285,15 @@ export default function Place() {
         ? `${Math.round(header.distance_km)} km away`
         : null
 
+  // Pictures come from the saved links and uploads; everything else is a source row.
+  const isPhoto = (source: PlacePage['saved_content'][number]) =>
+    Boolean(source.media_type?.startsWith('image/') && (source.file_url || source.url))
+  const photos = sources.filter(isPhoto)
+  const documents = sources.filter((source) => !isPhoto(source))
   // The reason is usually the creator's own sentence. Said once, with its
   // author, rather than twice in gold 200px apart.
   const echo = overview.why_saved
-    ? sources.find((source) => source.quote && norm(source.quote) === norm(overview.why_saved))
+    ? documents.find((source) => source.quote && norm(source.quote) === norm(overview.why_saved))
     : undefined
   const sourceTitle = (source: PlacePage['saved_content'][number]) =>
     source.title || source.url || SOURCE_LABEL[source.kind] || source.kind
@@ -436,6 +441,31 @@ export default function Place() {
         </>
       )}
 
+      {photos.length > 0 && (
+        <div className="photos" aria-label="Photos">
+          {photos.map((photo) => (
+            <a
+              key={photo.source_id}
+              className="photo"
+              href={photo.url ?? photo.file_url ?? '#'}
+              target="_blank"
+              rel="noreferrer"
+              title={photo.title ?? undefined}
+            >
+              <img
+                src={photo.file_url ?? photo.url ?? ''}
+                alt={photo.title ?? ''}
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={(event) => {
+                  ;(event.currentTarget.parentElement as HTMLElement).style.display = 'none'
+                }}
+              />
+            </a>
+          ))}
+        </div>
+      )}
+
       <SectionLabel>Why you saved it</SectionLabel>
       <div className="pad">
         {overview.why_saved ? (
@@ -453,12 +483,12 @@ export default function Place() {
         )}
       </div>
 
-      <SectionLabel count={sources.length > 1 ? sources.length : undefined}>Saved content</SectionLabel>
-      {sources.length === 0 ? (
+      <SectionLabel count={documents.length > 1 ? documents.length : undefined}>Saved content</SectionLabel>
+      {documents.length === 0 ? (
         <p className="pad t-small dimmer">No source is attached to this place yet.</p>
       ) : (
         <ul className="list">
-          {sources.map((source) => (
+          {documents.map((source) => (
             <li key={source.source_id}>
               <div className="item item--static">
                 <div className="item__body">

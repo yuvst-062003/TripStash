@@ -181,6 +181,8 @@ export interface PlacePage {
     published_on: string | null
     captured_at: string
     provenance: string
+    media_type?: string | null
+    file_url?: string | null
     takeaway: string | null
     quote: string | null
     media_timestamp_seconds: number | null

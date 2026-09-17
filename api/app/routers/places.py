@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.adapters import get_places, get_weather
+from app.adapters import get_places, get_storage, get_weather
 from app.db import get_session
 from app.deps import current_trip, owned_or_404
 from app.models.capture import KnowledgeItem, Source, SourcePlaceEvidence
@@ -204,6 +204,10 @@ def place_page(
                 "published_on": source.published_on.isoformat() if source.published_on else None,
                 "captured_at": source.created_at.isoformat(),
                 "provenance": str(source.provenance),
+                "media_type": source.media_type,
+                "file_url": (
+                    get_storage().signed_url(source.storage_key) if source.storage_key else None
+                ),
                 "takeaway": row.takeaway,
                 "quote": row.quote,
                 "media_timestamp_seconds": row.media_timestamp_seconds,
