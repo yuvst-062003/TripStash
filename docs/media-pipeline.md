@@ -31,6 +31,34 @@ pip install -e ".[asr]"          # optional: speech to text
 
 Nothing above costs money and nothing needs an account.
 
+## Links: the client reads, the server understands
+
+The server is the worst place in the system to read a social link. It sits on a
+datacenter IP, which is the first thing bot protection blocks; it is signed in
+to nothing; and it is geographically wherever the host happens to be. The
+traveller's own browser is on a residential connection, already holds whatever
+session the platform gave it, and is where the content was being looked at
+anyway.
+
+So a link is tried in this order, and the status records which path worked:
+
+1. **The operating system's share sheet.** The manifest declares TripStash as a
+   share target, so sharing a post into the installed app hands over the
+   caption directly - no fetching at all, and nothing that can be blocked. This
+   is the best path and it is also the least clever.
+2. **The browser calling oEmbed**, from the traveller's own connection.
+3. **The server calling oEmbed or reading Open Graph**, for ordinary pages
+   where nobody is being blocked.
+4. **Asking**, with the link kept either way.
+
+### What is deliberately not built
+
+Scraping a platform's markup with a headless browser, or downloading video
+files. Both breach the platforms' terms, both are non-goals in specification
+3.3, and - separately from any of that - a datacenter scraper is the *most*
+fragile option available, not the most powerful. The client-side paths above
+are better on every axis at once.
+
 ## Links: only what a site publishes
 
 A pasted URL is read before anything else, because that is usually where the

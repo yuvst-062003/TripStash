@@ -112,6 +112,8 @@ export const api = {
 
   // capture and review
   captureLink: (body: Record<string, unknown>) => post<SourceSummary>('/api/v1/sources', body),
+  // `reader` records which path recovered the caption: the browser, the
+  // operating system's share sheet, or the traveller typing it.
   upload: (files: File[], note?: string) => {
     const form = new FormData()
     files.forEach((file) => form.append('files', file))

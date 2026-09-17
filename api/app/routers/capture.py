@@ -24,7 +24,7 @@ from app.adapters.storage import ALLOWED_MEDIA_TYPES, SignatureError, Unsupporte
 from app.config import get_settings
 from app.db import get_session
 from app.deps import audit, current_trip, current_user, owned_or_404
-from app.models.capture import ExtractionCandidate, Source
+from app.models.capture import ExtractionCandidate, MediaStage, Source
 from app.models.core import Trip, User
 from app.models.enums import CandidateStatus, SourceKind
 from app.schemas.api import (
@@ -45,6 +45,13 @@ from app.services.extraction import (
 from app.worker import enqueue_source_processing
 
 router = APIRouter(tags=["capture"])
+
+# Friendly names for the paths that can recover a caption, best first.
+READER_LABELS = {
+    "share-target": "share sheet",
+    "browser-oembed": "browser · oEmbed",
+    "manual": "typed by you",
+}
 
 
 def _serialise_source(session: Session, source: Source) -> SourceResponse:
@@ -126,6 +133,22 @@ def capture_link(
         return _serialise_source(session, exc.source)
     except CaptureError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+    # The client can read a link the server cannot: it is on the traveller's own
+    # connection rather than a datacenter IP. Record which path supplied the
+    # text so the status is honest about it.
+    if body.reader and body.text:
+        session.add(
+            MediaStage(
+                source_id=source.id,
+                position=0,
+                name="link",
+                engine=READER_LABELS.get(body.reader, body.reader),
+                status="ok",
+                duration_ms=0,
+                detail=f"caption of {len(body.text)} chars supplied by the client",
+            )
+        )
 
     session.commit()
     enqueue_source_processing(source.id, background)

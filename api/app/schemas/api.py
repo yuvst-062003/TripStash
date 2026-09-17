@@ -106,6 +106,10 @@ class LinkCapture(ApiModel):
     author: str | None = None
     published_on: date | None = None
     kind: SourceKind = SourceKind.LINK
+    # Who recovered the caption: the operating system's share sheet, the
+    # traveller's own browser, or the traveller typing it. Recorded so the
+    # status shows which path worked, and never trusted for anything else.
+    reader: str | None = Field(default=None, max_length=40)
 
 
 class MediaStageResponse(ApiModel):

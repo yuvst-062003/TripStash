@@ -510,3 +510,49 @@ def test_a_video_with_no_speech_still_yields_reviewable_candidates(client, auth,
         if evidence["media_timestamp_seconds"] is not None
     ]
     assert stamped, "on-screen quotes should carry the moment they appeared"
+
+
+TIKTOK_CAPTION = (
+    "Cerro de la Cruz at sunset is the best free view in Antigua. "
+    "Careful with the taxi scam at the terminal, they quote four times the price."
+)
+
+
+def test_a_caption_the_client_recovered_is_saved_and_credited(client, auth, trip):
+    """The share sheet and the browser can read what the server cannot.
+
+    A datacenter IP is the first thing bot protection blocks, so the caption
+    arrives from the traveller's own device instead. The API records which path
+    supplied it rather than pretending it fetched anything.
+    """
+    response = client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={
+            "url": "https://vt.tiktok.com/ZSqsY4ykw/",
+            "text": TIKTOK_CAPTION,
+            "kind": "link",
+            "reader": "share-target",
+        },
+    )
+    assert response.status_code == 201, response.text
+    source = response.json()
+
+    assert source["status"] == "needs_review"
+    stage = next(stage for stage in source["stages"] if stage["name"] == "link")
+    assert stage["engine"] == "share sheet"
+    assert stage["status"] == "ok"
+
+    inbox = client.get("/api/v1/inbox", headers=auth, params={"source_id": source["id"]}).json()
+    types = {candidate["type"] for candidate in inbox}
+    assert "place" in types and "safety" in types
+
+
+def test_the_server_does_not_claim_to_have_read_a_link_the_client_read(client, auth, trip):
+    """No `reader`, no credit: the stage only appears when a path really ran."""
+    response = client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={"url": "https://example-blog.test/a", "text": "Go to Semuc Champey.", "kind": "link"},
+    )
+    assert [stage for stage in response.json()["stages"] if stage["name"] == "link"] == []

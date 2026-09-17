@@ -12,6 +12,7 @@ import MapScreen from './pages/MapScreen'
 import Saved from './pages/Saved'
 import TripScreen from './pages/TripScreen'
 import Place from './pages/Place'
+import ShareTarget from './pages/ShareTarget'
 import { Note, SkeletonRows } from './components/ui'
 import {
   Bookmark,
@@ -115,6 +116,8 @@ export default function App() {
           <Route path="/saved" element={<Saved />} />
           <Route path="/trip" element={<TripScreen />} />
           <Route path="/places/:tripPlaceId" element={<Place />} />
+          {/* Declared in the manifest as the share target; the OS lands here. */}
+          <Route path="/save" element={<ShareTarget />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
 

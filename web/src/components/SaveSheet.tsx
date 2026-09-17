@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { ApiError, api } from '../lib/api'
 import { useApp } from '../lib/context'
 import type { SourceSummary } from '../lib/types'
+import { hasBrowserReader, readLinkInBrowser } from '../lib/linkReader'
 import { Note, Sheet, Tabs } from './ui'
-import { Check, Upload } from './icons'
+import { Check, Loader2, Upload } from './icons'
 
 type Mode = 'link' | 'upload' | 'note' | 'place'
 
@@ -22,6 +23,28 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SourceSummary[] | null>(null)
+  const [reader, setReader] = useState<string | null>(null)
+  const [reading, setReading] = useState(false)
+
+  /**
+   * Ask the platform for the caption from here rather than from the server.
+   * The browser is on the traveller's own connection, which is the one a
+   * platform will actually answer. Finding nothing is an ordinary outcome.
+   */
+  async function tryReadLink(candidate: string) {
+    const trimmed = candidate.trim()
+    if (!trimmed || !hasBrowserReader(trimmed)) return
+    setReading(true)
+    try {
+      const read = await readLinkInBrowser(trimmed)
+      if (read?.text) {
+        setText((current) => current || read.text || '')
+        setReader(read.reader)
+      }
+    } finally {
+      setReading(false)
+    }
+  }
 
   async function save(event: React.FormEvent) {
     event.preventDefault()
@@ -36,6 +59,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
           url: mode === 'link' ? url.trim() || null : null,
           text: text.trim() || null,
           kind: mode === 'note' ? 'note' : mode === 'link' ? 'link' : 'manual',
+          reader: mode === 'link' ? reader : null,
         })
         setResult([data])
       }
@@ -116,9 +140,27 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
                 type="url"
                 placeholder="Reel, TikTok, article or Maps link"
                 value={url}
-                onChange={(event) => setUrl(event.target.value)}
+                onChange={(event) => {
+                  setUrl(event.target.value)
+                  setReader(null)
+                }}
+                onBlur={(event) => void tryReadLink(event.target.value)}
+                onPaste={(event) => {
+                  const pasted = event.clipboardData.getData('text')
+                  if (pasted) window.setTimeout(() => void tryReadLink(pasted), 0)
+                }}
               />
             </label>
+
+            {reading && (
+              <p className="row t-sm dim" style={{ gap: 6 }}>
+                <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                Asking the platform for the caption…
+              </p>
+            )}
+            {reader && !reading && (
+              <Note Icon={Check}>Caption read by your browser, straight from the platform.</Note>
+            )}
             <label className="field">
               <span>Caption or transcript</span>
               <textarea
