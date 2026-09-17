@@ -1,15 +1,21 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { motion } from 'motion/react'
 import { ApiError, api } from '../lib/api'
+import { useMotionPrefs } from '../lib/motion'
 import type { Candidate } from '../lib/types'
-import { Banner, Confidence, KNOWLEDGE_LABEL, Meta, Note, pairText } from './ui'
-import { Check, Layers, Pencil, X } from './icons'
+import { Banner, Confidence, KNOWLEDGE_LABEL, Meta, Note, knowledgeTint, pairText, stampToneFor } from './ui'
+import { Stamp, StampDrop } from './Stamp'
+import { Layers, Pencil, StickyNote, X } from './icons'
+import { CheckIcon, type CheckIconHandle } from './motion'
+
+type Decision = 'saved' | 'ignored' | null
 
 /**
  * One extracted item awaiting a decision.
  *
  * Everything claimed appears with the words it came from, its confidence and
  * the place it resolved to. Nothing happens until approve, edit, merge or
- * ignore is chosen.
+ * ignore is chosen — and approving is the one moment that gets a stamp.
  */
 export default function ReviewCard({
   candidate,
@@ -30,6 +36,10 @@ export default function ReviewCard({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mergeWithDuplicate, setMergeWithDuplicate] = useState(true)
+  const [stamped, setStamped] = useState(false)
+  const [decision, setDecision] = useState<Decision>(null)
+  const checkRef = useRef<CheckIconHandle>(null)
+  const { reduced, spring } = useMotionPrefs()
 
   const needsPin = isPlace && candidate.resolutions.length === 0 && !candidate.duplicate_of_place_id
   const merging = Boolean(candidate.duplicate_of_place_id) && mergeWithDuplicate
@@ -37,13 +47,20 @@ export default function ReviewCard({
   const { headline, detail } = isPlace
     ? { headline: candidate.title, detail: null }
     : pairText(candidate.title, candidate.body)
+  const tint = knowledgeTint(candidate.type)
 
-  async function run(action: () => Promise<unknown>) {
+  async function run(action: () => Promise<unknown>, outcome: Exclude<Decision, null>) {
     setBusy(true)
     setError(null)
     try {
       await action()
-      onDecided()
+      if (outcome === 'saved') {
+        // Stamp first, let it land, then let the card go.
+        setStamped(true)
+        window.setTimeout(() => setDecision('saved'), reduced ? 0 : 1000)
+      } else {
+        setDecision('ignored')
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'That did not go through.')
       setBusy(false)
@@ -60,10 +77,35 @@ export default function ReviewCard({
         provider_place_id: isPlace && chosen ? chosen : null,
         merge_into_place_id: merging ? candidate.duplicate_of_place_id : null,
       })
-    })
+    }, 'saved')
 
   return (
-    <article className="card">
+    <motion.article
+      className="card"
+      style={{ position: 'relative', overflow: 'hidden' }}
+      animate={
+        decision === 'saved'
+          ? { opacity: 0, scale: 0.96 }
+          : decision === 'ignored'
+            ? { opacity: 0, x: 120 }
+            : { opacity: 1, x: 0, scale: 1 }
+      }
+      transition={reduced ? { duration: 0 } : spring}
+      onAnimationComplete={() => {
+        if (decision) onDecided()
+      }}
+    >
+      <div className="row between" style={{ marginBottom: 'var(--s-3)' }}>
+        <Stamp tone={stampToneFor(tint)} size="sm" rotate={-5}>
+          {KNOWLEDGE_LABEL[candidate.type] ?? candidate.type}
+        </Stamp>
+        {/* The quote is the proof. When it is word for word what is already on
+            screen, only its provenance is worth repeating. */}
+        {candidate.evidence[0] && (
+          <span className="t-small dimmer">from the {candidate.evidence[0].channel}</span>
+        )}
+      </div>
+
       {editing ? (
         <input
           className="input"
@@ -72,31 +114,24 @@ export default function ReviewCard({
           aria-label="Title"
         />
       ) : (
-        <h3 className="t-md">{headline}</h3>
+        <h3 className="t-title" style={{ fontSize: '1.25rem' }}>
+          {headline}
+        </h3>
       )}
 
       {detail && (
-        <p className="t-sm dim" style={{ marginTop: 4 }}>
+        <p className="t dim" style={{ marginTop: 6 }}>
           {detail}
         </p>
       )}
 
       <Meta
+        className="mt"
         parts={[
-          KNOWLEDGE_LABEL[candidate.type] ?? candidate.type,
           candidate.destination_scope,
           resolved && [resolved.category, resolved.city].filter(Boolean).join(', '),
         ]}
       />
-
-      <div className="row between" style={{ marginTop: 6 }}>
-        <Confidence value={candidate.confidence} />
-        {/* The quote is the proof. When it is word for word what is already on
-            screen, only its provenance is worth repeating. */}
-        {candidate.evidence[0] && (
-          <span className="t-sm dimmer">from the {candidate.evidence[0].channel}</span>
-        )}
-      </div>
 
       {candidate.evidence.map((evidence, index) => {
         const shown = (detail ?? headline).trim().replace(/…$/, '')
@@ -107,6 +142,10 @@ export default function ReviewCard({
           </blockquote>
         )
       })}
+
+      <div style={{ marginTop: 'var(--s-3)' }}>
+        <Confidence value={candidate.confidence} />
+      </div>
 
       {candidate.duplicate_of_place_id && (
         <div style={{ marginTop: 'var(--s-3)' }}>
@@ -126,12 +165,12 @@ export default function ReviewCard({
 
       {isPlace && candidate.resolutions.length > 0 && !merging && (
         <fieldset style={{ border: 0, padding: 0, margin: 'var(--s-3) 0 0' }}>
-          <legend className="t-xs" style={{ marginBottom: 6 }}>
+          <legend className="t-small dim" style={{ marginBottom: 6 }}>
             Which place is this?
           </legend>
           <div className="stack-2">
             {candidate.resolutions.map((option) => (
-              <label key={option.provider_place_id} className="check t-sm">
+              <label key={option.provider_place_id} className="check t-small">
                 <input
                   type="radio"
                   name={`resolve-${candidate.id}`}
@@ -139,7 +178,7 @@ export default function ReviewCard({
                   onChange={() => setChosen(option.provider_place_id)}
                 />
                 <span className="grow">
-                  <span className="t-md">{option.name}</span>
+                  <span className="t-head">{option.name}</span>
                   <span className="meta" style={{ display: 'block' }}>
                     {[option.category, option.city, option.country].filter(Boolean).join(', ')} ·{' '}
                     <span className="num">{Math.round(option.match_confidence * 100)}%</span> match
@@ -180,29 +219,58 @@ export default function ReviewCard({
         </div>
       )}
 
-      <div className="row" style={{ marginTop: 'var(--s-3)', gap: 'var(--s-2)' }}>
-        <button className="btn btn--accent btn--sm" disabled={busy || needsPin} onClick={approve}>
-          <Check size={15} strokeWidth={2.4} />
-          {busy ? 'Saving…' : merging ? 'Merge and save' : 'Save'}
-        </button>
-        <button className="btn btn--sm btn--plain" disabled={busy} onClick={() => setEditing((on) => !on)}>
-          <Pencil size={14} strokeWidth={2.2} />
-          {editing ? 'Done' : 'Edit'}
+      <div className="row" style={{ marginTop: 'var(--s-4)', gap: 'var(--s-2)' }}>
+        <motion.button
+          className="btn btn--ink grow"
+          disabled={busy || needsPin}
+          onClick={approve}
+          whileTap={{ scale: 0.97 }}
+          onPointerEnter={() => checkRef.current?.startAnimation()}
+          onPointerLeave={() => checkRef.current?.stopAnimation()}
+        >
+          <CheckIcon ref={checkRef} size={17} aria-hidden />
+          {busy ? 'Saving…' : merging ? 'Merge' : 'Save'}
+        </motion.button>
+        <button
+          className="icon-btn"
+          disabled={busy}
+          onClick={() => setEditing((on) => !on)}
+          aria-label={editing ? 'Done editing' : 'Edit title'}
+          aria-pressed={editing}
+          style={editing ? { background: 'var(--paper-2)', color: 'var(--ink)' } : undefined}
+        >
+          <Pencil size={17} strokeWidth={2.2} />
         </button>
         {!noteOpen && (
-          <button className="btn btn--sm btn--plain" disabled={busy} onClick={() => setNoteOpen(true)}>
-            Note
+          <button className="icon-btn" disabled={busy} onClick={() => setNoteOpen(true)} aria-label="Add a note">
+            <StickyNote size={17} strokeWidth={2.2} />
           </button>
         )}
         <button
-          className="btn btn--sm btn--plain"
+          className="btn btn--ghost"
           disabled={busy}
-          onClick={() => run(() => api.ignoreCandidate(candidate.id))}
+          onClick={() => run(() => api.ignoreCandidate(candidate.id), 'ignored')}
         >
-          <X size={15} strokeWidth={2.2} />
+          <X size={16} strokeWidth={2.4} />
           Ignore
         </button>
       </div>
-    </article>
+
+      {/* The stamp lands over the card, centred, then the card leaves. */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'grid',
+          placeItems: 'center',
+          pointerEvents: 'none',
+        }}
+        aria-live="polite"
+      >
+        <StampDrop show={stamped} tone="teal">
+          Saved
+        </StampDrop>
+      </div>
+    </motion.article>
   )
 }

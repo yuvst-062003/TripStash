@@ -916,6 +916,7 @@ textarea.input { min-height: 84px; resize: vertical; }
 .confidence__bar { width: 48px; height: 4px; border-radius: 2px; background: var(--paper-2); overflow: hidden; }
 .confidence__bar > span { display: block; height: 100%; background: var(--teal); }
 
+.mt { margin-top: 6px; }
 .divider { height: 1px; background: var(--line); border: 0; margin: 0; }
 
 .skeleton {

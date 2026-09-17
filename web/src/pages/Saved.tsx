@@ -1,10 +1,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AnimatePresence, motion } from 'motion/react'
 import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
+import { useMotionPrefs } from '../lib/motion'
 import ReviewCard from '../components/ReviewCard'
-import TopBar from '../components/TopBar'
+import Segmented from '../components/Segmented'
+import { AskButton } from '../components/TopBar'
+import { Stamp, StatusStamp } from '../components/Stamp'
 import {
   CacheNote,
   Empty,
@@ -12,13 +16,16 @@ import {
   Glyph,
   KNOWLEDGE_LABEL,
   Meta,
+  MotionList,
+  MotionRow,
   Note,
   Pill,
   SectionLabel,
   SkeletonRows,
-  StatusLabel,
-  Tabs,
+  categoryTint,
+  knowledgeTint,
   pairText,
+  stampToneFor,
 } from '../components/ui'
 import {
   Archive,
@@ -44,8 +51,13 @@ export default function Saved() {
 
   return (
     <div className="screen">
-      <TopBar title="Saved" />
-      <Tabs
+      <header className="hero" style={{ paddingBottom: 'var(--s-2)' }}>
+        <div className="hero__top" style={{ marginBottom: 0 }}>
+          <h1 className="t-display hero__title">Saved</h1>
+          <AskButton />
+        </div>
+      </header>
+      <Segmented
         label="Saved views"
         value={view}
         onChange={setView}
@@ -56,11 +68,29 @@ export default function Saved() {
           { value: 'sources', label: 'Sources' },
         ]}
       />
-      {view === 'inbox' && <InboxView onSave={openSave} />}
-      {view === 'places' && <PlacesView />}
-      {view === 'knowledge' && <KnowledgeView />}
-      {view === 'sources' && <SourcesView />}
+      <AnimatePresence mode="wait" initial={false}>
+        <ViewPane key={view}>
+          {view === 'inbox' && <InboxView onSave={openSave} />}
+          {view === 'places' && <PlacesView />}
+          {view === 'knowledge' && <KnowledgeView />}
+          {view === 'sources' && <SourcesView />}
+        </ViewPane>
+      </AnimatePresence>
     </div>
+  )
+}
+
+function ViewPane({ children }: { children: React.ReactNode }) {
+  const { reduced, spring } = useMotionPrefs()
+  return (
+    <motion.div
+      initial={reduced ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={reduced ? undefined : { opacity: 0, y: -6 }}
+      transition={spring}
+    >
+      {children}
+    </motion.div>
   )
 }
 
@@ -74,10 +104,11 @@ function InboxView({ onSave }: { onSave: () => void }) {
   if (candidates.length === 0) {
     return (
       <Empty
+        stamp="All clear"
         title="Nothing waiting"
         body="Everything captured has been reviewed. New items land here first — nothing reaches the map unconfirmed."
         action={
-          <button className="btn btn--accent" onClick={onSave}>
+          <button className="btn btn--coral" onClick={onSave}>
             Save something
           </button>
         }
@@ -94,21 +125,26 @@ function InboxView({ onSave }: { onSave: () => void }) {
 
   return (
     <>
-      <p className="pad t-sm dim" style={{ paddingTop: 'var(--s-3)' }}>
-        {candidates.length} item{candidates.length === 1 ? '' : 's'} extracted. Approve, correct or
-        ignore each one.
+      <p className="pad t-small dim" style={{ paddingTop: 'var(--s-4)' }}>
+        {candidates.length} item{candidates.length === 1 ? '' : 's'} extracted. Stamp what is right,
+        fix what is close, ignore the rest.
       </p>
       {Object.entries(groups).map(([type, items]) => (
         <section key={type}>
-          <SectionLabel>
-            {KNOWLEDGE_LABEL[type] ?? type} · {items.length}
-          </SectionLabel>
+          <SectionLabel count={items.length}>{KNOWLEDGE_LABEL[type] ?? type}</SectionLabel>
           <ul className="pad stack">
-            {items.map((candidate) => (
-              <li key={candidate.id}>
-                <ReviewCard candidate={candidate} onDecided={inbox.reload} />
-              </li>
-            ))}
+            <AnimatePresence initial={false}>
+              {items.map((candidate) => (
+                <motion.li
+                  key={candidate.id}
+                  layout
+                  exit={{ opacity: 0, height: 0, marginTop: 0, overflow: 'hidden' }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                >
+                  <ReviewCard candidate={candidate} onDecided={inbox.reload} />
+                </motion.li>
+              ))}
+            </AnimatePresence>
           </ul>
         </section>
       ))}
@@ -126,8 +162,8 @@ function PlacesView() {
 
   return (
     <>
-      <div className="pad" style={{ paddingBlock: 'var(--s-3)' }}>
-        <div className="searchbar" style={{ marginInline: 0, boxShadow: 'none' }}>
+      <div className="pad" style={{ paddingBlock: 'var(--s-4) var(--s-3)' }}>
+        <div className="searchbar searchbar--flat" style={{ marginInline: 0 }}>
           <Search size={17} className="dimmer" />
           <input
             value={query}
@@ -143,45 +179,53 @@ function PlacesView() {
       {places.error && <ErrorNote message={places.error} onRetry={places.reload} />}
       {places.data?.length === 0 && (
         <Empty
+          stamp="No pins"
           title="No confirmed places yet"
           body="Approve something from Inbox and it appears here and on the map."
         />
       )}
 
-      <ul className="list">
-        {(places.data ?? []).map((place) => (
-          <li key={place.trip_place_id}>
-            <Link to={`/places/${place.trip_place_id}`} className="item">
-              <Glyph Icon={CATEGORY_ICON[place.category] ?? CATEGORY_ICON.other} />
-              <div className="item__body">
-                <div className="row between" style={{ gap: 'var(--s-2)' }}>
-                  <p className="item__title grow clamp-1">{place.name}</p>
-                  <StatusLabel status={place.status} />
-                </div>
-                <Meta
-                  parts={[
-                    place.category,
-                    place.city,
-                    place.walking_minutes != null
-                      ? `${place.walking_minutes} min walk`
-                      : place.distance_km != null && `${Math.round(place.distance_km)} km away`,
-                    `${place.source_count} source${place.source_count === 1 ? '' : 's'}`,
-                  ]}
+      {places.data && places.data.length > 0 && (
+        <MotionList>
+          {places.data.map((place, index) => (
+            <MotionRow key={place.trip_place_id}>
+              <Link to={`/places/${place.trip_place_id}`} className="item">
+                <Glyph
+                  Icon={CATEGORY_ICON[place.category] ?? CATEGORY_ICON.other}
+                  tint={categoryTint(place.category)}
                 />
-                {place.reason_saved && (
-                  <p className="t-sm dim clamp-2" style={{ marginTop: 2 }}>
-                    {place.reason_saved}
-                  </p>
-                )}
-                {place.needs_review && (
-                  <Note tone="warn">Low-confidence extraction — check the name and pin.</Note>
-                )}
-              </div>
-              <ChevronRight size={18} className="dimmer" style={{ flex: 'none', marginTop: 9 }} />
-            </Link>
-          </li>
-        ))}
-      </ul>
+                <div className="item__body">
+                  <div className="row between row--top" style={{ gap: 'var(--s-2)' }}>
+                    <p className="item__title grow clamp-1">{place.name}</p>
+                    <StatusStamp status={place.status} rotate={index % 2 ? 4 : -6} />
+                  </div>
+                  <Meta
+                    parts={[
+                      place.category,
+                      place.city,
+                      place.walking_minutes != null
+                        ? `${place.walking_minutes} min walk`
+                        : place.distance_km != null && `${Math.round(place.distance_km)} km away`,
+                      `${place.source_count} source${place.source_count === 1 ? '' : 's'}`,
+                    ]}
+                  />
+                  {place.reason_saved && (
+                    <p className="t-small dim clamp-2" style={{ marginTop: 4 }}>
+                      {place.reason_saved}
+                    </p>
+                  )}
+                  {place.needs_review && (
+                    <div style={{ marginTop: 6 }}>
+                      <Note tone="warn">Low-confidence extraction — check the name and pin.</Note>
+                    </div>
+                  )}
+                </div>
+                <ChevronRight size={18} className="item__chev" />
+              </Link>
+            </MotionRow>
+          ))}
+        </MotionList>
+      )}
     </>
   )
 }
@@ -194,7 +238,7 @@ function KnowledgeView() {
 
   return (
     <>
-      <div className="rail" style={{ paddingBlock: 'var(--s-3)' }}>
+      <div className="rail" style={{ paddingBlock: 'var(--s-4) var(--s-3)' }}>
         <Pill on={type === null} onClick={() => setType(null)}>
           All
         </Pill>
@@ -209,54 +253,65 @@ function KnowledgeView() {
       {knowledge.error && <ErrorNote message={knowledge.error} onRetry={knowledge.reload} />}
       {knowledge.data?.length === 0 && (
         <Empty
+          stamp="Nothing here"
           title="No saved knowledge yet"
           body="Not everything is a map pin. Safety warnings, transport tips, prices and packing advice live here, each with its source."
         />
       )}
 
-      <ul className="list">
-        {(knowledge.data ?? []).map((item) => {
-          const Icon = KNOWLEDGE_ICON[item.type] ?? KNOWLEDGE_ICON.general
-          const { headline, detail } = pairText(item.title, item.body)
-          return (
-            <li key={item.id}>
-              <div className="item" style={{ cursor: 'default' }}>
-                <Glyph Icon={Icon} />
-                <div className="item__body">
-                  <p className="item__title">{headline}</p>
-                  {detail && (
-                    <p className="t-sm dim" style={{ marginTop: 2 }}>
-                      {detail}
-                    </p>
-                  )}
-                  {/* Official facts, creator advice and model inference stay distinct. */}
-                  <Meta
-                    parts={[
-                      KNOWLEDGE_LABEL[item.type] ?? item.type,
-                      item.destination_scope,
-                      item.provenance,
-                      item.source_date,
-                      item.user_edited && 'edited by you',
-                    ]}
-                  />
-                  {item.requires_official_verification && (
-                    <Note tone="warn" Icon={Flag}>
-                      Entry rules change — confirm against the official source.
-                    </Note>
-                  )}
+      {knowledge.data && knowledge.data.length > 0 && (
+        <MotionList>
+          {knowledge.data.map((item) => {
+            const Icon = KNOWLEDGE_ICON[item.type] ?? KNOWLEDGE_ICON.general
+            const tint = knowledgeTint(item.type)
+            const { headline, detail } = pairText(item.title, item.body)
+            return (
+              <MotionRow key={item.id}>
+                <div className="item item--static">
+                  <Glyph Icon={Icon} tint={tint} />
+                  <div className="item__body">
+                    <div className="row between row--top" style={{ gap: 'var(--s-2)' }}>
+                      <p className="item__title grow">{headline}</p>
+                      <Stamp tone={stampToneFor(tint)} size="sm" rotate={-5}>
+                        {KNOWLEDGE_LABEL[item.type] ?? item.type}
+                      </Stamp>
+                    </div>
+                    {detail && (
+                      <p className="t-small dim" style={{ marginTop: 4 }}>
+                        {detail}
+                      </p>
+                    )}
+                    {/* Official facts, creator advice and model inference stay distinct. */}
+                    <Meta
+                      className="mt"
+                      parts={[
+                        item.destination_scope,
+                        item.provenance,
+                        item.source_date,
+                        item.user_edited && 'edited by you',
+                      ]}
+                    />
+                    {item.requires_official_verification && (
+                      <div style={{ marginTop: 6 }}>
+                        <Note tone="warn" Icon={Flag}>
+                          Entry rules change — confirm against the official source.
+                        </Note>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    className="icon-btn"
+                    aria-label={`Archive ${headline}`}
+                    onClick={() => api.updateKnowledge(item.id, { is_archived: true }).then(knowledge.reload)}
+                  >
+                    <Archive size={17} />
+                  </button>
                 </div>
-                <button
-                  className="icon-btn"
-                  aria-label={`Archive ${headline}`}
-                  onClick={() => api.updateKnowledge(item.id, { is_archived: true }).then(knowledge.reload)}
-                >
-                  <Archive size={17} />
-                </button>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
+              </MotionRow>
+            )
+          })}
+        </MotionList>
+      )}
     </>
   )
 }
@@ -269,21 +324,22 @@ function SourcesView() {
   if (sources.data?.length === 0) {
     return (
       <Empty
-        title="No sources yet"
+        stamp="No sources"
+        title="Nothing captured yet"
         body="Every link, screenshot and video you capture is kept here, whatever the extraction managed to do with it."
       />
     )
   }
 
   return (
-    <ul className="list">
+    <MotionList>
       {(sources.data ?? []).map((source) => {
         const Icon = SOURCE_ICON[source.kind] ?? Link2
         const failed = source.status === 'failed'
         return (
-          <li key={source.id}>
-            <div className="item" style={{ cursor: 'default' }}>
-              <Glyph Icon={Icon} />
+          <MotionRow key={source.id}>
+            <div className="item item--static">
+              <Glyph Icon={Icon} tint={failed ? 'coral' : 'other'} />
               <div className="item__body">
                 <p className="item__title clamp-2">
                   {source.title || source.filename || source.url}
@@ -297,17 +353,21 @@ function SourcesView() {
                     `${source.candidate_count} extracted`,
                   ]}
                 />
-                {source.failure_reason && <Note tone="warn">{source.failure_reason}</Note>}
-                <div className="row" style={{ gap: 'var(--s-2)', marginTop: 'var(--s-2)' }}>
+                {source.failure_reason && (
+                  <div style={{ marginTop: 6 }}>
+                    <Note tone="warn">{source.failure_reason}</Note>
+                  </div>
+                )}
+                <div className="row row--wrap" style={{ gap: 'var(--s-1)', marginTop: 'var(--s-2)' }}>
                   {source.url && (
-                    <a className="btn btn--sm btn--plain" href={source.url} target="_blank" rel="noreferrer">
+                    <a className="btn btn--sm btn--ghost" href={source.url} target="_blank" rel="noreferrer">
                       Original
                       <ArrowUpRight size={14} strokeWidth={2.2} />
                     </a>
                   )}
                   {failed && (
                     <button
-                      className="btn btn--sm btn--plain"
+                      className="btn btn--sm btn--ghost"
                       onClick={() => api.retrySource(source.id).then(sources.reload)}
                     >
                       <RefreshCw size={14} strokeWidth={2.2} />
@@ -315,7 +375,7 @@ function SourcesView() {
                     </button>
                   )}
                   <button
-                    className="btn btn--sm btn--plain"
+                    className="btn btn--sm btn--ghost"
                     onClick={() => {
                       if (confirm('Delete this source and its stored file? Places saved from it stay.')) {
                         api.deleteSource(source.id).then(sources.reload)
@@ -328,9 +388,9 @@ function SourcesView() {
                 </div>
               </div>
             </div>
-          </li>
+          </MotionRow>
         )
       })}
-    </ul>
+    </MotionList>
   )
 }
