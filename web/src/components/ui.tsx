@@ -381,18 +381,27 @@ export function MotionList({
   children,
   className = 'list',
   as: Tag = 'ul',
+  animateIn = true,
+  delay = 0,
 }: {
   children: ReactNode
   className?: string
   as?: 'ul' | 'ol'
+  /** False on a return visit: the rows are already known, they just appear. */
+  animateIn?: boolean
+  /** Seconds to hold before the first row, so a headline can lead. */
+  delay?: number
 }) {
   const { reduced } = useMotionPrefs()
   const Component = Tag === 'ol' ? motion.ol : motion.ul
+  const variants = delay
+    ? { ...STAGGER_LIST, show: { transition: { staggerChildren: 0.04, delayChildren: delay } } }
+    : STAGGER_LIST
   return (
     <Component
       className={className}
-      variants={STAGGER_LIST}
-      initial={reduced ? false : 'hidden'}
+      variants={variants}
+      initial={reduced || !animateIn ? false : 'hidden'}
       animate="show"
     >
       {children}

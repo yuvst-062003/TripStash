@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import { useMotionPrefs } from '../lib/motion'
+import { useColdLoad } from '../App'
 import { HeroActions } from '../components/TopBar'
 import NumberFlow from '@number-flow/react'
 import { BudgetArc, MoneyFigure } from '../components/Money'
@@ -19,7 +20,6 @@ import {
   MotionRow,
   Note,
   SectionLabel,
-  SkeletonRows,
   categoryTint,
   knowledgeTint,
   pairText,
@@ -34,9 +34,15 @@ import {
   Inbox,
   KNOWLEDGE_ICON,
   MapPin,
-  RefreshCw,
   Ticket,
 } from '../components/icons'
+import type { HomePayload } from '../lib/types'
+
+/** The last dashboard, kept across visits so a return renders at once and refreshes behind. */
+let lastHome: HomePayload | null = null
+
+/** Today in the traveller's own timezone, as the API expects it (YYYY-MM-DD). */
+const localToday = () => new Date().toLocaleDateString('en-CA')
 
 const PHASE_LABEL = {
   before: 'Before the trip',
@@ -57,25 +63,35 @@ function dayOfTrip(start: string | null | undefined, today: string): number | nu
 export default function Home() {
   const { trip, position, location, requestLocation, openSave } = useApp()
   const { reduced, spring } = useMotionPrefs()
+  // The entrance plays once, on a cold load; a return from another tab just shows the page.
+  const fresh = useColdLoad()
   useScreenContext({ surface: 'home' })
 
   const home = useAsync(
-    () => api.home({ lat: position?.lat, lon: position?.lon }),
+    () => api.home({ lat: position?.lat, lon: position?.lon, on: localToday() }),
     [position?.lat, position?.lon],
   )
+  if (home.data) lastHome = home.data
+  const data = home.data ?? lastHome
 
-  if (home.loading && !home.data) {
+  if (home.loading && !data) {
     return (
-      <div className="screen">
+      <div className="screen screen--loading" aria-busy>
         <header className="hero">
           <div className="skeleton" style={{ height: 14, width: '40%' }} />
           <div className="skeleton" style={{ height: 48, width: '70%', marginTop: 20 }} />
         </header>
-        <SkeletonRows rows={5} />
+        <div className="pad">
+          <div className="skeleton" style={{ height: 88, borderRadius: 16 }} />
+        </div>
+        <div className="rail" style={{ marginTop: 'var(--s-8)' }} aria-hidden>
+          <div className="skeleton" style={{ width: 248, height: 212, borderRadius: 24 }} />
+          <div className="skeleton" style={{ width: 248, height: 212, borderRadius: 24 }} />
+        </div>
       </div>
     )
   }
-  if (home.error && !home.data) {
+  if (home.error && !data) {
     return (
       <div className="screen">
         <header className="hero">
@@ -85,9 +101,8 @@ export default function Home() {
       </div>
     )
   }
-  if (!home.data) return null
+  if (!data) return null
 
-  const data = home.data
   const { review_queue: queue, money } = data
   const day = data.phase === 'during' ? dayOfTrip(trip?.start_date, data.date) : null
   const headline = data.current_destination?.name ?? trip?.name ?? 'Your trip'
@@ -102,7 +117,7 @@ export default function Home() {
         </div>
         <motion.h1
           className="t-display--lg hero__title"
-          initial={reduced ? false : { opacity: 0, y: 10 }}
+          initial={reduced || !fresh ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={spring}
         >
@@ -111,29 +126,25 @@ export default function Home() {
         <div className="hero__line">
           {day !== null ? <span>Day {day}</span> : <span>{PHASE_LABEL[data.phase]}</span>}
           {data.weather && (
-            <motion.span
-              className="hero__chip"
-              initial={reduced ? false : { opacity: 0, scale: 0.85 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ ...spring, delay: 0.18 }}
-            >
+            <span className="hero__chip">
               <CloudSun size={14} strokeWidth={2.4} />
               {data.weather.summary} {Math.round(data.weather.temperature_c)}°
-            </motion.span>
+              {data.weather.precipitation_probability >= 0.4 &&
+                ` · ${Math.round(data.weather.precipitation_probability * 100)}% rain`}
+            </span>
           )}
           {data.countdown_days !== null && <span>{data.countdown_days} days to go</span>}
           {location.status !== 'granted' && (
-            <button className="chip" onClick={requestLocation} style={{ minHeight: 28 }}>
+            <button className="chip" onClick={requestLocation}>
               <Crosshair size={13} strokeWidth={2.4} />
               {location.status === 'locating' ? 'Locating…' : 'Use my location'}
             </button>
           )}
         </div>
-        {location.status === 'denied' && (
+        {location.status === 'denied' && data.current_destination && (
           <div style={{ marginTop: 'var(--s-3)' }}>
             <Note tone="warn">
-              Location unavailable, so distances are hidden. Everything else works from your current
-              destination.
+              Location off, so nearby is measured from {data.current_destination.name}'s centre.
             </Note>
           </div>
         )}
@@ -143,8 +154,8 @@ export default function Home() {
 
       {queueTotal > 0 && (
         <div className="pad">
-          <Link to="/saved" className="card card--coral" style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-4)' }}>
-            <span className="t-display num" style={{ fontSize: '2.5rem', lineHeight: 1 }}>
+          <Link to="/saved" className="card card--press" style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-4)' }}>
+            <span className="t-title num" style={{ fontSize: '1.75rem', lineHeight: 1 }}>
               <NumberFlow value={queue.pending_candidates} animated={!reduced} />
             </span>
             <span className="grow">
@@ -157,21 +168,23 @@ export default function Home() {
                   ` ${queue.failed_sources} capture${queue.failed_sources === 1 ? '' : 's'} need a hand.`}
               </span>
             </span>
-            <Stamp tone="coral" size="sm" Icon={queue.failed_sources > 0 ? AlertTriangle : Inbox} rotate={-8}>
+            <Stamp
+              tone={queue.failed_sources > 0 ? 'warn' : 'muted'}
+              size="sm"
+              Icon={queue.failed_sources > 0 ? AlertTriangle : Inbox}
+              rotate={-8}
+            >
               Inbox
             </Stamp>
           </Link>
         </div>
       )}
 
-      <SectionLabel action={<Link className="btn btn--sm btn--ghost" to="/trip">Plan</Link>}>
+      <SectionLabel action={<Link className="btn btn--sm btn--ghost" to="/trip?section=plan">Plan</Link>}>
         Today
       </SectionLabel>
       {data.today_plan.length === 0 ? (
-        <p className="pad t-small dim">
-          Nothing planned.{' '}
-          {position ? 'Saved places near you are below.' : 'Share your location to see what is nearby.'}
-        </p>
+        <p className="pad t-small dim">Nothing planned today.</p>
       ) : (
         <ol className="timeline">
           {data.today_plan.map((item) => (
@@ -208,7 +221,7 @@ export default function Home() {
           }
         />
       ) : (
-        <MotionList className="rail" as="ul">
+        <MotionList className="rail" as="ul" animateIn={fresh} delay={0.1}>
           {data.resurfaced.map((item, index) => {
             const isPlace = item.kind === 'place'
             const Icon = isPlace
@@ -229,10 +242,12 @@ export default function Home() {
                 {/* Why it is surfacing now is part of the product, not a debug note. */}
                 <p className="rail-card__reason clamp-2">{item.reason}</p>
                 {detail && <p className="t-small dimmer clamp-2">{detail}</p>}
-                <div className="rail-card__foot">
-                  <span className="num">{item.distance_km !== null ? `${item.distance_km} km` : ''}</span>
-                  {item.trip_place_id && <ChevronRight size={16} />}
-                </div>
+                {(item.distance_km !== null || item.trip_place_id) && (
+                  <div className="rail-card__foot">
+                    <span className="num">{item.distance_km !== null ? `${item.distance_km} km` : ''}</span>
+                    {item.trip_place_id && <ChevronRight size={16} />}
+                  </div>
+                )}
               </>
             )
             return (
@@ -250,7 +265,7 @@ export default function Home() {
         </MotionList>
       )}
 
-      <SectionLabel action={<Link className="btn btn--sm btn--ghost" to="/trip">Details</Link>}>
+      <SectionLabel action={<Link className="btn btn--sm btn--ghost" to="/trip?section=money">Details</Link>}>
         Money
       </SectionLabel>
       <div className="pad">
@@ -258,7 +273,9 @@ export default function Home() {
           <div className="grow">
             <MoneyFigure amount={money.spent_total} currency={money.currency} />
             <p className="t-small dim num" style={{ marginTop: 6 }}>
-              {money.spent_today.toFixed(0)} today
+              {money.spent_today === 0
+                ? 'Nothing spent today'
+                : `${money.spent_today.toFixed(0)} ${money.currency} today`}
             </p>
             {money.budget !== null && money.daily && (
               <p className="t-small dimmer num" style={{ marginTop: 10 }}>
@@ -269,7 +286,7 @@ export default function Home() {
             )}
           </div>
           {money.budget !== null && (
-            <div style={{ width: 116, flex: 'none', color: 'var(--paper)' }}>
+            <div style={{ width: 116, flex: 'none' }}>
               <BudgetArc spent={money.spent_total} budget={money.budget} />
             </div>
           )}
@@ -295,16 +312,18 @@ export default function Home() {
         </>
       )}
 
-      <p className="pad t-small dimmer" style={{ marginTop: 'var(--s-8)' }}>
-        {Object.entries(data.place_counts)
-          .map(([status, count]) => `${count} ${status.replace('_', ' ')}`)
-          .join(' · ')}
-      </p>
-      {queue.failed_sources > 0 && (
-        <p className="pad t-small dimmer row" style={{ marginTop: 'var(--s-2)', gap: 6 }}>
-          <RefreshCw size={13} /> Failed captures stay in Inbox with a retry.
-        </p>
-      )}
+      {(() => {
+        const total = Object.entries(data.place_counts)
+          .filter(([status]) => status !== 'archived' && status !== 'inbox')
+          .reduce((sum, [, count]) => sum + count, 0)
+        if (total === 0) return null
+        return (
+          <Link to="/saved" className="pad t-small dim row" style={{ marginTop: 'var(--s-8)', gap: 6 }}>
+            {total} place{total === 1 ? '' : 's'} on your map
+            <ChevronRight size={14} />
+          </Link>
+        )
+      })()}
     </div>
   )
 }

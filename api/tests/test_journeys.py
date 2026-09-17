@@ -584,3 +584,53 @@ def test_recommendations_come_only_from_the_travellers_own_stash(client, auth, t
 
     nothing = client.get("/api/v1/recommend", headers=auth, params={"q": "Ushuaia"}).json()
     assert nothing["cards"] == [] and "Nothing stashed" in nothing["summary"]
+
+
+def test_home_never_invents_a_distance_from_you_without_a_location(client, auth, trip):
+    """Spec 12: honest numbers. A stand-in origin finds places but is not "from you"."""
+    from datetime import date, timedelta
+
+    source = capture_reel(client, auth)
+    inbox = client.get("/api/v1/inbox", headers=auth).json()
+    # A place inside Antigua (the volcano is 16 km out, beyond "nearby").
+    place = next(
+        c
+        for c in inbox
+        if c["is_place_candidate"]
+        and c["resolutions"]
+        and abs(c["resolutions"][0]["lat"] - ANTIGUA["lat"]) < 0.02
+        and abs(c["resolutions"][0]["lon"] - ANTIGUA["lon"]) < 0.02
+    )
+    client.post(
+        f"/api/v1/candidates/{place['id']}/approve",
+        headers=auth,
+        json={"provider_place_id": place["resolutions"][0]["provider_place_id"]},
+    )
+    client.post(
+        "/api/v1/knowledge",
+        headers=auth,
+        json={
+            "type": "event",
+            "title": "Semana Santa",
+            "destination_scope": "Antigua",
+            "happens_on": (date.today() + timedelta(days=5)).isoformat(),
+        },
+    )
+    assert source["id"]
+
+    without = client.get("/api/v1/home", headers=auth).json()["resurfaced"]
+    places = [r for r in without if r["kind"] == "place"]
+    assert places, "the destination centre still finds nearby saves"
+    assert all(r["distance_km"] is None for r in places)
+    assert all("from you" not in r["reason"] for r in places)
+    assert places[0]["reason"].startswith("In Antigua")
+
+    with_location = client.get(
+        "/api/v1/home", headers=auth, params={"lat": 14.5586, "lon": -90.7295}
+    ).json()["resurfaced"]
+    near = [r for r in with_location if r["kind"] == "place"]
+    assert near and near[0]["distance_km"] is not None
+
+    # The same event is never two cards.
+    events = [r for r in with_location if r.get("knowledge_type") == "event"]
+    assert len(events) == 1

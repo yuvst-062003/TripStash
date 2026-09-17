@@ -68,7 +68,7 @@
   --card: #ffffff;
   --ink: #0f2e2a;
   --ink-2: #33605a;
-  --ink-3: #6b948c;
+  --ink-3: #4f776f;
   --line: #cde6da;
 
   --teal: #0ba37f;
@@ -115,7 +115,7 @@
   --tint-stay-soft: var(--teal-soft);
   --tint-nature: #2f9b4f;
   --tint-nature-soft: #dcf4e1;
-  --tint-view: #c48a00;
+  --tint-view: #9a6a00;
   --tint-view-soft: var(--gold-soft);
   --tint-transport: var(--sky);
   --tint-transport-soft: var(--sky-soft);
@@ -132,7 +132,7 @@
     --card: #142e32;
     --ink: #eef7f3;
     --ink-2: #a6c4bd;
-    --ink-3: #6c8f88;
+    --ink-3: #7fa39b;
     --line: #1f3c40;
 
     --teal: #3fd9b0;
@@ -177,7 +177,7 @@
   --card: #142e32;
   --ink: #eef7f3;
   --ink-2: #a6c4bd;
-  --ink-3: #6c8f88;
+  --ink-3: #7fa39b;
   --line: #1f3c40;
   --teal: #3fd9b0;
   --teal-hover: #63e4c2;

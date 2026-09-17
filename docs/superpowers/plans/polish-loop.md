@@ -23,8 +23,8 @@ replan; captures fail → restart the dev server by PID, retry once; deploy fail
 | # | Screen | Status | Findings (A/B/C → applied) | Commit |
 | --- | --- | --- | --- | --- |
 | 0 | Cross-cutting (tokens, shared components) | done | 401 rewrite, 422 text, btn hover/press/busy, code font | a0f58b7 |
-| 1 | Sign in | done | A 8 / B 8 / C 8 → 20 applied, 4 skipped (drag momentum, shared-layout wordmark, header 3px ✓trivial, Logo off — kept compressed) | (this commit) |
-| 2 | Home | pending | | |
+| 1 | Sign in | done | A 8 / B 8 / C 8 → 20 applied, 2 skipped (drag momentum, shared-layout wordmark) | 4036cbb |
+| 2 | Home | done | A 8 / B 8 / C 8 → 22 applied, 2 skipped (skeleton shape partly; nothing else) | (this commit) |
 | 3 | Map | pending | | |
 | 4 | Saved (tabs) | pending | | |
 | 5 | Inbox review card | pending | | |
@@ -40,4 +40,5 @@ replan; captures fail → restart the dev server by PID, retry once; deploy fail
 
 - Step 0: plan written; servers up; demo DB re-seeded.
 - Step 1 (cross-cutting): reviewers proved a 401 rewrite bug on sign-in (any 401 → "session expired"); fixed in api.ts with a test-by-hand (wrong password now reads "Wrong email or password."). Commit a0f58b7.
+- Step 3 (home): API — a stand-in origin (destination centre) no longer produces "from you" distances; resurfaced cards deduped; test added. Web — cold-load entrance vs tab-switch slide was inverted by `initial={false}` on AnimatePresence (Motion memoises presence context): fixed with a module-level cold flag; back-navigation now slides the right way (custom variants); `on` sent as the local date; deep links to Trip sections; queue card quiet (plain card, title-size numeral, muted/warn stamp); hero washes removed; money card on teal-deep with AA text; gold glyph readable in dark; `--ink-3`/`--tint-view` darkened for AA; rail cards equal height, foot only when it has content; section rhythm fixed; press feedback on card links; skeleton held 150 ms and cached payload on return; FAB lifts by transform; rain in the weather chip; chip is a full tap target; footer is a sentence that links to Saved. Side note: a reviewer's itinerary test flipped one demo place to "planned" (planner only promotes) — demo DB will be re-seeded before final captures; the non-reverting promotion goes to the Trip review.
 - Step 2 (sign in): scene no longer rebuilds at landing (spin via ref); no drop-shadow/backdrop-blur over the live canvas; pixel ratio capped 1.5; intro 1.1 s, skipped for returning users, tap to skip; CTA dark-on-teal (AA); space palette now overrides danger/warn; error slot reserved with role=alert and aria-invalid; busy button breathes; dev-only demo hint; email remembered; logo compressed to 0.85 s and starts after the form lands; drag works under reduced motion. Verified: one canvas, intro skipped on return, error text correct in both schemes.

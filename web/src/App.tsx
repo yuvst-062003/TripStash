@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation as useRouterLocation } from 'react-router-dom'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, motion, type Variants } from 'motion/react'
 import { api, token } from './lib/api'
 import { AppContext, type AskSeed, type ScreenContext } from './lib/context'
 import { useAsync, useLocation, useOnlineStatus } from './lib/hooks'
@@ -44,14 +44,13 @@ function TabIcon({ Icon, active }: { Icon: AnimatedIcon; active: boolean }) {
   useEffect(() => {
     if (!active || reduced) return
     ref.current?.startAnimation()
-    const id = window.setTimeout(() => ref.current?.stopAnimation(), 900)
+    const id = window.setTimeout(() => ref.current?.stopAnimation(), 500)
     return () => window.clearTimeout(id)
   }, [active, reduced])
   return <Icon ref={ref} size={22} aria-hidden />
 }
 
 const TAB_ORDER = ['/', '/map', '/saved', '/trip']
-let lastPath = '/'
 
 /** Which way a route change travels: along the tab bar, or deeper for a detail page. */
 function direction(from: string, to: string): 1 | -1 {
@@ -62,22 +61,40 @@ function direction(from: string, to: string): 1 | -1 {
   return b >= a ? 1 : -1
 }
 
+/** True until the first route has mounted: a cold load shows content, not a slide. */
+let booted = false
+export function useColdLoad(): boolean {
+  const cold = useRef(!booted).current
+  useEffect(() => {
+    booted = true
+  }, [])
+  return cold
+}
+
 /**
  * Every route slides in along the direction of travel — translate for
- * navigation, never scale — entering in 220 ms and leaving in 160 ms.
+ * navigation, never scale — entering in 200 ms and leaving in 120 ms. The
+ * direction is handed in through `custom` so the page on its way out gets
+ * the same answer as the one arriving.
  */
-function Page({ children, path }: { children: ReactNode; path: string }) {
+const EASE_OUT = [0.22, 1, 0.36, 1] as const
+const EASE_IN = [0.4, 0, 1, 1] as const
+const PAGE: Variants = {
+  enter: (dir: number) => ({ opacity: 0, x: 18 * dir }),
+  center: { opacity: 1, x: 0, transition: { duration: 0.2, ease: EASE_OUT } },
+  exit: (dir: number) => ({ opacity: 0, x: -14 * dir, transition: { duration: 0.12, ease: EASE_IN } }),
+}
+
+function Page({ children }: { children: ReactNode }) {
   const { reduced } = useMotionPrefs()
-  const dir = direction(lastPath, path)
-  useEffect(() => {
-    lastPath = path
-  }, [path])
+  const cold = useColdLoad()
   return (
     <motion.div
       className="page"
-      initial={reduced ? false : { opacity: 0, x: 18 * dir }}
-      animate={{ opacity: 1, x: 0, transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
-      exit={reduced ? undefined : { opacity: 0, x: -14 * dir, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } }}
+      variants={PAGE}
+      initial={reduced || cold ? false : 'enter'}
+      animate="center"
+      exit={reduced ? undefined : 'exit'}
     >
       {children}
     </motion.div>
@@ -92,6 +109,13 @@ export default function App() {
   const [screenContext, setScreenContext] = useState<ScreenContext | null>(null)
   const online = useOnlineStatus()
   const route = useRouterLocation()
+  // Direction of travel, decided once per route change and shared with the exiting page.
+  const prevPath = useRef(route.pathname)
+  const dir = useRef<1 | -1>(1)
+  if (prevPath.current !== route.pathname) {
+    dir.current = direction(prevPath.current, route.pathname)
+    prevPath.current = route.pathname
+  }
   const { state: location, request: requestLocation, setManual: setManualLocation } = useLocation()
   const plusRef = useRef<PlusIconHandle>(null)
 
@@ -170,14 +194,14 @@ export default function App() {
           </div>
         )}
 
-        <AnimatePresence mode="wait" initial={false}>
+        <AnimatePresence mode="wait" custom={dir.current}>
           <Routes location={route} key={route.pathname}>
-            <Route path="/" element={<Page path="/"><Home /></Page>} />
-            <Route path="/map" element={<Page path="/map"><MapScreen /></Page>} />
-            <Route path="/saved" element={<Page path="/saved"><Saved /></Page>} />
-            <Route path="/trip" element={<Page path="/trip"><TripScreen /></Page>} />
-            <Route path="/trip/journey" element={<Page path={route.pathname}><Journey /></Page>} />
-            <Route path="/places/:tripPlaceId" element={<Page path={route.pathname}><Place /></Page>} />
+            <Route path="/" element={<Page><Home /></Page>} />
+            <Route path="/map" element={<Page><MapScreen /></Page>} />
+            <Route path="/saved" element={<Page><Saved /></Page>} />
+            <Route path="/trip" element={<Page><TripScreen /></Page>} />
+            <Route path="/trip/journey" element={<Page><Journey /></Page>} />
+            <Route path="/places/:tripPlaceId" element={<Page><Place /></Page>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AnimatePresence>
@@ -187,7 +211,7 @@ export default function App() {
         {!immersive && (
         <motion.button
           className="fab"
-          whileTap={{ scale: 0.94 }}
+          whileTap={{ scale: 0.97 }}
           onClick={() => setSaveOpen(true)}
           onPointerEnter={() => plusRef.current?.startAnimation()}
           onPointerLeave={() => plusRef.current?.stopAnimation()}

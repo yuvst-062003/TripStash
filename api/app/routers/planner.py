@@ -102,6 +102,7 @@ def home(
             lon=origin[1] if origin else None,
             on=today,
             destination_scope=current_destination.name if current_destination else None,
+            from_user=lat is not None and lon is not None,
             limit=5,
         )]
     )

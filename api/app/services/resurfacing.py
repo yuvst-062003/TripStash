@@ -62,18 +62,39 @@ def resurface(
     lon: float | None,
     on: date,
     destination_scope: str | None = None,
+    from_user: bool = True,
     limit: int = 8,
 ) -> list[Resurfaced]:
+    """What matters now.
+
+    `from_user` says whether lat/lon is the traveller's own position or a
+    stand-in (the current destination's centre). A stand-in still finds the
+    right places, but it must never be described as a distance "from you".
+    """
     out: list[Resurfaced] = []
 
     if lat is not None and lon is not None:
-        out.extend(_nearby_saves(session, trip_id, lat, lon))
-        out.extend(_airport_knowledge(session, trip_id, lat, lon))
+        out.extend(_nearby_saves(session, trip_id, lat, lon, from_user, destination_scope))
+        if from_user:
+            out.extend(_airport_knowledge(session, trip_id, lat, lon))
 
     out.extend(_scoped_knowledge(session, trip_id, destination_scope))
     out.extend(_upcoming_events(session, trip_id, on))
     out.sort(key=lambda item: (-item.confidence, item.distance_km or 0.0))
-    return out[:limit]
+    return _dedupe(out)[:limit]
+
+
+def _dedupe(items: list[Resurfaced]) -> list[Resurfaced]:
+    """One card per thing; the first (highest-ranked) reason wins."""
+    seen: set[str] = set()
+    kept: list[Resurfaced] = []
+    for item in items:
+        key = item.knowledge_item_id or item.trip_place_id or item.title
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(item)
+    return kept
 
 
 EVENT_HORIZON_DAYS = 45
@@ -122,25 +143,39 @@ def _upcoming_events(session: Session, trip_id: str, on: date) -> list[Resurface
     return out
 
 
-def _nearby_saves(session: Session, trip_id: str, lat: float, lon: float) -> list[Resurfaced]:
+def _nearby_saves(
+    session: Session,
+    trip_id: str,
+    lat: float,
+    lon: float,
+    from_user: bool,
+    scope: str | None,
+) -> list[Resurfaced]:
     out: list[Resurfaced] = []
     for trip_place, distance in nearby_trip_places(
         session, trip_id, lat, lon, NEARBY_RADIUS_KM, limit=10
     ):
         if trip_place.status in (PlaceStatus.ARCHIVED, PlaceStatus.VISITED):
             continue
-        minutes = walking_minutes(distance)
+        if not from_user:
+            where = f"In {scope}" if scope else "Nearby"
+            reason = f"{where}, still unvisited."
+        elif distance < 0.1:
+            reason = "You're here, and it is still unvisited."
+        else:
+            reason = f"About {walking_minutes(distance)} min walk from you and still unvisited."
         out.append(
             Resurfaced(
                 kind="place",
                 title=trip_place.place.name,
                 body=trip_place.reason_saved,
-                reason=f"About {minutes} min walk from you and still unvisited.",
+                reason=reason,
                 confidence=0.9 if trip_place.status == PlaceStatus.MUST_VISIT else 0.75,
                 trip_place_id=trip_place.id,
                 place_id=trip_place.place_id,
                 category=trip_place.place.category,
-                distance_km=distance,
+                # A distance from a stand-in point is not a distance from you.
+                distance_km=distance if from_user else None,
             )
         )
     return out

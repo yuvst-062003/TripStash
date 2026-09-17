@@ -340,7 +340,7 @@ function MapSheet({
     const apply = () => {
       const px = Math.round(node.getBoundingClientRect().height)
       root.style.setProperty('--sheet-h', `${px}px`)
-      root.style.setProperty('--fab-bottom', `calc(${px}px + var(--nav-h) + var(--s-3))`)
+      root.style.setProperty('--fab-lift', `${px}px`)
     }
     apply()
     const observer = new ResizeObserver(apply)
@@ -348,7 +348,7 @@ function MapSheet({
     return () => {
       observer.disconnect()
       root.style.removeProperty('--sheet-h')
-      root.style.removeProperty('--fab-bottom')
+      root.style.removeProperty('--fab-lift')
     }
   }, [])
 

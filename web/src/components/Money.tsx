@@ -24,7 +24,6 @@ export function MoneyFigure({
         value={amount}
         format={{ minimumFractionDigits: decimals, maximumFractionDigits: decimals }}
         animated={!reduced}
-        willChange
       />
       <span className="t-head dimmer" style={{ letterSpacing: 0 }}>
         {currency}
@@ -69,9 +68,9 @@ export function BudgetArc({
         strokeWidth="10"
         strokeLinecap="round"
         strokeDasharray={arcLength}
-        initial={reduced ? false : { strokeDashoffset: arcLength }}
+        initial={false}
         animate={{ strokeDashoffset: arcLength * (1 - ratio) }}
-        transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 60, damping: 18 }}
+        transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 170, damping: 26 }}
       />
       <text
         x="60"
@@ -85,7 +84,7 @@ export function BudgetArc({
       >
         {Math.round(ratio * 100)}%
       </text>
-      <text x="60" y="82" textAnchor="middle" fontFamily="var(--font)" fontWeight="500" fontSize="9" fill="var(--ink-3)">
+      <text x="60" y="82" textAnchor="middle" fontFamily="var(--font)" fontWeight="500" fontSize="9" fill="currentColor" opacity="0.8">
         of budget
       </text>
     </svg>

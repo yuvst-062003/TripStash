@@ -1,5 +1,5 @@
 import { Suspense, lazy, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
@@ -39,7 +39,16 @@ function daysFrom(date: string | null | undefined): number | null {
 
 export default function TripScreen() {
   const { trip, signOut } = useApp()
-  const [section, setSection] = useState<Section>('plan')
+  // Deep links from Home ("Plan", "Details") open the right section.
+  const [params, setParams] = useSearchParams()
+  const initial = params.get('section')
+  const [section, setSectionState] = useState<Section>(
+    initial === 'bookings' || initial === 'money' ? initial : 'plan',
+  )
+  const setSection = (next: Section) => {
+    setSectionState(next)
+    setParams(next === 'plan' ? {} : { section: next }, { replace: true })
+  }
   const { reduced, spring } = useMotionPrefs()
   useScreenContext({ surface: 'trip' })
 

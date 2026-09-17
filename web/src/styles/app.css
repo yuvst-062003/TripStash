@@ -101,9 +101,6 @@ code { font: inherit; font-weight: 600; }
 /* Editorial screen header: the place you are is the headline. */
 .hero {
   padding: calc(var(--s-6) + env(safe-area-inset-top)) var(--s-4) var(--s-4);
-  background:
-    radial-gradient(120% 90% at 100% 0%, var(--teal-soft) 0%, transparent 55%),
-    radial-gradient(70% 60% at 0% 100%, var(--gold-soft) 0%, transparent 60%);
 }
 .hero__top {
   display: flex;
@@ -156,12 +153,14 @@ code { font: inherit; font-weight: 600; }
 /* Section title: a real heading, not a caps label. */
 .section {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--s-3);
   padding: var(--s-8) var(--s-4) var(--s-3);
 }
 .section:first-child { padding-top: var(--s-4); }
+/* An action keeps its 36px hit area without inflating the row. */
+.section > .btn { margin-block: -7px; }
 .section__title {
   font: 700 1.125rem/1.2 var(--font);
   font-variation-settings: 'opsz' 32, 'wdth' 92;
@@ -171,7 +170,7 @@ code { font: inherit; font-weight: 600; }
 
 .rail {
   display: flex;
-  gap: var(--s-2);
+  gap: var(--s-3);
   overflow-x: auto;
   scrollbar-width: none;
   padding: var(--s-1) var(--s-4);
@@ -179,7 +178,7 @@ code { font: inherit; font-weight: 600; }
   scroll-padding-inline: var(--s-4);
 }
 .rail::-webkit-scrollbar { display: none; }
-.rail > * { flex: 0 0 auto; scroll-snap-align: start; }
+.rail > * { flex: 0 0 auto; display: flex; scroll-snap-align: start; }
 
 /* ---------------------------------------------------------------------------
    Lists
@@ -234,7 +233,7 @@ code { font: inherit; font-weight: 600; }
 .glyph--transport { background: var(--tint-transport-soft); color: var(--tint-transport); }
 .glyph--teal { background: var(--teal-soft); color: var(--teal); }
 .glyph--coral { background: var(--coral-soft); color: var(--coral); }
-.glyph--gold { background: var(--gold-soft); color: var(--on-gold); }
+.glyph--gold { background: var(--gold-soft); color: var(--tint-view); }
 
 /* ---------------------------------------------------------------------------
    Cards
@@ -247,15 +246,19 @@ code { font: inherit; font-weight: 600; }
   padding: var(--s-4);
 }
 .card--raised { border-color: transparent; box-shadow: var(--shadow-float); }
-.card--ink { background: var(--primary-gradient); color: #ffffff; border-color: transparent; }
-.card--ink .dim { color: rgba(255, 255, 255, 0.78); }
-.card--ink .dimmer { color: rgba(255, 255, 255, 0.6); }
+.card--ink { background: var(--teal-deep); color: #ffffff; border-color: transparent; }
+.card--ink .dim { color: rgba(255, 255, 255, 0.9); }
+.card--ink .dimmer { color: rgba(255, 255, 255, 0.8); }
+/* A card that is a link answers the press like a button does. */
+.card--press { transition: transform var(--dur) var(--ease); }
+.card--press:active { transform: scale(0.98); transition-duration: 0ms; }
 .card--coral { background: var(--coral-soft); border-color: transparent; }
 .card--gold { background: var(--gold-soft); border-color: transparent; }
 .card--teal { background: var(--teal-soft); border-color: transparent; }
 
 /* A tall card in a horizontal rail — the "brought back" strip. */
 .rail-card {
+  flex: 1;
   width: 248px;
   min-height: 212px;
   display: flex;
@@ -269,8 +272,10 @@ code { font: inherit; font-weight: 600; }
   text-align: left;
   transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
-.rail-card:hover { transform: translateY(-2px); border-color: var(--teal-soft); transition-duration: 0ms; }
-.rail-card:active { transform: scale(0.985); }
+@media (hover: hover) {
+  .rail-card:hover { transform: translateY(-2px); border-color: var(--teal-soft); transition-duration: 0ms; }
+}
+.rail-card:active { transform: scale(0.98); transition-duration: 0ms; }
 .rail-card__title {
   font: 700 1.25rem/1.1 var(--font);
   font-variation-settings: 'opsz' 40, 'wdth' 90;
@@ -332,7 +337,7 @@ code { font: inherit; font-weight: 600; }
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 .icon-btn:hover { background: var(--paper-2); color: var(--ink); }
-.icon-btn:active { transform: scale(0.94); }
+.icon-btn:active { transform: scale(0.96); transition-duration: 0ms; }
 .icon-btn--raised {
   background: var(--card);
   box-shadow: var(--shadow-float);
@@ -469,7 +474,9 @@ code { font: inherit; font-weight: 600; }
   display: flex;
   align-items: center;
   gap: var(--s-2);
+  transition: transform var(--dur) var(--ease);
 }
+a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
 
 .stepper { padding-inline: var(--s-4); }
 .stepper__item {
@@ -572,7 +579,8 @@ code { font: inherit; font-weight: 600; }
 .fab {
   position: fixed;
   right: var(--s-4);
-  bottom: var(--fab-bottom, calc(var(--nav-h) + var(--s-3)));
+  bottom: calc(var(--nav-h) + var(--s-3));
+  transform: translateY(calc(-1 * var(--fab-lift, 0px)));
   z-index: 45;
   display: inline-flex;
   align-items: center;
@@ -586,7 +594,7 @@ code { font: inherit; font-weight: 600; }
   font: var(--head);
   box-shadow: var(--shadow-float);
   cursor: pointer;
-  transition: bottom var(--dur-slow) var(--ease);
+  transition: transform var(--dur-slow) var(--ease);
 }
 
 /* ---------------------------------------------------------------------------
@@ -965,9 +973,12 @@ textarea.input { min-height: 84px; resize: vertical; }
   inset: 0;
   transform: translateX(-100%);
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--card) 70%, transparent), transparent);
-  animation: shimmer 1.4s ease-in-out infinite;
+  animation: shimmer 1.6s linear infinite;
 }
 @keyframes shimmer { to { transform: translateX(100%); } }
+/* A skeleton that shows for one frame is a flash, not a state: hold it 150 ms. */
+.screen--loading { animation: appear 0s 150ms both; }
+@keyframes appear { from { visibility: hidden; } }
 
 .empty {
   padding: var(--s-10) var(--s-4);
@@ -1269,7 +1280,7 @@ textarea.input { min-height: 84px; resize: vertical; }
   cursor: pointer;
   transition: transform var(--dur) var(--ease);
 }
-.avatar-btn:active { transform: scale(0.94); }
+.avatar-btn:active { transform: scale(0.96); transition-duration: 0ms; }
 
 /* ---------------------------------------------------------------------------
    Journey, full screen — the route on the Earth, night sky, glass controls.
