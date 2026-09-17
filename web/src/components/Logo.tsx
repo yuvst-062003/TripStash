@@ -2,14 +2,15 @@ import { motion } from 'motion/react'
 import { useMotionPrefs } from '../lib/motion'
 
 /**
- * The TripStash mark: a folded paper map with a pin planted in it.
+ * The TripStash mark: from content to plan.
  *
- * The map is yours — three panels, folded the way a paper map is — and the
- * pin is a place you stashed on it. A dashed route runs across the panels to
- * the pin: the thing you saved, brought back on the way.
+ * A folded map whose first panel is a video frame — a Reel, a screenshot,
+ * the thing you saved — with a play button. A dashed route runs from that
+ * play button across the map to a pin: what you watched, turned into a place
+ * on your own map.
  *
- * Animated, the map unfolds panel by panel, the route is drawn, and the pin
- * drops in with the stamp spring. Static, it is just the mark.
+ * Animated, the map unfolds, the play button appears, the route is drawn from
+ * it, and the pin drops in with the stamp spring. Static, it is just the mark.
  */
 export default function Logo({
   size = 72,
@@ -61,9 +62,19 @@ export default function Logo({
         {...panel(2)}
       />
 
-      {/* The route across the map, drawn after the panels are open. */}
+      {/* The content: a play button on the first panel. */}
       <motion.path
-        d="M9 48 C 16 44, 18 36, 26 38 S 40 44, 48 34"
+        d="M10.5 28.5 L19 34 L10.5 39.5 Z"
+        fill="var(--paper)"
+        initial={play ? { scale: 0, opacity: 0 } : undefined}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ ...stamp, delay: play ? 0.5 : 0 }}
+        style={{ transformOrigin: '14px 34px' }}
+      />
+
+      {/* The route: from the play button, across the map, to the pin. */}
+      <motion.path
+        d="M19 34 C 25 34, 25 45, 32 43 S 41 40, 48 35"
         fill="none"
         stroke="var(--paper)"
         strokeWidth="2.2"
@@ -71,14 +82,14 @@ export default function Logo({
         strokeDasharray="3.5 3.5"
         initial={play ? { pathLength: 0, opacity: 0 } : undefined}
         animate={{ pathLength: 1, opacity: 0.85 }}
-        transition={{ duration: 0.55, delay: play ? 0.55 : 0, ease }}
+        transition={{ duration: 0.55, delay: play ? 0.7 : 0, ease }}
       />
 
-      {/* The pin, dropped in with the stamp spring, planted where the route ends. */}
+      {/* The plan: a pin, dropped in with the stamp spring where the route ends. */}
       <motion.g
         initial={play ? { y: -26, opacity: 0, scale: 1.25 } : undefined}
         animate={{ y: 0, opacity: 1, scale: 1 }}
-        transition={{ ...stamp, delay: play ? 0.85 : 0 }}
+        transition={{ ...stamp, delay: play ? 1.05 : 0 }}
         style={{ transformOrigin: '48px 34px' }}
       >
         <ellipse cx="48" cy="35" rx="6" ry="2.2" fill="rgba(0,0,0,0.28)" />

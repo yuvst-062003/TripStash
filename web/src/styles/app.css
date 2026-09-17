@@ -1089,3 +1089,12 @@ textarea.input { min-height: 84px; resize: vertical; }
 @media (min-width: 720px) {
   .login__globe { right: 4vw; top: 8vh; }
 }
+
+/* The trip's own globe in the hero — small, spinning, route arcs drawn. */
+.trip-globe {
+  flex: none;
+  width: 148px;
+  height: 148px;
+  margin: -12px -8px 0 0;
+  cursor: grab;
+}

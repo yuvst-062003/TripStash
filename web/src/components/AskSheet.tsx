@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { motion } from 'motion/react'
 import { ApiError, api } from '../lib/api'
 import { useApp, type AskSeed } from '../lib/context'
+import { useMotionPrefs } from '../lib/motion'
 import type { AskResponse, ProposedAction } from '../lib/types'
+import { Stamp } from './Stamp'
 import {
   Freshness,
   Glyph,
@@ -12,17 +15,12 @@ import {
   Pill,
   Sheet,
   SkeletonRows,
+  categoryTint,
+  knowledgeTint,
   pairText,
 } from './ui'
-import {
-  ArrowUpRight,
-  Check,
-  ChevronRight,
-  KNOWLEDGE_ICON,
-  CATEGORY_ICON,
-  Navigation,
-  Send,
-} from './icons'
+import { ArrowUpRight, Check, ChevronRight, KNOWLEDGE_ICON, CATEGORY_ICON, Navigation } from './icons'
+import { SendIcon, type SendIconHandle } from './motion'
 
 const STARTERS = [
   'What have I saved near me?',
@@ -30,6 +28,35 @@ const STARTERS = [
   'How is my budget doing?',
   'Where can I stay?',
 ]
+
+/**
+ * The answer arrives a word at a time — quickly, capped so a long answer
+ * never makes you wait — because a reply that simply appears reads as a
+ * template, and one that streams reads as considered.
+ */
+function Reveal({ text }: { text: string }) {
+  const { reduced } = useMotionPrefs()
+  const words = text.split(' ')
+  if (reduced) return <p className="t">{text}</p>
+  const animated = Math.min(words.length, 40)
+  const step = 0.4 / animated
+  return (
+    <p className="t" aria-label={text}>
+      {words.map((word, index) => (
+        <motion.span
+          key={index}
+          aria-hidden
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18, delay: index < animated ? index * step : 0.4 }}
+          style={{ display: 'inline-block', marginRight: '0.28em' }}
+        >
+          {word}
+        </motion.span>
+      ))}
+    </p>
+  )
+}
 
 /**
  * One assistant, everywhere.
@@ -47,6 +74,7 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
   const [error, setError] = useState<string | null>(null)
   const [applied, setApplied] = useState<string[]>([])
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const sendRef = useRef<SendIconHandle>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -94,28 +122,31 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
               placeholder="What have I saved near me?"
               onChange={(event) => setQuestion(event.target.value)}
               aria-label="Your question"
-              style={{ paddingRight: 48 }}
+              style={{ paddingRight: 52 }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) submit()
               }}
             />
-            <button
+            <motion.button
               type="submit"
               className="icon-btn"
               disabled={busy || !question.trim()}
               aria-label="Ask"
+              whileTap={{ scale: 0.9 }}
+              onPointerEnter={() => sendRef.current?.startAnimation()}
+              onPointerLeave={() => sendRef.current?.stopAnimation()}
               style={{
                 position: 'absolute',
-                right: 4,
-                bottom: 4,
-                width: 36,
-                height: 36,
+                right: 6,
+                bottom: 6,
+                width: 38,
+                height: 38,
                 background: question.trim() ? 'var(--ink)' : 'transparent',
-                color: question.trim() ? 'var(--bg)' : 'var(--ink-3)',
+                color: question.trim() ? 'var(--paper)' : 'var(--ink-3)',
               }}
             >
-              <Send size={16} strokeWidth={2.2} />
-            </button>
+              <SendIcon ref={sendRef} size={17} aria-hidden />
+            </motion.button>
           </div>
         </form>
 
@@ -147,7 +178,14 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
         </div>
       )}
 
-      {busy && <SkeletonRows rows={2} />}
+      {busy && (
+        <div className="pad" style={{ paddingTop: 'var(--s-4)' }}>
+          <Stamp tone="muted" size="sm" rotate={-4}>
+            Thinking
+          </Stamp>
+          <SkeletonRows rows={2} />
+        </div>
+      )}
 
       {error && (
         <div className="pad" style={{ paddingTop: 'var(--s-3)' }}>
@@ -158,7 +196,7 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
       {answer && (
         <>
           <div className="pad" style={{ paddingTop: 'var(--s-4)' }}>
-            <p className="t">{answer.answer}</p>
+            <Reveal text={answer.answer} />
             {answer.disclaimers.map((note) => (
               <div key={note} style={{ marginTop: 'var(--s-2)' }}>
                 <Note tone="warn">{note}</Note>
@@ -169,18 +207,18 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
           {answer.proposed_actions.length > 0 && (
             <div className="pad" style={{ marginTop: 'var(--s-4)' }}>
               {answer.proposed_actions.map((action) => (
-                <div key={action.type} className="card">
-                  <p className="t-md">{action.label}</p>
-                  <p className="t-sm dim" style={{ marginTop: 2 }}>
+                <div key={action.type} className="card card--teal">
+                  <p className="t-head">{action.label}</p>
+                  <p className="t-small dim" style={{ marginTop: 2 }}>
                     {action.preview}
                   </p>
                   <div style={{ marginTop: 'var(--s-3)' }}>
                     {applied.includes(action.type) ? (
-                      <span className="row t-sm" style={{ gap: 4, color: 'var(--accent)' }}>
-                        <Check size={15} strokeWidth={2.4} /> Done
-                      </span>
+                      <Stamp tone="teal" size="sm" Icon={Check} rotate={-5}>
+                        Done
+                      </Stamp>
                     ) : (
-                      <button className="btn btn--accent btn--sm" onClick={() => confirm(action)}>
+                      <button className="btn btn--ink btn--sm" onClick={() => confirm(action)}>
                         Confirm
                       </button>
                     )}
@@ -193,18 +231,20 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
           {answer.cards.length > 0 && (
             <ul className="list" style={{ marginTop: 'var(--s-4)' }}>
               {answer.cards.map((card, index) => {
+                const category = card.subtitle?.split(',')[0]?.trim() ?? 'other'
                 const Icon = card.knowledge_type
                   ? KNOWLEDGE_ICON[card.knowledge_type] ?? KNOWLEDGE_ICON.general
-                  : CATEGORY_ICON[card.subtitle?.split(',')[0]?.trim() ?? 'other'] ?? CATEGORY_ICON.other
+                  : CATEGORY_ICON[category] ?? CATEGORY_ICON.other
+                const tint = card.knowledge_type ? knowledgeTint(card.knowledge_type) : categoryTint(category)
                 const { headline, detail } = pairText(card.title, card.body)
                 const inner = (
                   <>
-                    {card.type !== 'budget' && <Glyph Icon={Icon} />}
+                    {card.type !== 'budget' && <Glyph Icon={Icon} tint={tint} />}
                     <div className="item__body">
                       <div className="row between" style={{ gap: 'var(--s-2)' }}>
                         <p className="item__title grow clamp-1">{headline}</p>
                         {card.walking_minutes != null && (
-                          <span className="t-sm dimmer num" style={{ flex: 'none' }}>
+                          <span className="t-small dimmer num" style={{ flex: 'none' }}>
                             {card.walking_minutes} min
                           </span>
                         )}
@@ -216,13 +256,13 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
                           card.provenance,
                         ]}
                       />
-                      {card.why_saved && <p className="t-sm dim clamp-2">{card.why_saved}</p>}
-                      {detail && <p className="t-sm dim clamp-3">{detail}</p>}
+                      {card.why_saved && <p className="t-small dim clamp-2">{card.why_saved}</p>}
+                      {detail && <p className="t-small dim clamp-3">{detail}</p>}
 
                       {card.type === 'budget' && (
-                        <p className="t-lg num" style={{ marginTop: 4 }}>
+                        <p className="t-title num" style={{ marginTop: 4 }}>
                           {card.spent?.toFixed(0)}{' '}
-                          <span className="t-sm dimmer">
+                          <span className="t-small dimmer">
                             {card.currency} spent
                             {card.remaining != null && ` · ${card.remaining.toFixed(0)} left`}
                           </span>
@@ -235,7 +275,7 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
 
                       {card.facts?.map((fact) => (
                         <div className="row between" key={fact.kind} style={{ marginTop: 4 }}>
-                          <span className="t-sm grow clamp-1">
+                          <span className="t-small grow clamp-1">
                             <span className="dimmer" style={{ textTransform: 'capitalize' }}>
                               {fact.kind}{' '}
                             </span>
@@ -257,7 +297,7 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
                   >
                     {card.actions.slice(0, 2).map((action) => (
                       <a
-                        className="btn btn--sm btn--plain"
+                        className="btn btn--sm btn--ghost"
                         key={action.key}
                         href={action.url}
                         target="_blank"
@@ -279,10 +319,10 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
                     {card.trip_place_id ? (
                       <Link className="item" to={`/places/${card.trip_place_id}`} onClick={onClose}>
                         {inner}
-                        <ChevronRight size={17} className="dimmer" style={{ flex: 'none', marginTop: 9 }} />
+                        <ChevronRight size={17} className="item__chev" />
                       </Link>
                     ) : (
-                      <div className="item" style={{ cursor: 'default' }}>
+                      <div className="item item--static">
                         {inner}
                       </div>
                     )}
@@ -295,15 +335,15 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
 
           {answer.citations.length > 0 && (
             <>
-              <p className="pad t-xs" style={{ marginTop: 'var(--s-5)' }}>
+              <p className="pad t-head" style={{ marginTop: 'var(--s-5)' }}>
                 Where this came from
               </p>
               <ul className="list">
                 {answer.citations.map((citation, index) => (
                   <li key={`${citation.source_id}-${index}`}>
-                    <div className="item" style={{ cursor: 'default' }}>
+                    <div className="item item--static">
                       <div className="item__body">
-                        <p className="t-sm clamp-1">{citation.label}</p>
+                        <p className="t-small clamp-1">{citation.label}</p>
                         <Meta parts={[citation.provenance, citation.published_on]} />
                         {citation.quote && (
                           <blockquote className="quote" style={{ marginTop: 6 }}>
@@ -312,7 +352,7 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
                         )}
                         {citation.url && (
                           <a
-                            className="btn btn--sm btn--plain"
+                            className="btn btn--sm btn--ghost"
                             href={citation.url}
                             target="_blank"
                             rel="noreferrer"
@@ -330,7 +370,7 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
             </>
           )}
 
-          <p className="pad t-sm dimmer" style={{ marginTop: 'var(--s-4)' }}>
+          <p className="pad t-small dimmer" style={{ marginTop: 'var(--s-4)' }}>
             Answered from your own trip records in {answer.latency_ms} ms. Nothing was changed.
           </p>
         </>

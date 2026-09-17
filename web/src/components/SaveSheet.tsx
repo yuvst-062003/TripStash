@@ -1,9 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { motion } from 'motion/react'
 import { ApiError, api } from '../lib/api'
 import { useApp } from '../lib/context'
+import { STAMP_PATTERN, tick } from '../lib/haptics'
 import type { SourceSummary } from '../lib/types'
-import { Note, Sheet, Tabs } from './ui'
-import { Check, Upload } from './icons'
+import Segmented from './Segmented'
+import { Stamp, StampDrop } from './Stamp'
+import { Note, Sheet } from './ui'
+import { Check } from './icons'
+import { UploadIcon, type UploadIconHandle } from './motion'
 
 type Mode = 'link' | 'upload' | 'note' | 'place'
 
@@ -22,6 +27,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SourceSummary[] | null>(null)
+  const uploadRef = useRef<UploadIconHandle>(null)
 
   async function save(event: React.FormEvent) {
     event.preventDefault()
@@ -59,6 +65,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
     return (
       <Sheet title="Saved" onClose={onClose}>
         <div className="pad stack" style={{ paddingTop: 'var(--s-2)' }}>
+          <SavedStamp pending={pending} />
           <Note Icon={Check}>
             {pending > 0
               ? `${pending} item${pending === 1 ? '' : 's'} extracted and waiting in Inbox. Nothing goes on your map until you confirm it.`
@@ -72,7 +79,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
           ))}
 
           <div className="row" style={{ gap: 'var(--s-2)' }}>
-            <button className="btn btn--accent grow" onClick={onClose}>
+            <button className="btn btn--ink grow" onClick={onClose}>
               Done
             </button>
             <button
@@ -94,7 +101,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <Sheet title="Save" onClose={onClose}>
-      <Tabs
+      <Segmented
         label="What to save"
         value={mode}
         onChange={setMode}
@@ -128,7 +135,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
                 onChange={(event) => setText(event.target.value)}
               />
             </label>
-            <p className="t-sm dimmer">
+            <p className="t-small dimmer">
               The link is stored either way. If the platform blocks reading it, paste the caption or
               add a screenshot and nothing is lost.
             </p>
@@ -137,13 +144,26 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
 
         {mode === 'upload' && (
           <>
-            <label
-              className="btn btn--block"
-              style={{ flexDirection: 'column', gap: 4, minHeight: 92, cursor: 'pointer' }}
+            <motion.label
+              className="card"
+              whileTap={{ scale: 0.985 }}
+              onPointerEnter={() => uploadRef.current?.startAnimation()}
+              onPointerLeave={() => uploadRef.current?.stopAnimation()}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 6,
+                minHeight: 112,
+                justifyContent: 'center',
+                cursor: 'pointer',
+                borderStyle: 'dashed',
+                borderWidth: 2,
+              }}
             >
-              <Upload size={20} strokeWidth={1.9} className="dimmer" />
-              <span className="t-md">Choose photos or videos</span>
-              <span className="t-sm dimmer">Only what you pick here is uploaded</span>
+              <UploadIcon ref={uploadRef} size={24} aria-hidden />
+              <span className="t-head">Choose photos or videos</span>
+              <span className="t-small dimmer">Only what you pick here is uploaded</span>
               <input
                 type="file"
                 multiple
@@ -151,10 +171,10 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
                 className="sr-only"
                 onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
               />
-            </label>
+            </motion.label>
 
             {files.length > 0 && (
-              <p className="t-sm dim num">
+              <p className="t-small dim num">
                 {files.length} file{files.length === 1 ? '' : 's'} ·{' '}
                 {(files.reduce((sum, file) => sum + file.size, 0) / 1048576).toFixed(1)} MB
               </p>
@@ -170,7 +190,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
               />
             </label>
 
-            <p className="t-sm dimmer">
+            <p className="t-small dimmer">
               TripStash never scans your library. Each file keeps a content hash, so re-importing the
               same clip will not duplicate it.
             </p>
@@ -193,7 +213,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
         {mode === 'place' && (
           <>
             {position ? (
-              <p className="t-sm dim num">
+              <p className="t-small dim num">
                 Saving {position.lat.toFixed(4)}, {position.lon.toFixed(4)}.
               </p>
             ) : (
@@ -215,10 +235,34 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
 
         {error && <Note tone="danger">{error}</Note>}
 
-        <button className="btn btn--accent btn--block" type="submit" disabled={!canSubmit}>
+        <motion.button className="btn btn--coral btn--block" type="submit" disabled={!canSubmit} whileTap={{ scale: 0.98 }}>
           {busy ? 'Saving…' : 'Save and extract'}
-        </button>
+        </motion.button>
       </form>
     </Sheet>
+  )
+}
+
+/** The stamp lands as the sheet opens on the result, with a haptic tick. */
+function SavedStamp({ pending }: { pending: number }) {
+  const [show, setShow] = useState(false)
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setShow(true)
+      tick(STAMP_PATTERN)
+    }, 120)
+    return () => window.clearTimeout(id)
+  }, [])
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-4)', minHeight: 72 }}>
+      <StampDrop show={show} tone={pending > 0 ? 'teal' : 'muted'} Icon={Check}>
+        Stashed
+      </StampDrop>
+      {pending > 0 && (
+        <Stamp tone="coral" size="sm" rotate={5}>
+          {pending} to review
+        </Stamp>
+      )}
+    </div>
   )
 }
