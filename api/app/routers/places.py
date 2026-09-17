@@ -308,7 +308,9 @@ def place_page(
             ],
         },
         "actions": {
-            "primary": handoff.serialise([handoff.navigate(place)]),
+            "primary": handoff.serialise(
+                [handoff.navigate(place, mode=handoff.travel_mode(distance))]
+            ),
             "secondary": handoff.serialise(handoff.for_place(place)[1:]),
         },
         "suggested_questions": _suggested_questions(place.category),

@@ -10,6 +10,7 @@ import { useMotionPrefs } from '../lib/motion'
 import type { MapFeature, PlaceStatus } from '../lib/types'
 import { STATUS_STAMP, Stamp, StatusStamp } from '../components/Stamp'
 import {
+  CacheNote,
   Empty,
   ErrorNote,
   Freshness,
@@ -17,6 +18,7 @@ import {
   Meta,
   MotionList,
   MotionRow,
+  Note,
   Pill,
   SkeletonRows,
   categoryTint,
@@ -34,13 +36,28 @@ import {
 
 const STATUS_FILTERS: PlaceStatus[] = ['saved', 'must_visit', 'planned', 'visited']
 const CATEGORY_FILTERS = ['attraction', 'restaurant', 'cafe', 'accommodation', 'nature', 'viewpoint']
+const CATEGORY_LABEL: Record<string, string> = {
+  attraction: 'Attraction',
+  restaurant: 'Restaurant',
+  cafe: 'Café',
+  bar: 'Bar',
+  accommodation: 'Stay',
+  nature: 'Nature',
+  viewpoint: 'Viewpoint',
+  activity: 'Activity',
+  transport: 'Transport',
+  shop: 'Shop',
+  other: 'Place',
+}
 
 /** Sheet snap points as a share of the viewport — the map-app pattern. */
 const SNAP = { peek: 0.28, half: 0.55, full: 0.9 } as const
 type Snap = keyof typeof SNAP
 const SNAP_ORDER: Snap[] = ['peek', 'half', 'full']
+/** A selected place's card sizes to its content, up to this share of the viewport. */
+const CARD_MAX = 0.6
 
-/** OSM tiles; the colour scheme is handled in CSS on the tile pane. */
+/** OSM tiles; the colour scheme is handled in CSS on the tile pane and a tint pane. */
 const TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 const ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 
@@ -53,26 +70,47 @@ const STATUS_COLOUR: Record<PlaceStatus, string> = {
   archived: 'var(--ink-3)',
 }
 
-/** A stamp pin: a tinted ring with the category glyph inside. */
-function pinIcon(feature: MapFeature, active: boolean, index = 0): L.DivIcon {
-  const { status, is_favourite: favourite, name, category } = feature.properties
+/** Pins closer than this on screen become one cluster pin. */
+const CLUSTER_PX = 30
+const PIN = 44
+
+/**
+ * A stamp pin inside a 44px hit area. Status is a badge icon, not just a
+ * hue; must-visit is a filled coral disc so it reads by weight.
+ */
+function pinIcon(feature: MapFeature, enter: boolean, index = 0): L.DivIcon {
+  const { status, is_favourite: favourite, category } = feature.properties
   const Icon = CATEGORY_ICON[category] ?? CATEGORY_ICON.other
-  const size = active ? 40 : 28
+  const StatusIcon = STATUS_STAMP[status].Icon
+  const classes = ['pin']
+  if (favourite) classes.push('pin--fav')
+  if (status === 'must_visit') classes.push('pin--must')
+  if (enter) classes.push('pin--enter')
   const html = renderToStaticMarkup(
-    <div
-      className={`pin${favourite ? ' pin--fav' : ''}${active ? ' pin--active' : ''}`}
-      style={{ '--pin': STATUS_COLOUR[status], '--i': Math.min(index, 12) } as React.CSSProperties}
-    >
-      <Icon strokeWidth={2.6} />
+    <div className="pin-hit">
+      <div
+        className={classes.join(' ')}
+        style={{ '--pin': STATUS_COLOUR[status], '--i': Math.min(index, 12) } as React.CSSProperties}
+      >
+        <Icon strokeWidth={2.6} />
+        {status !== 'saved' && (
+          <span className="pin__badge">
+            <StatusIcon strokeWidth={3} />
+          </span>
+        )}
+      </div>
     </div>,
   )
-  return L.divIcon({
-    className: '',
-    html,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-    ...({ alt: `${name} — ${STATUS_STAMP[status].label}` } as object),
-  })
+  return L.divIcon({ className: '', html, iconSize: [PIN, PIN], iconAnchor: [PIN / 2, PIN / 2] })
+}
+
+function clusterIcon(count: number): L.DivIcon {
+  const html = renderToStaticMarkup(
+    <div className="pin-hit">
+      <div className="pin pin--cluster">{count}</div>
+    </div>,
+  )
+  return L.divIcon({ className: '', html, iconSize: [PIN, PIN], iconAnchor: [PIN / 2, PIN / 2] })
 }
 
 /** The traveller's own saves on a familiar base map. */
@@ -92,9 +130,6 @@ export default function MapScreen() {
     label: selected?.properties.name,
   })
 
-  const snapRef = useRef<Snap>(snap)
-  snapRef.current = snap
-
   const params = useMemo(
     () => ({
       status: statuses.length ? statuses : undefined,
@@ -106,8 +141,69 @@ export default function MapScreen() {
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
-  const layerRef = useRef<L.LayerGroup | null>(null)
+  const markersRef = useRef<Map<string, L.Marker>>(new Map())
+  const clustersRef = useRef<L.LayerGroup | null>(null)
   const meRef = useRef<L.Marker | null>(null)
+  const drawnOnce = useRef(false)
+  const fittedIds = useRef('')
+  const featuresRef = useRef<MapFeature[]>([])
+  /** The sheet's current height in px, for fit padding. */
+  const sheetPx = useRef(window.innerHeight * SNAP.peek)
+  const selectRef = useRef<(feature: MapFeature) => void>(() => {})
+  /** Where the list was before a pin was tapped, so closing the card goes back there. */
+  const snapBefore = useRef<Snap>('peek')
+
+  const all = mapData.data?.features ?? []
+  const features = useMemo(() => {
+    if (!query.trim()) return all
+    const needle = query.trim().toLowerCase()
+    return all.filter((feature) => feature.properties.name.toLowerCase().includes(needle))
+  }, [all, query])
+  featuresRef.current = features
+
+  /**
+   * Pins that would overlap on screen become one cluster pin; tapping it
+   * zooms to just those places. Re-run after every zoom and data change.
+   */
+  const layoutPins = useCallback(() => {
+    const map = mapRef.current
+    const clusters = clustersRef.current
+    if (!map || !clusters) return
+    clusters.clearLayers()
+    const pending = featuresRef.current.filter((f) => markersRef.current.has(f.properties.trip_place_id))
+    const placed: { point: L.Point; members: MapFeature[] }[] = []
+    for (const feature of pending) {
+      const [lon, lat] = feature.geometry.coordinates
+      const point = map.latLngToLayerPoint([lat, lon])
+      const near = placed.find((group) => group.point.distanceTo(point) < CLUSTER_PX)
+      if (near) near.members.push(feature)
+      else placed.push({ point, members: [feature] })
+    }
+    for (const group of placed) {
+      const single = group.members.length === 1
+      for (const member of group.members) {
+        const marker = markersRef.current.get(member.properties.trip_place_id)
+        if (!marker) continue
+        if (single) {
+          if (!map.hasLayer(marker)) marker.addTo(map)
+        } else if (map.hasLayer(marker)) {
+          marker.remove()
+        }
+      }
+      if (!single) {
+        const bounds = L.latLngBounds(
+          group.members.map((m) => [m.geometry.coordinates[1], m.geometry.coordinates[0]] as [number, number]),
+        )
+        L.marker(bounds.getCenter(), { icon: clusterIcon(group.members.length), keyboard: true })
+          .on('click', () => map.fitBounds(bounds, { padding: [60, 60], maxZoom: 17, animate: !reduced }))
+          .on('add', (event) => {
+            const element = (event.target as L.Marker).getElement()
+            element?.setAttribute('aria-label', `${group.members.length} places here — tap to zoom in`)
+          })
+          .addTo(clusters)
+      }
+    }
+  }, [reduced])
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -119,22 +215,29 @@ export default function MapScreen() {
     // control and above the sheet, so nothing overlaps it.
     map.attributionControl.setPosition('bottomright').setPrefix('')
     L.tileLayer(TILES, { maxZoom: 19, attribution: ATTRIBUTION }).addTo(map)
-    layerRef.current = L.layerGroup().addTo(map)
+    // A tint pane pulls the tiles into the palette (multiply in light,
+    // lighten in dark), below the markers.
+    const tint = map.createPane('tint')
+    tint.style.zIndex = '250'
+    tint.style.pointerEvents = 'none'
+    L.rectangle(
+      [
+        [-85, -180],
+        [85, 180],
+      ],
+      { pane: 'tint', stroke: false, fillOpacity: 1, interactive: false, className: 'map-tint' },
+    ).addTo(map)
+    clustersRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
+    map.on('zoomend', () => layoutPins())
     return () => {
       map.remove()
       mapRef.current = null
-      layerRef.current = null
+      clustersRef.current = null
+      markersRef.current.clear()
       meRef.current = null
     }
-  }, [])
-
-  const features = useMemo(() => {
-    const all = mapData.data?.features ?? []
-    if (!query.trim()) return all
-    const needle = query.trim().toLowerCase()
-    return all.filter((feature) => feature.properties.name.toLowerCase().includes(needle))
-  }, [mapData.data, query])
+  }, [layoutPins])
 
   /**
    * The search bar and the sheet sit over the map, so a plain `fitBounds`
@@ -143,41 +246,107 @@ export default function MapScreen() {
   const visiblePadding = useCallback(
     (): L.FitBoundsOptions => ({
       paddingTopLeft: [24, 120],
-      paddingBottomRight: [24, Math.round(window.innerHeight * SNAP[snapRef.current]) + 24],
+      paddingBottomRight: [24, Math.round(sheetPx.current) + 24],
       maxZoom: 15,
-      animate: false,
+      animate: drawnOnce.current && !reduced,
+      duration: 0.35,
     }),
-    [],
+    [reduced],
   )
 
+  // Markers are kept by id: a tap, a filter or a keystroke adds and removes
+  // only what changed, so pins never re-mount and the drop-in plays once.
   useEffect(() => {
     const map = mapRef.current
-    const layer = layerRef.current
-    if (!map || !layer) return
-
-    layer.clearLayers()
-    const bounds: L.LatLngExpression[] = []
-    features.forEach((feature, index) => {
-      const [lon, lat] = feature.geometry.coordinates
-      const active = selected?.properties.trip_place_id === feature.properties.trip_place_id
-      bounds.push([lat, lon])
-      L.marker([lat, lon], { icon: pinIcon(feature, active, index), keyboard: true, riseOnHover: true })
-        .on('click', () => {
-          setSelected(feature)
-          setSnap('half')
-          // Lift the pin above the sheet that is about to cover the lower half.
-          const zoom = map.getZoom()
-          const point = map.project([lat, lon], zoom)
-          point.y += (window.innerHeight * SNAP.half) / 2
-          map.panTo(map.unproject(point, zoom), { animate: !reduced })
-        })
-        .addTo(layer)
-    })
-    if (bounds.length && !selected) {
-      map.fitBounds(L.latLngBounds(bounds), visiblePadding())
+    if (!map) return
+    const wanted = new Set(features.map((f) => f.properties.trip_place_id))
+    for (const [id, marker] of markersRef.current) {
+      if (!wanted.has(id)) {
+        marker.remove()
+        markersRef.current.delete(id)
+      }
     }
-  }, [features, selected, visiblePadding, reduced])
+    let added = 0
+    const enter = !drawnOnce.current
+    for (const feature of features) {
+      const id = feature.properties.trip_place_id
+      if (markersRef.current.has(id)) continue
+      const [lon, lat] = feature.geometry.coordinates
+      const marker = L.marker([lat, lon], {
+        icon: pinIcon(feature, enter, added),
+        keyboard: true,
+        riseOnHover: true,
+      })
+        .on('click', () => selectRef.current(feature))
+        .on('add', (event) => {
+          const element = (event.target as L.Marker).getElement()
+          element?.setAttribute(
+            'aria-label',
+            `${feature.properties.name} — ${STATUS_STAMP[feature.properties.status].label}`,
+          )
+        })
+      markersRef.current.set(id, marker)
+      added += 1
+    }
+    if (enter) {
+      // Drop-in classes are only for the first draw; strip them once played.
+      window.setTimeout(() => {
+        for (const marker of markersRef.current.values()) {
+          marker.getElement()?.querySelector('.pin--enter')?.classList.remove('pin--enter')
+        }
+      }, 1000)
+    }
+    layoutPins()
+    const ids = features.map((f) => f.properties.trip_place_id).sort().join(',')
+    if (features.length && ids !== fittedIds.current && !selected) {
+      fittedIds.current = ids
+      map.fitBounds(
+        L.latLngBounds(
+          features.map((f) => [f.geometry.coordinates[1], f.geometry.coordinates[0]] as [number, number]),
+        ),
+        visiblePadding(),
+      )
+    }
+    drawnOnce.current = true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [features])
 
+  // Selection only touches the two pins involved.
+  useEffect(() => {
+    for (const [id, marker] of markersRef.current) {
+      const pin = marker.getElement()?.querySelector('.pin')
+      const active = id === selected?.properties.trip_place_id
+      pin?.classList.toggle('pin--active', active)
+      marker.setZIndexOffset(active ? 1000 : 0)
+    }
+  }, [selected])
+
+  const select = useCallback(
+    (feature: MapFeature) => {
+      const map = mapRef.current
+      if (!map) return
+      setSelected((current) => {
+        if (!current) snapBefore.current = snap
+        return feature
+      })
+      setSnap('half')
+      // Lift the pin above the card that is about to cover the lower part.
+      const [lon, lat] = feature.geometry.coordinates
+      const zoom = map.getZoom()
+      const point = map.project([lat, lon], zoom)
+      point.y += Math.min(window.innerHeight * CARD_MAX, 360) / 2
+      map.panTo(map.unproject(point, zoom), { animate: !reduced })
+    },
+    [reduced, snap],
+  )
+  selectRef.current = select
+  const clearSelection = () => {
+    setSelected(null)
+    setSnap(snapBefore.current)
+  }
+
+  // Your position: a dot, and the map goes to it when you ask.
+  const wantCentre = useRef(false)
   useEffect(() => {
     const map = mapRef.current
     if (!map || !position) return
@@ -186,12 +355,26 @@ export default function MapScreen() {
       icon: L.divIcon({ className: '', html: '<div class="me-dot"></div>', iconSize: [16, 16] }),
       interactive: false,
     }).addTo(map)
-  }, [position])
-
-  useEffect(() => {
-    const id = window.setTimeout(() => mapRef.current?.invalidateSize(), 360)
-    return () => window.clearTimeout(id)
-  }, [snap])
+    if (wantCentre.current) {
+      wantCentre.current = false
+      map.flyTo([position.lat, position.lon], Math.max(map.getZoom(), 15), {
+        animate: !reduced,
+        duration: 0.6,
+      })
+    }
+  }, [position, reduced])
+  const locate = () => {
+    const map = mapRef.current
+    if (location.status === 'granted' && position && map) {
+      map.flyTo([position.lat, position.lon], Math.max(map.getZoom(), 15), {
+        animate: !reduced,
+        duration: 0.6,
+      })
+      return
+    }
+    wantCentre.current = true
+    requestLocation()
+  }
 
   const toggle = useCallback(
     <T,>(list: T[], value: T, set: (next: T[]) => void) =>
@@ -200,10 +383,14 @@ export default function MapScreen() {
   )
 
   const hasFilters = statuses.length > 0 || categories.length > 0
+  const searching = query.trim() !== ''
   const clearFilters = () => {
     setStatuses([])
     setCategories([])
   }
+  const onHeight = useCallback((px: number) => {
+    sheetPx.current = px
+  }, [])
 
   return (
     <div className="map-screen">
@@ -241,7 +428,7 @@ export default function MapScreen() {
               className="rail"
               initial={reduced ? false : { opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={reduced ? undefined : { opacity: 0, y: -8 }}
+              exit={reduced ? undefined : { opacity: 0, y: -6, transition: { duration: 0.12, ease: [0.4, 0, 1, 1] } }}
               transition={spring}
             >
               {hasFilters && (
@@ -265,23 +452,35 @@ export default function MapScreen() {
                   on={categories.includes(category)}
                   onClick={() => toggle(categories, category, setCategories)}
                 >
-                  {category}
+                  {CATEGORY_LABEL[category] ?? category}
                 </Pill>
               ))}
             </motion.div>
           )}
         </AnimatePresence>
+
+        {location.status === 'denied' && (
+          <div className="pad">
+            <div className="banner banner--warn" style={{ boxShadow: 'var(--shadow-float)' }}>
+              <Crosshair size={15} strokeWidth={2.2} />
+              <div className="grow">
+                Location off — distances and walking times stay hidden until you allow it.
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="map-side">
         <motion.button
           className="icon-btn icon-btn--glass"
-          onClick={requestLocation}
-          whileTap={{ scale: 0.92 }}
+          onClick={locate}
+          whileTap={{ scale: 0.96 }}
           aria-label="Centre on my location"
+          aria-busy={location.status === 'locating'}
           style={location.status === 'granted' ? { color: 'var(--teal)' } : undefined}
         >
-          <Crosshair size={19} />
+          <Crosshair size={19} className={location.status === 'locating' ? 'spin' : undefined} />
         </motion.button>
       </div>
 
@@ -289,13 +488,20 @@ export default function MapScreen() {
         snap={snap}
         onSnap={setSnap}
         selected={selected}
-        onClearSelection={() => setSelected(null)}
+        onSelect={select}
+        onClearSelection={clearSelection}
         features={features}
+        total={all.length}
+        query={query}
         loading={mapData.loading && !mapData.data}
         error={mapData.error}
+        fromCache={mapData.fromCache}
         onRetry={mapData.reload}
         hasFilters={hasFilters}
+        searching={searching}
         onClearFilters={clearFilters}
+        onClearSearch={() => setQuery('')}
+        onHeight={onHeight}
       />
     </div>
   )
@@ -305,34 +511,75 @@ function MapSheet({
   snap,
   onSnap,
   selected,
+  onSelect,
   onClearSelection,
   features,
+  total,
+  query,
   loading,
   error,
+  fromCache,
   onRetry,
   hasFilters,
+  searching,
   onClearFilters,
+  onClearSearch,
+  onHeight,
 }: {
   snap: Snap
   onSnap: (next: Snap) => void
   selected: MapFeature | null
+  onSelect: (feature: MapFeature) => void
   onClearSelection: () => void
   features: MapFeature[]
+  total: number
+  query: string
   loading: boolean
   error: string | null
+  fromCache: boolean
   onRetry: () => void
   hasFilters: boolean
+  searching: boolean
   onClearFilters: () => void
+  onClearSearch: () => void
+  onHeight: (px: number) => void
 }) {
   const { reduced, spring } = useMotionPrefs()
   const height = useMotionValue(window.innerHeight * SNAP[snap])
   const panStart = useRef(0)
   const sectionRef = useRef<HTMLElement | null>(null)
+  const topRef = useRef<HTMLDivElement | null>(null)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const [contentPx, setContentPx] = useState(0)
   const contentSized = Boolean(selected) && snap !== 'full'
 
+  // A selected place's card is as tall as its content (measured live) up to
+  // CARD_MAX; the list uses the snap points. One motion value drives both.
+  useEffect(() => {
+    const body = bodyRef.current
+    if (!body) return
+    const measure = () => setContentPx(body.scrollHeight)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(body)
+    for (const child of Array.from(body.children)) observer.observe(child)
+    return () => observer.disconnect()
+  }, [selected])
+
+  const target = contentSized
+    ? Math.min((topRef.current?.offsetHeight ?? 64) + contentPx, window.innerHeight * CARD_MAX)
+    : window.innerHeight * SNAP[snap]
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.toggleAttribute('data-sheet-live', true)
+    const controls = animate(height, target, reduced ? { duration: 0 } : spring)
+    controls.then(() => root.toggleAttribute('data-sheet-live', false))
+    return () => controls.stop()
+  }, [target, height, reduced, spring])
+
   // One variable drives everything that must sit above the sheet — the
-  // locate button, the FAB and the attribution — measured from the real
-  // height, so a content-sized card and a mid-drag sheet both stay clear.
+  // locate button, the FAB and the attribution — from the real height.
   useEffect(() => {
     const node = sectionRef.current
     if (!node) return
@@ -341,6 +588,7 @@ function MapSheet({
       const px = Math.round(node.getBoundingClientRect().height)
       root.style.setProperty('--sheet-h', `${px}px`)
       root.style.setProperty('--fab-lift', `${px}px`)
+      onHeight(px)
     }
     apply()
     const observer = new ResizeObserver(apply)
@@ -349,14 +597,9 @@ function MapSheet({
       observer.disconnect()
       root.style.removeProperty('--sheet-h')
       root.style.removeProperty('--fab-lift')
+      root.toggleAttribute('data-sheet-live', false)
     }
-  }, [])
-
-  // The sheet follows the finger while dragging, then springs to a snap.
-  useEffect(() => {
-    const controls = animate(height, window.innerHeight * SNAP[snap], reduced ? { duration: 0 } : spring)
-    return () => controls.stop()
-  }, [snap, height, reduced, spring])
+  }, [onHeight])
 
   const step = (direction: 1 | -1) => {
     const index = SNAP_ORDER.indexOf(snap)
@@ -365,6 +608,7 @@ function MapSheet({
 
   const onPanStart = () => {
     panStart.current = height.get()
+    document.documentElement.toggleAttribute('data-sheet-live', true)
   }
   const onPan = (_: PointerEvent, info: PanInfo) => {
     if (contentSized) return
@@ -374,7 +618,6 @@ function MapSheet({
   }
   const onPanEnd = (_: PointerEvent, info: PanInfo) => {
     if (contentSized) {
-      // Content-sized card: a drag up opens the full page-height sheet, down collapses.
       if (Math.abs(info.offset.y) < 24) step(1)
       else step(info.offset.y < 0 ? 1 : -1)
       return
@@ -388,61 +631,68 @@ function MapSheet({
     const nearest = SNAP_ORDER.reduce((best, key) =>
       Math.abs(SNAP[key] - current) < Math.abs(SNAP[best] - current) ? key : best,
     )
-    if (nearest === snap) animate(height, window.innerHeight * SNAP[snap], spring)
-    else onSnap(nearest)
+    if (nearest === snap) {
+      animate(height, window.innerHeight * SNAP[snap], spring).then(() =>
+        document.documentElement.toggleAttribute('data-sheet-live', false),
+      )
+    } else {
+      onSnap(nearest)
+    }
   }
 
-  return (
-    <motion.section
-      ref={sectionRef}
-      className={`map-sheet${contentSized ? ' map-sheet--auto' : ''}`}
-      style={contentSized ? undefined : { height }}
-      aria-label="Saved places"
-    >
-      <motion.button
-        className="map-sheet__handle"
-        onPanStart={onPanStart}
-        onPan={onPan}
-        onPanEnd={onPanEnd}
-        onClick={() => step(snap === 'full' ? -1 : 1)}
-        aria-label={snap === 'peek' ? 'Expand list' : 'Collapse list'}
-      >
-        <span className="drawer__grip" style={{ margin: '0 auto var(--s-3)' }} />
-        <span className="row between">
-          <span className="t-title grow clamp-1" style={{ fontSize: '1.25rem' }}>
-            {selected
-              ? selected.properties.name
-              : `${features.length} saved place${features.length === 1 ? '' : 's'}`}
-          </span>
-          {selected ? (
-            <span
-              className="icon-btn"
-              onClick={(event) => {
-                event.stopPropagation()
-                onClearSelection()
-              }}
-              aria-hidden
-            >
-              <X size={17} />
-            </span>
-          ) : (
-            <span className="t-small dimmer">{snap === 'peek' ? 'Pull up' : 'Pull down'}</span>
-          )}
-        </span>
-      </motion.button>
+  const title = selected
+    ? selected.properties.name
+    : loading
+      ? 'Loading your places…'
+      : searching || hasFilters
+        ? `${features.length} of ${total} match`
+        : `${features.length} saved place${features.length === 1 ? '' : 's'}`
 
-      <div className="map-sheet__body">
+  return (
+    <motion.section ref={sectionRef} className="map-sheet" style={{ height }} aria-label="Saved places">
+      <div className="map-sheet__top" ref={topRef}>
+        <motion.button
+          className="map-sheet__handle"
+          onPanStart={onPanStart}
+          onPan={onPan}
+          onPanEnd={onPanEnd}
+          onClick={() => step(snap === 'full' ? -1 : 1)}
+          aria-label={snap === 'full' ? 'Collapse list' : 'Expand list'}
+        >
+          <span className="drawer__grip" />
+          <span className="drawer__title clamp-1">{title}</span>
+        </motion.button>
+        {selected && (
+          <button className="icon-btn map-sheet__close" onClick={onClearSelection} aria-label="Back to the list">
+            <X size={18} />
+          </button>
+        )}
+      </div>
+
+      <div className="map-sheet__body" ref={bodyRef}>
+        <CacheNote visible={fromCache} />
         {error && <ErrorNote message={error} onRetry={onRetry} />}
         {loading && <SkeletonRows rows={4} />}
 
         {selected ? (
           <MarkerDetail feature={selected} />
-        ) : features.length === 0 && !loading ? (
-          hasFilters ? (
+        ) : features.length === 0 && !loading && !error ? (
+          searching ? (
+            <Empty
+              stamp="No match"
+              title={`Nothing saved matches "${query.trim()}"`}
+              body={`${total} place${total === 1 ? '' : 's'} on your map. Try part of the name.`}
+              action={
+                <button className="btn" onClick={onClearSearch}>
+                  Clear search
+                </button>
+              }
+            />
+          ) : hasFilters ? (
             <Empty
               stamp="No match"
               title="No places match these filters"
-              body="Nothing saved fits the current combination."
+              body={`${total} place${total === 1 ? '' : 's'} on your map, none in this combination.`}
               action={
                 <button className="btn" onClick={onClearFilters}>
                   Clear filters
@@ -462,7 +712,7 @@ function MapSheet({
               const props = feature.properties
               return (
                 <MotionRow key={props.trip_place_id}>
-                  <Link className="item" to={`/places/${props.trip_place_id}`}>
+                  <button className="item" onClick={() => onSelect(feature)}>
                     <Glyph
                       Icon={CATEGORY_ICON[props.category] ?? CATEGORY_ICON.other}
                       tint={categoryTint(props.category)}
@@ -474,7 +724,7 @@ function MapSheet({
                       </div>
                       <Meta
                         parts={[
-                          props.category,
+                          CATEGORY_LABEL[props.category] ?? props.category,
                           `${props.source_count} source${props.source_count === 1 ? '' : 's'}`,
                         ]}
                       />
@@ -485,7 +735,7 @@ function MapSheet({
                       )}
                     </div>
                     <ChevronRight size={18} className="item__chev" />
-                  </Link>
+                  </button>
                 </MotionRow>
               )
             })}
@@ -509,10 +759,11 @@ function MarkerDetail({ feature }: { feature: MapFeature }) {
 
   return (
     <div className="pad" style={{ paddingBottom: 'var(--s-6)' }}>
+      <CacheNote visible={detail.fromCache} />
       <div className="row between">
         <Meta
           parts={[
-            props.category,
+            CATEGORY_LABEL[props.category] ?? props.category,
             page?.header.city,
             page?.header.walking_minutes != null
               ? `${page.header.walking_minutes} min walk`
@@ -524,7 +775,7 @@ function MarkerDetail({ feature }: { feature: MapFeature }) {
       </div>
 
       {hours ? (
-        <div className="row between" style={{ marginTop: 'var(--s-3)' }}>
+        <div className="row between row--top" style={{ marginTop: 'var(--s-3)' }}>
           <p className="t-small grow">
             <span className="dimmer">Hours </span>
             {hours.primary.value}
@@ -544,11 +795,16 @@ function MarkerDetail({ feature }: { feature: MapFeature }) {
       )}
 
       <div className="row" style={{ marginTop: 'var(--s-4)', gap: 'var(--s-2)' }}>
-        {page && (
+        {page ? (
           <a className="btn btn--ink grow" href={page.actions.primary[0].url} target="_blank" rel="noreferrer">
             <Navigation size={16} strokeWidth={2.2} />
             Navigate
           </a>
+        ) : (
+          <span className="btn btn--ink grow" aria-busy>
+            <Navigation size={16} strokeWidth={2.2} />
+            Navigate
+          </span>
         )}
         <button
           className="btn"
@@ -573,6 +829,11 @@ function MarkerDetail({ feature }: { feature: MapFeature }) {
           <Stamp tone="gold" size="sm" rotate={-4}>
             Favourite
           </Stamp>
+        </div>
+      )}
+      {detail.error && (
+        <div style={{ marginTop: 'var(--s-3)' }}>
+          <Note tone="danger">{detail.error}</Note>
         </div>
       )}
     </div>

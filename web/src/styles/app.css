@@ -30,6 +30,7 @@ code { font: inherit; font-weight: 600; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
@@ -580,7 +581,7 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   position: fixed;
   right: var(--s-4);
   bottom: calc(var(--nav-h) + var(--s-3));
-  transform: translateY(calc(-1 * var(--fab-lift, 0px)));
+  translate: 0 calc(-1 * var(--fab-lift, 0px));
   z-index: 45;
   display: inline-flex;
   align-items: center;
@@ -594,7 +595,7 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   font: var(--head);
   box-shadow: var(--shadow-float);
   cursor: pointer;
-  transition: transform var(--dur-slow) var(--ease);
+  transition: translate var(--dur-slow) var(--ease);
 }
 
 /* ---------------------------------------------------------------------------
@@ -622,6 +623,7 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   outline: none;
 }
 .drawer__grip {
+  display: block;
   flex: none;
   width: 40px;
   height: 5px;
@@ -670,13 +672,19 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
 }
 .map-canvas { position: absolute; inset: 0; }
 .leaflet-container { width: 100%; height: 100%; background: var(--paper-2); font-family: var(--font); }
-/* OSM tiles, quietened to sit under ink pins; inverted for the dark scheme. */
-.leaflet-tile-pane { filter: saturate(0.6) contrast(1.02); }
-:root[data-theme='dark'] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(0.92) saturate(0.45); }
+/* OSM tiles, quietened, then pulled into the palette by a tint pane that
+   multiplies in light and lightens in dark — so land reads as paper, not
+   as a stock embed, and the dark map never goes to black. */
+.leaflet-tile-pane { filter: saturate(0.6); }
+.leaflet-tint-pane { mix-blend-mode: multiply; }
+.map-tint { fill: var(--paper-2); }
+:root[data-theme='dark'] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.85) saturate(0.45); }
+:root[data-theme='dark'] .leaflet-tint-pane { mix-blend-mode: lighten; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .leaflet-tile-pane {
-    filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(0.92) saturate(0.45);
+    filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.85) saturate(0.45);
   }
+  :root:not([data-theme='light']) .leaflet-tint-pane { mix-blend-mode: lighten; }
 }
 .leaflet-control-attribution {
   font-size: 10px;
@@ -686,9 +694,12 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
 }
 .leaflet-control-attribution a { color: var(--ink-2); }
 .leaflet-bottom.leaflet-right {
-  bottom: calc(var(--sheet-h, 28dvh) + var(--nav-h) - 10px);
-  transition: bottom var(--dur-slow) var(--ease);
+  bottom: calc(var(--nav-h) - 10px);
+  translate: 0 calc(-1 * var(--fab-lift, 0px));
+  transition: translate var(--dur-slow) var(--ease);
 }
+/* While the sheet is under a finger or mid-spring, followers track it exactly. */
+:root[data-sheet-live] :is(.fab, .map-side, .leaflet-bottom.leaflet-right) { transition: none; }
 
 .map-top {
   position: absolute;
@@ -709,9 +720,9 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   padding: 0 var(--s-1) 0 var(--s-4);
   min-height: 50px;
   border-radius: var(--r-pill);
-  background: var(--glass);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--line);
   box-shadow: var(--shadow-float);
 }
@@ -730,50 +741,71 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
 .map-side {
   position: absolute;
   left: var(--s-4);
-  bottom: calc(var(--sheet-h, 28dvh) + var(--nav-h) + var(--s-3));
+  bottom: calc(var(--nav-h) + var(--s-3));
+  translate: 0 calc(-1 * var(--fab-lift, 0px));
   z-index: 500;
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
-  transition: bottom var(--dur-slow) var(--ease);
+  transition: translate var(--dur-slow) var(--ease);
 }
+.spin { animation: spin 900ms linear infinite; }
+@keyframes spin { to { rotate: 360deg; } }
 
-/* Map pin: a small stamp. */
+/* Map pin: a small stamp in a 44px hit area. Status is a badge icon, not a hue. */
+.pin-hit { width: 44px; height: 44px; display: grid; place-items: center; }
 .pin {
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   background: var(--paper);
   border: 2.5px solid var(--pin, var(--ink));
   color: var(--pin, var(--ink));
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 0 0 1.5px var(--paper), 0 2px 6px rgba(0, 0, 0, 0.25);
   transform: rotate(-8deg);
   transition: transform var(--dur) var(--ease);
+  font: var(--tiny);
+  font-weight: 800;
 }
 .pin::after {
   content: '';
   position: absolute;
-  inset: 3px;
+  inset: 4px;
   border-radius: 50%;
   border: 1px dashed currentColor;
   opacity: 0.55;
+  pointer-events: none;
 }
-.pin svg { width: 12px; height: 12px; }
-/* Pins drop in one after another when the map first draws. */
-.pin:not(.pin--active) { animation: pin-in 360ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 40ms); }
+.pin svg { width: 14px; height: 14px; }
+.pin__badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--pin);
+  color: var(--paper);
+  box-shadow: 0 0 0 1.5px var(--paper);
+}
+.pin__badge svg { width: 9px; height: 9px; }
+/* Must-visit reads by weight: a solid coral disc, the same coral as Save. */
+.pin--must { background: var(--pin); color: var(--on-coral); }
+.pin--must::after { border-color: rgba(42, 18, 8, 0.45); }
+.pin--fav { box-shadow: 0 0 0 1.5px var(--paper), 0 0 0 4px var(--tint-view), 0 2px 6px rgba(0, 0, 0, 0.25); }
+/* Pins drop in one after another when the map first draws — and only then. */
+.pin--enter { animation: pin-in 360ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 40ms); }
 @keyframes pin-in { from { opacity: 0; transform: rotate(-8deg) translateY(-10px) scale(0.6); } to { opacity: 1; transform: rotate(-8deg) translateY(0) scale(1); } }
-.pin--fav { box-shadow: 0 0 0 3px var(--gold), 0 2px 6px rgba(0, 0, 0, 0.25); }
 .pin--active {
-  width: 40px;
-  height: 40px;
-  z-index: 600;
   background: var(--pin, var(--ink));
   color: var(--paper);
-  transform: rotate(-8deg) scale(1);
-  animation: pin-pop 420ms var(--ease-out);
+  transform: rotate(-8deg) scale(1.35);
+  animation: pin-pop 320ms var(--ease-out);
 }
 .pin--active::before {
   content: '';
@@ -782,11 +814,14 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   border-radius: 50%;
   border: 2px solid var(--pin, var(--ink));
   opacity: 0;
-  animation: pin-ring 1.4s var(--ease-out) infinite;
+  animation: pin-ring 1.1s var(--ease-out) 2;
 }
-.pin--active svg { width: 16px; height: 16px; }
-@keyframes pin-pop { from { transform: rotate(-24deg) scale(0.5); } to { transform: rotate(-8deg) scale(1); } }
+.pin--active .pin__badge { display: none; }
+@keyframes pin-pop { from { transform: rotate(-20deg) scale(0.7); } to { transform: rotate(-8deg) scale(1.35); } }
 @keyframes pin-ring { 0% { transform: scale(0.7); opacity: 0.8; } 100% { transform: scale(1.5); opacity: 0; } }
+/* Several places on one spot: a count you can tap to zoom in. */
+.pin--cluster { width: 36px; height: 36px; background: var(--ink); color: var(--paper); border-color: var(--paper); font-size: 0.8125rem; }
+.pin--cluster::after { display: none; }
 
 .me-dot {
   width: 16px;
@@ -810,9 +845,9 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   box-shadow: var(--shadow-sheet);
   overflow: hidden;
 }
-.map-sheet--auto { height: auto; max-height: 60dvh; }
+.map-sheet__top { position: relative; flex: none; }
 .map-sheet__handle {
-  flex: none;
+  display: block;
   width: 100%;
   padding: var(--s-2) var(--s-4) var(--s-3);
   border: 0;
@@ -822,6 +857,9 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   cursor: grab;
   touch-action: none;
 }
+.map-sheet__handle .drawer__grip { display: block; margin: 0 auto var(--s-3); }
+.map-sheet__handle .drawer__title { display: block; padding-right: 44px; }
+.map-sheet__close { position: absolute; right: var(--s-2); bottom: 4px; }
 .map-sheet__body { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
 
 /* Place header: the real map, pine-tinted, with the title over its edge. */
