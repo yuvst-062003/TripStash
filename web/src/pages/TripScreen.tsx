@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react'
+import { Suspense, lazy, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import { useMotionPrefs } from '../lib/motion'
 import Globe, { type GlobePoint } from '../components/Globe'
+import Starfield from '../components/Starfield'
 import Segmented from '../components/Segmented'
-import { AskButton } from '../components/TopBar'
+import { HeroActions } from '../components/TopBar'
 import { BudgetArc, MoneyFigure } from '../components/Money'
 import { Stamp } from '../components/Stamp'
 import {
@@ -21,9 +23,19 @@ import {
   SectionLabel,
   SkeletonRows,
 } from '../components/ui'
-import { Download, Plus, Ticket, Trash2 } from '../components/icons'
+import { Download, Maximize2, Plus, Ticket, Trash2 } from '../components/icons'
 
 type Section = 'plan' | 'bookings' | 'money'
+
+const EarthGlobe = lazy(() => import('../components/EarthGlobe'))
+
+/** Days until the trip starts, or since it started; null without a date. */
+function daysFrom(date: string | null | undefined): number | null {
+  if (!date) return null
+  const then = new Date(`${date}T00:00:00`).getTime()
+  if (Number.isNaN(then)) return null
+  return Math.round((then - Date.now()) / 86_400_000)
+}
 
 export default function TripScreen() {
   const { trip, signOut } = useApp()
@@ -55,51 +67,78 @@ export default function TripScreen() {
     current?.lat != null && current?.lon != null ? [current.lat, current.lon] : stops[0]
 
   const dates = `${trip?.start_date ?? 'no fixed start'} → ${trip?.end_date ?? 'open ended'}`
+  const countdown = daysFrom(trip?.start_date)
 
   return (
     <div className="screen">
       <header className="hero" style={{ paddingBottom: 'var(--s-3)' }}>
         <div className="hero__top">
           <span className="t-small dim">Your trip</span>
-          <AskButton />
+          <HeroActions />
         </div>
-        <div className="row row--top" style={{ gap: 'var(--s-3)' }}>
-          <div className="grow">
-            <motion.h1
-              className="t-display hero__title"
-              initial={reduced ? false : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={spring}
-            >
-              {trip?.name ?? 'Trip'}
-            </motion.h1>
-            <div className="hero__line">
-              <span className="num">{dates}</span>
-              {trip?.total_budget != null && (
-                <span className="num">
-                  {trip.total_budget} {trip.base_currency} budget
-                </span>
-              )}
-            </div>
-            {current && (
-              <div style={{ marginTop: 'var(--s-3)' }}>
+        <motion.h1
+          className="t-display hero__title"
+          initial={reduced ? false : { opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={spring}
+        >
+          {trip?.name ?? 'Trip'}
+        </motion.h1>
+        <div className="hero__line">
+          <span className="num">{dates}</span>
+          {trip?.total_budget != null && (
+            <span className="num">
+              {trip.total_budget} {trip.base_currency} budget
+            </span>
+          )}
+        </div>
+      </header>
+
+      {/* The journey: the whole route on the planet, and where you are on it. */}
+      <div className="pad">
+        <motion.section
+          className="journey"
+          initial={reduced ? false : { opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...spring, delay: 0.08 }}
+          aria-label="Your route on the globe"
+        >
+          <Link to="/trip/journey" className="journey__open" aria-label="Open the full route">
+            <Maximize2 size={16} strokeWidth={2.4} />
+            Open
+          </Link>
+          <Starfield count={70} />
+          <div className="journey__globe">
+            <Suspense fallback={<Globe points={points} route={stops} focus={focus} size={300} spin={0.0018} vivid />}>
+              <EarthGlobe points={points} route={stops} focus={focus} size={300} spin={0.0018} />
+            </Suspense>
+          </div>
+          <div className="journey__copy">
+            {current ? (
+              <>
                 <Stamp tone="coral" size="sm" rotate={-5}>
                   Now in {current.name}
                 </Stamp>
-              </div>
+                <p className="journey__line">
+                  {stops.length > 1 ? `${stops.length} stops on the route` : 'The route so far'}
+                </p>
+              </>
+            ) : countdown !== null && countdown > 0 ? (
+              <>
+                <p className="t-small" style={{ color: 'var(--ink-2)' }}>Getting close</p>
+                <p className="journey__line">
+                  {countdown} day{countdown === 1 ? '' : 's'} to go
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="t-small" style={{ color: 'var(--ink-2)' }}>No fixed start</p>
+                <p className="journey__line">Add a stop and a date when you know</p>
+              </>
             )}
           </div>
-          {/* The trip on a globe: route stops joined by arcs, every pin as a dot. */}
-          <motion.div
-            className="trip-globe"
-            initial={reduced ? false : { opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <Globe points={points} route={stops} focus={focus} size={148} spin={0.0018} />
-          </motion.div>
-        </div>
-      </header>
+        </motion.section>
+      </div>
 
       <Segmented
         label="Trip sections"

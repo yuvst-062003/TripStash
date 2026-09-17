@@ -104,6 +104,14 @@ export const api = {
   createTrip: (body: Record<string, unknown>) => post<Trip>('/api/v1/trips', body),
   addDestination: (body: Record<string, unknown>) =>
     post<unknown>('/api/v1/trips/current/destinations', body),
+  updateDestination: (id: string, body: Record<string, unknown>) =>
+    request<unknown>(`/api/v1/trips/current/destinations/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  removeDestination: (id: string) =>
+    request<void>(`/api/v1/trips/current/destinations/${id}`, { method: 'DELETE' }),
 
   // home
   home: (query: Record<string, unknown>) => get<HomePayload>('/api/v1/home', query),

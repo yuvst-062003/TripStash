@@ -4,7 +4,7 @@ import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import { useMotionPrefs } from '../lib/motion'
-import { AskButton } from '../components/TopBar'
+import { HeroActions } from '../components/TopBar'
 import { BudgetArc, MoneyFigure } from '../components/Money'
 import { Stamp } from '../components/Stamp'
 import {
@@ -97,7 +97,7 @@ export default function Home() {
       <header className="hero">
         <div className="hero__top">
           <span className="t-small dim clamp-1">{trip?.name}</span>
-          <AskButton />
+          <HeroActions />
         </div>
         <motion.h1
           className="t-display--lg hero__title"

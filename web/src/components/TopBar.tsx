@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useApp } from '../lib/context'
 import { cn } from '../lib/cn'
 import { SparklesIcon, type SparklesIconHandle } from './motion'
+import { Avatar } from './ProfileSheet'
+import { api } from '../lib/api'
+import { useAsync } from '../lib/hooks'
 
 /**
  * Compact sticky title bar for inner screens.
@@ -56,5 +59,26 @@ export function AskButton({ tone = 'ink' }: { tone?: 'ink' | 'ghost' }) {
       <SparklesIcon ref={ref} size={16} aria-hidden />
       Ask
     </button>
+  )
+}
+
+/** The account: a disc with your initial that opens the profile drawer. */
+export function ProfileButton() {
+  const { openProfile } = useApp()
+  const me = useAsync(() => api.me(), [])
+  return (
+    <button className="avatar-btn" onClick={openProfile} aria-label="Your account and settings">
+      <Avatar email={me.data?.email} size={40} />
+    </button>
+  )
+}
+
+/** Ask plus the account disc, for the hero's top row. */
+export function HeroActions() {
+  return (
+    <span className="row" style={{ gap: 'var(--s-2)' }}>
+      <AskButton />
+      <ProfileButton />
+    </span>
   )
 }

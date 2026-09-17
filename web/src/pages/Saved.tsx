@@ -7,7 +7,7 @@ import { useAsync } from '../lib/hooks'
 import { useMotionPrefs } from '../lib/motion'
 import ReviewCard from '../components/ReviewCard'
 import Segmented from '../components/Segmented'
-import { AskButton } from '../components/TopBar'
+import { HeroActions } from '../components/TopBar'
 import { Stamp, StatusStamp } from '../components/Stamp'
 import {
   CacheNote,
@@ -54,7 +54,7 @@ export default function Saved() {
       <header className="hero" style={{ paddingBottom: 'var(--s-2)' }}>
         <div className="hero__top" style={{ marginBottom: 0 }}>
           <h1 className="t-display hero__title">Saved</h1>
-          <AskButton />
+          <HeroActions />
         </div>
       </header>
       <Segmented

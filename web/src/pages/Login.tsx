@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ApiError, api, token } from '../lib/api'
 import { useMotionPrefs } from '../lib/motion'
 import Globe, { type GlobePoint } from '../components/Globe'
 import Logo from '../components/Logo'
+import Starfield from '../components/Starfield'
 import { Note } from '../components/ui'
+
+// The photographed Earth is three.js plus a 2K texture, so it arrives after
+// the page does; the vector globe stands in for the first moments.
+const EarthGlobe = lazy(() => import('../components/EarthGlobe'))
 
 /**
  * Illustrative pins for the sign-in globe. The app is for any trip, so the
@@ -31,18 +36,18 @@ const POINTS: GlobePoint[] = [
   { lat: 19.43, lon: -99.13 }, // Mexico City
 ]
 
-const GLOBE = 430
-/** Where the globe rests once the page has opened (matches .login__globe). */
-const REST = { top: -70, right: -150 }
+const GLOBE = 400
+/** Where the globe rests once the page has opened: centred, under the wordmark. */
+const REST_TOP = 150
 const INTRO_MS = 1600
 
 /**
- * Sign in.
+ * Sign in — the Earth from orbit.
  *
- * It opens on a small, vivid globe turning alone in the middle of the page.
- * After a beat the globe swells and glides to the top-right, the wordmark
- * grows into place beneath the mark, and the form rises from the bottom.
- * The globe is one element the whole way, so the WebGL scene never resets.
+ * A dark sky, a small globe turning alone in the middle of the page. After a
+ * beat it swells into place beneath the wordmark, and the glass form rises
+ * from the bottom over the planet's lower half. The globe is one element the
+ * whole way, so the scene never resets.
  */
 export default function Login({ onAuthenticated }: { onAuthenticated: () => void }) {
   const { reduced, spring } = useMotionPrefs()
@@ -61,11 +66,9 @@ export default function Login({ onAuthenticated }: { onAuthenticated: () => void
 
   // The globe's resting centre versus the screen centre, in its own frame.
   const introOffset = useMemo(() => {
-    const width = window.innerWidth
     const height = window.innerHeight
-    const restCentreX = width - REST.right - GLOBE / 2
-    const restCentreY = REST.top + GLOBE / 2
-    return { x: width / 2 - restCentreX, y: height * 0.4 - restCentreY }
+    const restCentreY = REST_TOP + GLOBE / 2
+    return { x: 0, y: height * 0.42 - restCentreY }
   }, [])
 
   async function submit(event: React.FormEvent) {
@@ -92,8 +95,11 @@ export default function Login({ onAuthenticated }: { onAuthenticated: () => void
 
   const landed = phase === 'page'
 
+  const globeProps = { points: POINTS, route: ROUTE, focus: [-8, -52] as [number, number], size: GLOBE, spin: landed ? 0.0022 : 0.011 }
+
   return (
-    <div className="login">
+    <div className="login login--space">
+      <Starfield />
       <motion.div
         className="login__globe"
         initial={reduced ? false : { x: introOffset.x, y: introOffset.y, scale: 0, opacity: 0 }}
@@ -109,7 +115,9 @@ export default function Login({ onAuthenticated }: { onAuthenticated: () => void
         }
         style={{ transformOrigin: '50% 50%' }}
       >
-        <Globe points={POINTS} route={ROUTE} focus={[-8, -52]} size={GLOBE} spin={landed ? 0.0025 : 0.012} vivid />
+        <Suspense fallback={<Globe {...globeProps} vivid />}>
+          <EarthGlobe {...globeProps} />
+        </Suspense>
       </motion.div>
 
       {/* The opening beat: the name, small, under the globe. */}
@@ -139,20 +147,16 @@ export default function Login({ onAuthenticated }: { onAuthenticated: () => void
 
       {landed && (
         <div className="login__body">
-          <div style={{ marginBottom: 'auto' }}>
-            <Logo size={76} animate />
-            <motion.h1 className="t-display--lg login__wordmark" {...rise(0.15)}>
-              Trip
-              <br />
-              Stash
-            </motion.h1>
-            <motion.p className="t dim login__tagline" {...rise(0.24)}>
-              Save places from Reels, screenshots and messages. See them around you. Get them back
-              when the moment is right.
-            </motion.p>
-          </div>
+          <motion.div className="login__head" {...rise(0.1)}>
+            <Logo size={44} animate />
+            <h1 className="t-display login__wordmark">TripStash</h1>
+          </motion.div>
+          <motion.p className="t login__tagline" {...rise(0.2)}>
+            Save places from Reels, screenshots and messages. See them around you. Get them back
+            when the moment is right.
+          </motion.p>
 
-          <motion.form className="card card--raised stack-4 login__form" onSubmit={submit} {...rise(0.34)}>
+          <motion.form className="login__form stack-4" onSubmit={submit} {...rise(0.34)}>
             <label className="field">
               <span>Email</span>
               <input

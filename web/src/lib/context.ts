@@ -33,6 +33,7 @@ export interface AppContextValue {
   setScreenContext: (context: ScreenContext | null) => void
   openAsk: (seed?: AskSeed) => void
   openSave: () => void
+  openProfile: () => void
   signOut: () => void
 }
 

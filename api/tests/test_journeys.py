@@ -465,3 +465,32 @@ def test_a_named_stay_still_becomes_a_place(client, auth, trip):
         json={"provider_place_id": candidate["resolutions"][0]["provider_place_id"]},
     )
     assert result.json()["kind"] == "place"
+
+
+def test_marking_a_stop_as_here_now_moves_the_flag(client, auth, trip):
+    """A route has one "here now"; moving it clears the previous stop's flag."""
+    created = client.post(
+        "/api/v1/trips/current/destinations",
+        headers=auth,
+        json={"name": "Lake Atitlán", "country": "Guatemala", "lat": 14.69, "lon": -91.2},
+    )
+    assert created.status_code == 201, created.text
+    stop_id = created.json()["id"]
+
+    moved = client.patch(
+        f"/api/v1/trips/current/destinations/{stop_id}",
+        headers=auth,
+        json={"is_current": True, "arrive_on": "2026-09-20"},
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["is_current"] is True
+    assert moved.json()["arrive_on"] == "2026-09-20"
+
+    stops = client.get("/api/v1/trips/current", headers=auth).json()["destinations"]
+    current = [stop["name"] for stop in stops if stop["is_current"]]
+    assert current == ["Lake Atitlán"]
+
+    missing = client.patch(
+        "/api/v1/trips/current/destinations/not-a-stop", headers=auth, json={"is_current": True}
+    )
+    assert missing.status_code == 404

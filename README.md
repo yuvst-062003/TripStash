@@ -18,6 +18,22 @@ loop, end to end, with every external service behind a replaceable adapter.
 capture → extract typed knowledge → confirm → personal map → resurface → verify → hand off
 ```
 
+## Screens
+
+Light and dark captures of every screen at phone size live in
+[`docs/screenshots/`](docs/screenshots/); the previous interface is kept in
+[`docs/screenshots/before/`](docs/screenshots/before/) for comparison, and the
+mark in [`docs/brand/`](docs/brand/). The design system is described in
+[`docs/design.md`](docs/design.md).
+
+| Sign in | Home | Map | Saved |
+| --- | --- | --- | --- |
+| ![Sign in](docs/screenshots/login-light.png) | ![Home](docs/screenshots/home-light.png) | ![Map](docs/screenshots/map-light.png) | ![Saved](docs/screenshots/saved-inbox-light.png) |
+
+| Place | Trip | Ask | Save |
+| --- | --- | --- | --- |
+| ![Place](docs/screenshots/place-light.png) | ![Trip](docs/screenshots/trip-light.png) | ![Ask](docs/screenshots/ask-light.png) | ![Save](docs/screenshots/save-light.png) |
+
 ## Quick start (no accounts, no API keys)
 
 ```bash
@@ -32,6 +48,8 @@ uvicorn app.main:app --reload           # http://127.0.0.1:8000/docs
 cd ../web
 npm install
 npm run dev                             # http://127.0.0.1:5173
+# If port 8000 is taken on your machine, run the API elsewhere and point the
+# dev proxy at it:  TRIPSTASH_API=http://127.0.0.1:8010 npm run dev
 ```
 
 Sign in with the credentials `python -m app.seed` prints
@@ -111,7 +129,8 @@ api/                     FastAPI modular monolith
   tests/                 36 tests, including the spec's acceptance criteria
 web/                     React + TypeScript PWA (Vite, Leaflet, service worker)
   src/styles/            Design tokens and the single stylesheet
-  src/components/        UI primitives, sheets, review card, icon vocabulary
+  src/components/        UI primitives, drawers, stamps, the globes, review card
+  src/components/motion/ Animated Lucide icons (pqoqubbw/icons, MIT)
 docs/                    Architecture, data model, spec coverage, ADRs
 infra/                   Database bootstrap SQL
 ```

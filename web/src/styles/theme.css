@@ -3,9 +3,10 @@
 
    A long overland trip is a passport filling with stamps. Every confirmed
    place, status and category here is drawn as one: an inked ring, a slight
-   rotation, a word around the arc. The palette is the map itself — pale sage
-   paper, deep pine ink, jungle teal — with one hot coral for the things you
-   must not miss and a stamp-pad gold for what is happening today.
+   rotation, a word around the arc. The palette is a bright map: mint-white
+   paper, deep pine ink, a saturated teal, sky blue for getting around — with
+   one hot coral for the things you must not miss and a stamp-pad gold for
+   what is happening today.
 --------------------------------------------------------------------------- */
 
 @font-face {
@@ -61,38 +62,43 @@
   --dur: 180ms;
   --dur-slow: 320ms;
 
-  /* Light: sage paper, pine ink. */
-  --paper: #f4f7f2;
-  --paper-2: #e9efe8;
+  /* Light: mint-white paper, deep pine ink. */
+  --paper: #f3faf6;
+  --paper-2: #e2f2ea;
   --card: #ffffff;
-  --ink: #132a2b;
-  --ink-2: #3f5a5b;
-  --ink-3: #7a9290;
-  --line: #d6e0d8;
+  --ink: #0f2e2a;
+  --ink-2: #33605a;
+  --ink-3: #6b948c;
+  --line: #cde6da;
 
-  --teal: #0e7c66;
-  --teal-hover: #0b6653;
-  --teal-soft: #ddefe8;
+  --teal: #0ba37f;
+  --teal-hover: #078c6c;
+  --teal-deep: #0f4f4a;
+  --teal-soft: #d3f3e6;
   --on-teal: #ffffff;
 
-  --coral: #ff6b3d;
-  --coral-hover: #f05a2c;
-  --coral-soft: #ffe6dc;
+  --coral: #ff6a3d;
+  --coral-hover: #f0582a;
+  --coral-soft: #ffe2d6;
   --on-coral: #2a1208;
 
-  --gold: #ffd166;
-  --gold-soft: #fff3cf;
+  --gold: #ffc83d;
+  --gold-soft: #fff0c2;
   --on-gold: #3a2a00;
+
+  --sky: #2f9bd6;
+  --sky-soft: #dbeffb;
 
   --warn: #9a6400;
   --warn-soft: #fff3cf;
   --danger: #b3261e;
   --danger-soft: #fde7e5;
 
-  --scrim: rgba(19, 42, 43, 0.45);
-  --shadow-float: 0 12px 32px -12px rgba(19, 42, 43, 0.28), 0 2px 6px -2px rgba(19, 42, 43, 0.12);
-  --shadow-sheet: 0 -8px 40px -16px rgba(19, 42, 43, 0.35);
-  --glass: rgba(244, 247, 242, 0.82);
+  --scrim: rgba(15, 46, 42, 0.45);
+  --shadow-float: 0 12px 32px -12px rgba(15, 46, 42, 0.28), 0 2px 6px -2px rgba(15, 46, 42, 0.12);
+  --shadow-sheet: 0 -8px 40px -16px rgba(15, 46, 42, 0.35);
+  --glass: rgba(243, 250, 246, 0.82);
+  --primary-gradient: linear-gradient(135deg, var(--teal) 0%, var(--teal-deep) 100%);
 
   /* Status: the word and icon carry the meaning; colour is the third signal. */
   --status-saved: var(--ink);
@@ -107,32 +113,35 @@
   --tint-food-soft: var(--coral-soft);
   --tint-stay: var(--teal);
   --tint-stay-soft: var(--teal-soft);
-  --tint-nature: #2f8f4e;
-  --tint-nature-soft: #e1f2e5;
-  --tint-view: #b8860b;
+  --tint-nature: #2f9b4f;
+  --tint-nature-soft: #dcf4e1;
+  --tint-view: #c48a00;
   --tint-view-soft: var(--gold-soft);
-  --tint-transport: var(--ink);
-  --tint-transport-soft: var(--paper-2);
-  --tint-other: var(--ink-2);
-  --tint-other-soft: var(--paper-2);
+  --tint-transport: var(--sky);
+  --tint-transport-soft: var(--sky-soft);
+  --tint-other: var(--teal);
+  --tint-other-soft: var(--teal-soft);
 
   --me: #2e7dd7;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --paper: #0b1716;
-    --paper-2: #12211f;
-    --card: #16262a;
-    --ink: #eef3ee;
-    --ink-2: #a9bdb9;
-    --ink-3: #6f8886;
-    --line: #22363a;
+    --paper: #0a1c1f;
+    --paper-2: #10282b;
+    --card: #142e32;
+    --ink: #eef7f3;
+    --ink-2: #a6c4bd;
+    --ink-3: #6c8f88;
+    --line: #1f3c40;
 
-    --teal: #3fcfa9;
-    --teal-hover: #5fdcbb;
-    --teal-soft: #12352e;
+    --teal: #3fd9b0;
+    --teal-hover: #63e4c2;
+    --teal-deep: #0e6b60;
+    --teal-soft: #103d36;
     --on-teal: #06201a;
+    --sky: #5db8ec;
+    --sky-soft: #10303f;
 
     --coral: #ff8a5b;
     --coral-hover: #ffa07a;
@@ -151,7 +160,8 @@
     --scrim: rgba(0, 0, 0, 0.6);
     --shadow-float: 0 12px 32px -12px rgba(0, 0, 0, 0.7), 0 2px 6px -2px rgba(0, 0, 0, 0.5);
     --shadow-sheet: 0 -8px 40px -16px rgba(0, 0, 0, 0.8);
-    --glass: rgba(11, 23, 22, 0.8);
+    --glass: rgba(10, 28, 31, 0.8);
+    --primary-gradient: linear-gradient(135deg, #14b88f 0%, #0d5a55 100%);
 
     --tint-nature: #5fc47f;
     --tint-nature-soft: #123421;
@@ -162,17 +172,20 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --paper: #0b1716;
-  --paper-2: #12211f;
-  --card: #16262a;
-  --ink: #eef3ee;
-  --ink-2: #a9bdb9;
-  --ink-3: #6f8886;
-  --line: #22363a;
-  --teal: #3fcfa9;
-  --teal-hover: #5fdcbb;
-  --teal-soft: #12352e;
+  --paper: #0a1c1f;
+  --paper-2: #10282b;
+  --card: #142e32;
+  --ink: #eef7f3;
+  --ink-2: #a6c4bd;
+  --ink-3: #6c8f88;
+  --line: #1f3c40;
+  --teal: #3fd9b0;
+  --teal-hover: #63e4c2;
+  --teal-deep: #0e6b60;
+  --teal-soft: #103d36;
   --on-teal: #06201a;
+  --sky: #5db8ec;
+  --sky-soft: #10303f;
   --coral: #ff8a5b;
   --coral-hover: #ffa07a;
   --coral-soft: #3a1f16;
@@ -184,7 +197,8 @@
   --scrim: rgba(0, 0, 0, 0.6);
   --shadow-float: 0 12px 32px -12px rgba(0, 0, 0, 0.7), 0 2px 6px -2px rgba(0, 0, 0, 0.5);
   --shadow-sheet: 0 -8px 40px -16px rgba(0, 0, 0, 0.8);
-  --glass: rgba(11, 23, 22, 0.8);
+  --glass: rgba(10, 28, 31, 0.8);
+  --primary-gradient: linear-gradient(135deg, #14b88f 0%, #0d5a55 100%);
   --tint-nature: #5fc47f;
   --tint-nature-soft: #123421;
   --tint-view: #e3b341;

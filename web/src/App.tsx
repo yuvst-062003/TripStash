@@ -8,6 +8,8 @@ import { FADE_RISE, useMotionPrefs } from './lib/motion'
 import { tick } from './lib/haptics'
 import AskSheet from './components/AskSheet'
 import SaveSheet from './components/SaveSheet'
+import ProfileSheet from './components/ProfileSheet'
+import Journey from './pages/Journey'
 import Login from './pages/Login'
 import NewTrip from './pages/NewTrip'
 import Home from './pages/Home'
@@ -68,6 +70,7 @@ export default function App() {
   const [authed, setAuthed] = useState(() => Boolean(token.get()))
   const [askSeed, setAskSeed] = useState<AskSeed | null>(null)
   const [saveOpen, setSaveOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
   const [screenContext, setScreenContext] = useState<ScreenContext | null>(null)
   const online = useOnlineStatus()
   const route = useRouterLocation()
@@ -82,6 +85,7 @@ export default function App() {
   }, [])
 
   const position = location.status === 'granted' ? location.position : null
+  const immersive = route.pathname === '/trip/journey'
 
   const value = useMemo(
     () => ({
@@ -106,6 +110,7 @@ export default function App() {
           },
         ),
       openSave: () => setSaveOpen(true),
+      openProfile: () => setProfileOpen(true),
       signOut,
     }),
     [
@@ -153,6 +158,7 @@ export default function App() {
             <Route path="/map" element={<Page><MapScreen /></Page>} />
             <Route path="/saved" element={<Page><Saved /></Page>} />
             <Route path="/trip" element={<Page><TripScreen /></Page>} />
+            <Route path="/trip/journey" element={<Page><Journey /></Page>} />
             <Route path="/places/:tripPlaceId" element={<Page><Place /></Page>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -160,6 +166,7 @@ export default function App() {
 
         {/* Save is the one action worth floating; Ask lives in each screen's
             header, where the context it inherits is visible. */}
+        {!immersive && (
         <motion.button
           className="fab"
           whileTap={{ scale: 0.94 }}
@@ -170,7 +177,9 @@ export default function App() {
           <PlusIcon ref={plusRef} size={20} aria-hidden />
           Save
         </motion.button>
+        )}
 
+        {!immersive && (
         <nav className="tabbar" aria-label="Main">
           <div className="tabbar__inner">
             {TABS.map(({ to, label, Icon }) => (
@@ -193,9 +202,11 @@ export default function App() {
             ))}
           </div>
         </nav>
+        )}
 
         {askSeed && <AskSheet seed={askSeed} onClose={() => setAskSeed(null)} />}
         {saveOpen && <SaveSheet onClose={() => setSaveOpen(false)} />}
+        {profileOpen && <ProfileSheet onClose={() => setProfileOpen(false)} />}
       </div>
     </AppContext.Provider>
   )

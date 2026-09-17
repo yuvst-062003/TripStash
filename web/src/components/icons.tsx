@@ -71,6 +71,11 @@ import {
   Map as MapIcon,
   Bookmark,
   Luggage,
+  Maximize2,
+  Moon,
+  Sun,
+  SunMoon,
+  UserRound,
 } from 'lucide-react'
 
 export type IconComponent = typeof MapPin
@@ -153,6 +158,8 @@ export {
   Luggage,
   MapIcon,
   MapPin,
+  Maximize2,
+  Moon,
   Mountain,
   Navigation,
   Pencil,
@@ -167,9 +174,12 @@ export {
   Sparkles,
   Star,
   StickyNote,
+  Sun,
+  SunMoon,
   Ticket,
   Trash2,
   Upload,
+  UserRound,
   Wallet,
   X,
 }

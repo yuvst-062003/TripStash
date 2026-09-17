@@ -71,6 +71,15 @@ class DestinationCreate(ApiModel):
     notes: str | None = None
 
 
+class DestinationUpdate(ApiModel):
+    """Only what a traveller changes after the fact: dates, notes, and being there."""
+
+    arrive_on: date | None = None
+    depart_on: date | None = None
+    notes: str | None = None
+    is_current: bool | None = None
+
+
 class DestinationResponse(ApiModel):
     id: str
     name: str

@@ -14,6 +14,7 @@ from app.models.core import Destination, Trip, User
 from app.schemas.api import (
     DestinationCreate,
     DestinationResponse,
+    DestinationUpdate,
     TripCreate,
     TripResponse,
 )
@@ -97,6 +98,27 @@ def add_destination(
         position=len(trip.destinations),
     )
     session.add(destination)
+    session.flush()
+    return destination
+
+
+@router.patch("/current/destinations/{destination_id}", response_model=DestinationResponse)
+def update_destination(
+    destination_id: str,
+    body: DestinationUpdate,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> Destination:
+    """Marking a stop as "here now" clears the flag on every other stop."""
+    destination = session.get(Destination, destination_id)
+    if destination is None or destination.trip_id != trip.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Destination not found.")
+    changes = body.model_dump(exclude_unset=True)
+    if changes.get("is_current"):
+        for other in trip.destinations:
+            other.is_current = False
+    for field, value in changes.items():
+        setattr(destination, field, value)
     session.flush()
     return destination
 

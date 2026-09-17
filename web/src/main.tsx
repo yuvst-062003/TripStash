@@ -5,6 +5,10 @@ import { MotionConfig } from 'motion/react'
 import 'leaflet/dist/leaflet.css'
 import './styles/app.css'
 import App from './App'
+import { applyPrefs } from './lib/prefs'
+
+// Before the first paint, so a saved dark theme never flashes light.
+applyPrefs()
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
