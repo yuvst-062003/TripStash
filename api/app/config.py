@@ -51,6 +51,10 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
+    # When set, the API also serves the built PWA from this directory, so one
+    # container is the whole app. Unset in development, where Vite serves it.
+    static_dir: Path | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

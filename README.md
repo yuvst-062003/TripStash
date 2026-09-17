@@ -64,6 +64,23 @@ Sign in with the credentials `python -m app.seed` prints
 (`traveller@example.com`). The seed runs the real pipeline, so the demo data is
 exactly what capture produces — including items still waiting in Inbox.
 
+### Deploy (one container)
+
+The root `Dockerfile` builds the PWA and lets the API serve it, so a single
+service is the whole app. On Railway:
+
+```bash
+railway init --name tripstash
+railway add --service app --variables "TRIPSTASH_SECRET_KEY=$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')"
+railway volume add --mount-path /data      # keeps the SQLite database across deploys
+railway up --detach && railway domain
+```
+
+The demo trip is seeded on first boot; sign in with
+`traveller@example.com` / `tripstash-demo-password`. Set
+`TRIPSTASH_AI_PROVIDER=anthropic` and `TRIPSTASH_ANTHROPIC_API_KEY` as
+service variables to turn on real extraction.
+
 ### With Postgres + PostGIS
 
 ```bash
