@@ -28,11 +28,16 @@ class MediaPayload:
 
 
 class AIAdapter(Protocol):
-    """Structured extraction and grounded answering."""
+    """Structured extraction and grounded answering.
+
+    `hints` carries the traveller's own destinations and previously approved
+    items. An adapter may ignore them; a model-backed one uses them to adapt to
+    this traveller without any training.
+    """
 
     name: str
 
-    def extract(self, payload: MediaPayload) -> ExtractionResult: ...
+    def extract(self, payload: MediaPayload, hints: object | None = None) -> ExtractionResult: ...
 
     def transcribe(self, payload: MediaPayload) -> tuple[str | None, str | None]:
         """Return (transcript, ocr_text) for uploaded media."""

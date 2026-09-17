@@ -170,7 +170,11 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
         payload.transcript = transcript
         payload.ocr_text = ocr_text
 
-    result = ai.extract(payload)
+    # The traveller's own route and past corrections travel with the request,
+    # which is how the model adapts to them without any training.
+    from app.services.adaptation import build_hints
+
+    result = ai.extract(payload, build_hints(session, source.trip_id))
 
     if result.failure_reason:
         # Recoverable, not lost: Inbox keeps it with a retry and manual path.

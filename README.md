@@ -108,7 +108,7 @@ api/                     FastAPI modular monolith
   app/schemas/           Typed extraction contract + request/response bodies
   app/services/          Pipeline, dedupe, assistant, resurfacing, freshness
   app/worker/            Background processing and freshness refresh
-  tests/                 36 tests, including the spec's acceptance criteria
+  tests/                 48 tests, including the spec's acceptance criteria
 web/                     React + TypeScript PWA (Vite, Leaflet, service worker)
   src/styles/            Design tokens and the single stylesheet
   src/components/        UI primitives, sheets, review card, icon vocabulary
@@ -123,7 +123,7 @@ swapping a fake for a real driver is configuration, not surgery.
 
 | Adapter | Default | Replace with |
 | --- | --- | --- |
-| AI extraction | `fake` — deterministic rule-based extractor | Claude API against `ExtractionResult` as the tool schema |
+| AI extraction | `fake` — deterministic rule-based extractor | `local` — free open weights via any OpenAI-compatible server ([guide](docs/local-model.md)) |
 | Places | `fake` — in-repo gazetteer | Any provider returning `ResolvedPlace` |
 | Weather | `fake` — deterministic by (lat, lon, date) | Any forecast API |
 | FX | `fake` — static mid-market table | Any rates API |
@@ -132,6 +132,20 @@ swapping a fake for a real driver is configuration, not surgery.
 The fake AI adapter is not a stand-in for a model's judgement. It exists so the
 pipeline, the review screen and the tests can run with no API key, and so the
 typed contract is pinned by something executable.
+
+### Free local extraction
+
+```bash
+ollama pull qwen2.5:7b-instruct-q4_K_M
+export TRIPSTASH_AI_PROVIDER=local
+```
+
+No paid API is involved anywhere in this project. A small model is kept honest
+by constrained decoding against the `ExtractionResult` schema, one repair
+attempt, and an evidence-grounding guard that **drops any claim whose quote is
+not actually in the source**. Your approvals and corrections feed straight back
+in as few-shot examples, and export as fine-tuning data once there are enough of
+them. See [docs/local-model.md](docs/local-model.md).
 
 ## Deliberately not built
 
@@ -145,6 +159,7 @@ implemented, what is stubbed, and what was left out on purpose.
 
 - [Architecture](docs/architecture.md)
 - [Design](docs/design.md)
+- [Running a free, local model](docs/local-model.md)
 - [Data model](docs/data-model.md)
 - [Specification coverage](docs/spec-coverage.md)
 - [ADR 0001 — Modular monolith](docs/adr/0001-modular-monolith.md)

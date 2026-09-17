@@ -40,8 +40,13 @@ class Settings(BaseSettings):
     fx_provider: str = "fake"
     storage_provider: str = "local"
 
-    anthropic_api_key: str | None = None
-    anthropic_model: str = "claude-opus-5"
+    # Any OpenAI-compatible local server: Ollama, llama.cpp, LM Studio, vLLM.
+    # Nothing here costs money; the weights run on your own machine.
+    llm_base_url: str = "http://localhost:11434/v1"
+    llm_model: str = "qwen2.5:7b-instruct-q4_K_M"
+    llm_timeout_seconds: float = 120.0
+    llm_api_key: str | None = None
+
     places_api_key: str | None = None
     weather_api_key: str | None = None
 

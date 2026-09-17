@@ -173,7 +173,9 @@ class FakeAIAdapter:
             return raw, None
         return None, None
 
-    def extract(self, payload: MediaPayload) -> ExtractionResult:
+    def extract(self, payload: MediaPayload, hints: object | None = None) -> ExtractionResult:
+        # Hints steer a model; the rules do not need them.
+        del hints
         channels: list[tuple[str, str]] = []
         if payload.text:
             channels.append(("caption" if payload.url else "text", payload.text))
@@ -335,32 +337,6 @@ class FakeAIAdapter:
             if normalize_name(needle) in normalize_name(sentence):
                 return sentence
         return None
-
-
-class AnthropicAIAdapter:
-    """Real extraction through the Claude API.
-
-    Deliberately thin: it hands the model the same schema the fake adapter
-    fills in, and validates the reply against it, so a malformed or refused
-    response fails loudly rather than reaching the review screen.
-    """
-
-    name = "anthropic"
-
-    def __init__(self, api_key: str, model: str) -> None:
-        self.api_key = api_key
-        self.model = model
-
-    def transcribe(self, payload: MediaPayload) -> tuple[str | None, str | None]:
-        raise NotImplementedError(
-            "Wire a speech-to-text and OCR provider before enabling the anthropic adapter."
-        )
-
-    def extract(self, payload: MediaPayload) -> ExtractionResult:
-        raise NotImplementedError(
-            "Set TRIPSTASH_AI_PROVIDER=fake, or implement this call against the "
-            "Claude API using app/schemas/extraction.ExtractionResult as the tool schema."
-        )
 
 
 def today() -> date:
