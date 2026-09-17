@@ -5,6 +5,7 @@ import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import { useMotionPrefs } from '../lib/motion'
 import { HeroActions } from '../components/TopBar'
+import NumberFlow from '@number-flow/react'
 import { BudgetArc, MoneyFigure } from '../components/Money'
 import { Stamp } from '../components/Stamp'
 import {
@@ -110,10 +111,15 @@ export default function Home() {
         <div className="hero__line">
           {day !== null ? <span>Day {day}</span> : <span>{PHASE_LABEL[data.phase]}</span>}
           {data.weather && (
-            <span className="hero__chip">
+            <motion.span
+              className="hero__chip"
+              initial={reduced ? false : { opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ ...spring, delay: 0.18 }}
+            >
               <CloudSun size={14} strokeWidth={2.4} />
               {data.weather.summary} {Math.round(data.weather.temperature_c)}°
-            </span>
+            </motion.span>
           )}
           {data.countdown_days !== null && <span>{data.countdown_days} days to go</span>}
           {location.status !== 'granted' && (
@@ -139,7 +145,7 @@ export default function Home() {
         <div className="pad">
           <Link to="/saved" className="card card--coral" style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-4)' }}>
             <span className="t-display num" style={{ fontSize: '2.5rem', lineHeight: 1 }}>
-              {queue.pending_candidates}
+              <NumberFlow value={queue.pending_candidates} animated={!reduced} />
             </span>
             <span className="grow">
               <span className="t-head" style={{ display: 'block' }}>

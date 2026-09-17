@@ -30,9 +30,13 @@ mark in [`docs/brand/`](docs/brand/). The design system is described in
 | --- | --- | --- | --- |
 | ![Sign in](docs/screenshots/login-light.png) | ![Home](docs/screenshots/home-light.png) | ![Map](docs/screenshots/map-light.png) | ![Saved](docs/screenshots/saved-inbox-light.png) |
 
-| Place | Trip | Ask | Save |
+| Place | Trip | Journey | Ask |
 | --- | --- | --- | --- |
-| ![Place](docs/screenshots/place-light.png) | ![Trip](docs/screenshots/trip-light.png) | ![Ask](docs/screenshots/ask-light.png) | ![Save](docs/screenshots/save-light.png) |
+| ![Place](docs/screenshots/place-light.png) | ![Trip](docs/screenshots/trip-light.png) | ![Journey](docs/screenshots/journey-light.png) | ![Ask](docs/screenshots/ask-light.png) |
+
+| Save | You | Home, dark | Map, dark |
+| --- | --- | --- | --- |
+| ![Save](docs/screenshots/save-light.png) | ![Profile](docs/screenshots/profile-light.png) | ![Home dark](docs/screenshots/home-dark.png) | ![Map dark](docs/screenshots/map-dark.png) |
 
 ## Quick start (no accounts, no API keys)
 
@@ -87,7 +91,9 @@ cd web  && npm run lint && npm run build
 | **Home** | Contextual dashboard: today, review queue, money, and knowledge brought back because it is relevant now |
 | **Map** | Your own saves only, filterable, with a compact recall card on every marker |
 | **Saved** | Inbox (review queue), confirmed places, typed knowledge, and every original source |
-| **Trip** | Flexible route, day plan, imported bookings, manual expenses, export |
+| **Trip** | Flexible route on the Earth, day plan, imported bookings, manual expenses, export |
+| **Journey** | The route full screen on a photoreal globe; add a city, mark where you are now |
+| **You** | Light / dark / auto, language, export, sign out |
 | **Ask** | One assistant, available everywhere, that inherits the current screen's context |
 | **Save** | One capture action: link, upload, note, or current location |
 

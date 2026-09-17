@@ -54,14 +54,14 @@ const STATUS_COLOUR: Record<PlaceStatus, string> = {
 }
 
 /** A stamp pin: a tinted ring with the category glyph inside. */
-function pinIcon(feature: MapFeature, active: boolean): L.DivIcon {
+function pinIcon(feature: MapFeature, active: boolean, index = 0): L.DivIcon {
   const { status, is_favourite: favourite, name, category } = feature.properties
   const Icon = CATEGORY_ICON[category] ?? CATEGORY_ICON.other
   const size = active ? 40 : 28
   const html = renderToStaticMarkup(
     <div
       className={`pin${favourite ? ' pin--fav' : ''}${active ? ' pin--active' : ''}`}
-      style={{ '--pin': STATUS_COLOUR[status] } as React.CSSProperties}
+      style={{ '--pin': STATUS_COLOUR[status], '--i': Math.min(index, 12) } as React.CSSProperties}
     >
       <Icon strokeWidth={2.6} />
     </div>,
@@ -157,11 +157,11 @@ export default function MapScreen() {
 
     layer.clearLayers()
     const bounds: L.LatLngExpression[] = []
-    for (const feature of features) {
+    features.forEach((feature, index) => {
       const [lon, lat] = feature.geometry.coordinates
       const active = selected?.properties.trip_place_id === feature.properties.trip_place_id
       bounds.push([lat, lon])
-      L.marker([lat, lon], { icon: pinIcon(feature, active), keyboard: true, riseOnHover: true })
+      L.marker([lat, lon], { icon: pinIcon(feature, active, index), keyboard: true, riseOnHover: true })
         .on('click', () => {
           setSelected(feature)
           setSnap('half')
@@ -172,7 +172,7 @@ export default function MapScreen() {
           map.panTo(map.unproject(point, zoom), { animate: !reduced })
         })
         .addTo(layer)
-    }
+    })
     if (bounds.length && !selected) {
       map.fitBounds(L.latLngBounds(bounds), visiblePadding())
     }

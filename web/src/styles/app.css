@@ -267,6 +267,7 @@ button { font: inherit; color: inherit; }
   text-align: left;
   transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
+.rail-card:hover { transform: translateY(-2px); border-color: var(--teal-soft); transition-duration: 0ms; }
 .rail-card:active { transform: scale(0.985); }
 .rail-card__title {
   font: 700 1.25rem/1.1 var(--font);
@@ -631,6 +632,15 @@ button { font: inherit; color: inherit; }
   overscroll-behavior: contain;
   padding-bottom: calc(var(--s-8) + env(safe-area-inset-bottom));
 }
+/* Content inside a drawer settles in just after the sheet does, top to bottom. */
+.drawer__body > * { animation: rise-in 240ms var(--ease-out) both; }
+.drawer__body > :nth-child(1) { animation-delay: 60ms; }
+.drawer__body > :nth-child(2) { animation-delay: 100ms; }
+.drawer__body > :nth-child(3) { animation-delay: 140ms; }
+.drawer__body > :nth-child(4) { animation-delay: 180ms; }
+.drawer__body > :nth-child(5) { animation-delay: 220ms; }
+.drawer__body > :nth-child(n + 6) { animation-delay: 250ms; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ---------------------------------------------------------------------------
    Map
@@ -738,6 +748,9 @@ button { font: inherit; color: inherit; }
   opacity: 0.55;
 }
 .pin svg { width: 12px; height: 12px; }
+/* Pins drop in one after another when the map first draws. */
+.pin:not(.pin--active) { animation: pin-in 360ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 40ms); }
+@keyframes pin-in { from { opacity: 0; transform: rotate(-8deg) translateY(-10px) scale(0.6); } to { opacity: 1; transform: rotate(-8deg) translateY(0) scale(1); } }
 .pin--fav { box-shadow: 0 0 0 3px var(--gold), 0 2px 6px rgba(0, 0, 0, 0.25); }
 .pin--active {
   width: 40px;
@@ -934,11 +947,21 @@ textarea.input { min-height: 84px; resize: vertical; }
 .divider { height: 1px; background: var(--line); border: 0; margin: 0; }
 
 .skeleton {
+  position: relative;
+  overflow: hidden;
   border-radius: 8px;
   background: var(--paper-2);
-  animation: pulse 1.6s ease-in-out infinite;
 }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+/* A slow shimmer rather than a pulse: calmer, and it reads as "loading". */
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--card) 70%, transparent), transparent);
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
 
 .empty {
   padding: var(--s-10) var(--s-4);

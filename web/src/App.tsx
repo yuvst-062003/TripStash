@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { api, token } from './lib/api'
 import { AppContext, type AskSeed, type ScreenContext } from './lib/context'
 import { useAsync, useLocation, useOnlineStatus } from './lib/hooks'
-import { FADE_RISE, useMotionPrefs } from './lib/motion'
+import { useMotionPrefs } from './lib/motion'
 import { tick } from './lib/haptics'
 import AskSheet from './components/AskSheet'
 import SaveSheet from './components/SaveSheet'
@@ -50,16 +50,34 @@ function TabIcon({ Icon, active }: { Icon: AnimatedIcon; active: boolean }) {
   return <Icon ref={ref} size={22} aria-hidden />
 }
 
-/** Every route slides in fresh; the Map keeps its own full-height layout. */
-function Page({ children }: { children: ReactNode }) {
-  const { reduced, spring } = useMotionPrefs()
+const TAB_ORDER = ['/', '/map', '/saved', '/trip']
+let lastPath = '/'
+
+/** Which way a route change travels: along the tab bar, or deeper for a detail page. */
+function direction(from: string, to: string): 1 | -1 {
+  const a = TAB_ORDER.indexOf(from)
+  const b = TAB_ORDER.indexOf(to)
+  if (a === -1) return -1 // coming back up from a detail page
+  if (b === -1) return 1 // going down into one
+  return b >= a ? 1 : -1
+}
+
+/**
+ * Every route slides in along the direction of travel — translate for
+ * navigation, never scale — entering in 220 ms and leaving in 160 ms.
+ */
+function Page({ children, path }: { children: ReactNode; path: string }) {
+  const { reduced } = useMotionPrefs()
+  const dir = direction(lastPath, path)
+  useEffect(() => {
+    lastPath = path
+  }, [path])
   return (
     <motion.div
       className="page"
-      initial={reduced ? false : FADE_RISE.initial}
-      animate={FADE_RISE.animate}
-      exit={reduced ? undefined : FADE_RISE.exit}
-      transition={spring}
+      initial={reduced ? false : { opacity: 0, x: 18 * dir }}
+      animate={{ opacity: 1, x: 0, transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
+      exit={reduced ? undefined : { opacity: 0, x: -14 * dir, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } }}
     >
       {children}
     </motion.div>
@@ -154,12 +172,12 @@ export default function App() {
 
         <AnimatePresence mode="wait" initial={false}>
           <Routes location={route} key={route.pathname}>
-            <Route path="/" element={<Page><Home /></Page>} />
-            <Route path="/map" element={<Page><MapScreen /></Page>} />
-            <Route path="/saved" element={<Page><Saved /></Page>} />
-            <Route path="/trip" element={<Page><TripScreen /></Page>} />
-            <Route path="/trip/journey" element={<Page><Journey /></Page>} />
-            <Route path="/places/:tripPlaceId" element={<Page><Place /></Page>} />
+            <Route path="/" element={<Page path="/"><Home /></Page>} />
+            <Route path="/map" element={<Page path="/map"><MapScreen /></Page>} />
+            <Route path="/saved" element={<Page path="/saved"><Saved /></Page>} />
+            <Route path="/trip" element={<Page path="/trip"><TripScreen /></Page>} />
+            <Route path="/trip/journey" element={<Page path={route.pathname}><Journey /></Page>} />
+            <Route path="/places/:tripPlaceId" element={<Page path={route.pathname}><Place /></Page>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AnimatePresence>
@@ -194,8 +212,14 @@ export default function App() {
                         aria-hidden
                       />
                     )}
-                    <TabIcon Icon={Icon} active={isActive} />
-                    {label}
+                    <motion.span
+                      className="tabbar__label"
+                      whileTap={{ scale: 0.92 }}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}
+                    >
+                      <TabIcon Icon={Icon} active={isActive} />
+                      {label}
+                    </motion.span>
                   </>
                 )}
               </NavLink>

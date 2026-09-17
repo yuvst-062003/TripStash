@@ -49,6 +49,8 @@ export default function Place() {
   // The compact bar fades in as the hero title scrolls under it.
   const barOpacity = useTransform(scrollY, [180, 240], [0, 1])
   const barY = useTransform(scrollY, [180, 240], [-8, 0])
+  // The map scrolls at half speed under the title: depth without a layout change.
+  const heroY = useTransform(scrollY, [0, 300], [0, 110])
 
   const page = useAsync(
     () => api.place(tripPlaceId!, { lat: position?.lat, lon: position?.lon }),
@@ -122,7 +124,7 @@ export default function Place() {
         </h2>
       </motion.header>
 
-      <div className="hero-map">
+      <motion.div className="hero-map" style={{ y: heroY }}>
         <MiniMap
           lat={header.coordinates.lat}
           lon={header.coordinates.lon}
@@ -137,7 +139,7 @@ export default function Place() {
         <div className="hero-map__stamp">
           <StatusStamp status={header.status} size="lg" rotate={8} />
         </div>
-      </div>
+      </motion.div>
 
       <div className="place-title">
         <div className="row between row--top">
