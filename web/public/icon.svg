@@ -1,9 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <rect width="64" height="64" rx="14" fill="#132a2b"/>
-  <g transform="rotate(-8 32 32)">
-    <circle cx="32" cy="32" r="18" fill="none" stroke="#ff6b3d" stroke-width="3" stroke-dasharray="2.2 2.2"/>
-    <circle cx="32" cy="32" r="13.5" fill="none" stroke="#ff6b3d" stroke-width="2.2"/>
-    <path d="M32 24.5c-3.3 0-6 2.7-6 6 0 4.5 6 10 6 10s6-5.5 6-10c0-3.3-2.7-6-6-6z" fill="#ff6b3d"/>
-    <circle cx="32" cy="30.5" r="2.2" fill="#132a2b"/>
+  <g transform="translate(2 3) scale(0.94)">
+    <path d="M4 22 L23 16 L23 52 L4 58 Z" fill="#f4f7f2"/>
+    <path d="M23 16 L42 22 L42 58 L23 52 Z" fill="#f4f7f2" fill-opacity="0.78"/>
+    <path d="M42 22 L61 16 L61 52 L42 58 Z" fill="#f4f7f2"/>
+    <path d="M9 48 C 16 44, 18 36, 26 38 S 40 44, 48 34" fill="none" stroke="#132a2b" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="3.5 3.5" opacity="0.8"/>
+    <ellipse cx="48" cy="35" rx="6" ry="2.2" fill="rgba(0,0,0,0.22)"/>
+    <path d="M48 6c-6.1 0-11 4.9-11 11 0 8.3 11 19 11 19s11-10.7 11-19c0-6.1-4.9-11-11-11z" fill="#ff6b3d"/>
+    <circle cx="48" cy="17" r="4.2" fill="#132a2b"/>
   </g>
 </svg>

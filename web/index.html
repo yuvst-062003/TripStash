@@ -23,6 +23,14 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Rubber-stamp ink: a little turbulence on the stamp edges. Referenced
+         by the large stamps only, so lists stay cheap to paint. -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <filter id="ink" x="-6%" y="-6%" width="112%" height="112%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="noise" />
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.8" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </svg>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

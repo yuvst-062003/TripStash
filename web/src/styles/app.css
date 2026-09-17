@@ -997,10 +997,10 @@ textarea.input { min-height: 84px; resize: vertical; }
 .stamp svg { width: 11px; height: 11px; }
 .stamp--sm { padding: 3px 7px; font-size: 0.5625rem; border-width: 1.5px; letter-spacing: 0.1em; }
 .stamp--sm::after { inset: 1.5px; }
-.stamp--lg { padding: 8px 14px; font-size: 0.8125rem; border-width: 2.5px; border-radius: 10px; }
+.stamp--lg { padding: 8px 14px; font-size: 0.8125rem; border-width: 2.5px; border-radius: 10px; filter: url(#ink); }
 .stamp--lg::after { inset: 3px; border-radius: 6px; }
 .stamp--lg svg { width: 14px; height: 14px; }
-.stamp--xl { padding: 12px 20px; font-size: 1.125rem; border-width: 3px; border-radius: 14px; }
+.stamp--xl { padding: 12px 20px; font-size: 1.125rem; border-width: 3px; border-radius: 14px; filter: url(#ink); }
 .stamp--xl::after { inset: 4px; border-radius: 9px; }
 .stamp--xl svg { width: 20px; height: 20px; }
 
@@ -1046,3 +1046,46 @@ textarea.input { min-height: 84px; resize: vertical; }
 
 /* Route transition wrapper. */
 .page { min-height: 100%; }
+
+/* ---------------------------------------------------------------------------
+   Sign in — the globe behind the wordmark
+--------------------------------------------------------------------------- */
+
+.login { position: relative; min-height: 100dvh; overflow: hidden; }
+.login__globe {
+  position: absolute;
+  top: -70px;
+  right: -150px;
+  z-index: 0;
+  pointer-events: auto;
+  cursor: grab;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 58%, transparent 72%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 58%, transparent 72%);
+}
+/* Keeps the wordmark legible where it crosses the globe. */
+.login__veil {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to right, var(--paper) 10%, color-mix(in srgb, var(--paper) 62%, transparent) 38%, transparent 62%),
+    linear-gradient(to top, var(--paper) 42%, transparent 60%);
+}
+.login__body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 100dvh;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: calc(var(--s-10) + env(safe-area-inset-top)) var(--s-4) calc(var(--s-6) + env(safe-area-inset-bottom));
+}
+.login__wordmark { margin-top: var(--s-5); font-size: clamp(3.25rem, 17vw, 4.75rem); }
+.login__tagline { margin-top: var(--s-4); max-width: 30ch; }
+.login__form { margin-top: var(--s-8); padding: var(--s-5); }
+@media (min-width: 720px) {
+  .login__globe { right: 4vw; top: 8vh; }
+}

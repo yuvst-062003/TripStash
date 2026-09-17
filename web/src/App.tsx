@@ -5,6 +5,7 @@ import { api, token } from './lib/api'
 import { AppContext, type AskSeed, type ScreenContext } from './lib/context'
 import { useAsync, useLocation, useOnlineStatus } from './lib/hooks'
 import { FADE_RISE, useMotionPrefs } from './lib/motion'
+import { tick } from './lib/haptics'
 import AskSheet from './components/AskSheet'
 import SaveSheet from './components/SaveSheet'
 import Login from './pages/Login'
@@ -173,7 +174,7 @@ export default function App() {
         <nav className="tabbar" aria-label="Main">
           <div className="tabbar__inner">
             {TABS.map(({ to, label, Icon }) => (
-              <NavLink key={to} to={to} end={to === '/'} className="tabbar__item">
+              <NavLink key={to} to={to} end={to === '/'} className="tabbar__item" onClick={() => tick()}>
                 {({ isActive }) => (
                   <>
                     {isActive && (

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { ApiError, api } from '../lib/api'
 import { useMotionPrefs } from '../lib/motion'
+import { STAMP_PATTERN, tick } from '../lib/haptics'
 import type { Candidate } from '../lib/types'
 import { Banner, Confidence, KNOWLEDGE_LABEL, Meta, Note, knowledgeTint, pairText, stampToneFor } from './ui'
 import { Stamp, StampDrop } from './Stamp'
@@ -57,6 +58,7 @@ export default function ReviewCard({
       if (outcome === 'saved') {
         // Stamp first, let it land, then let the card go.
         setStamped(true)
+        tick(STAMP_PATTERN)
         window.setTimeout(() => setDecision('saved'), reduced ? 0 : 1000)
       } else {
         setDecision('ignored')
