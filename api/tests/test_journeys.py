@@ -181,8 +181,21 @@ def test_place_page_keeps_sources_reason_and_freshness_visible(client, auth, tri
     assert hours, "provider hours should be recorded"
     assert hours[0]["primary"]["freshness"] in {"fresh", "ageing", "stale"}
     assert hours[0]["primary"]["age_label"]
-    assert page["header"]["walking_minutes"] is not None
+    assert page["header"]["distance_km"] is not None
     assert page["actions"]["primary"][0]["url"].startswith("https://www.google.com/maps/dir/")
+
+
+def test_walking_estimates_are_suppressed_beyond_walking_range(client, auth, trip):
+    """A minute figure for a place 100 km away is noise, not information."""
+    capture_reel(client, auth)
+    approve_all_places(client, auth)
+    places = client.get("/api/v1/places", headers=auth, params=ANTIGUA).json()
+
+    near = [p for p in places if p["distance_km"] is not None and p["distance_km"] <= 8]
+    far = [p for p in places if p["distance_km"] is not None and p["distance_km"] > 8]
+
+    assert near and all(p["walking_minutes"] is not None for p in near)
+    assert far and all(p["walking_minutes"] is None for p in far)
 
 
 def test_map_filters_by_status_and_category(client, auth, trip):
@@ -415,3 +428,40 @@ def test_ownership_is_checked_on_every_request(client, auth, trip):
 
     response = client.get(f"/api/v1/places/{saved[0]['trip_place_id']}", headers=other_auth)
     assert response.status_code == 404
+
+
+def test_advice_about_a_stay_is_knowledge_not_a_pin(client, auth, trip):
+    """A hostel recommendation with no named place must not demand coordinates."""
+    client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={"text": "The hostel we booked had a great rooftop bar.", "kind": "note"},
+    )
+    candidate = next(
+        c for c in client.get("/api/v1/inbox", headers=auth).json() if c["type"] == "accommodation"
+    )
+    assert candidate["is_place_candidate"] is False
+
+    result = client.post(f"/api/v1/candidates/{candidate['id']}/approve", headers=auth, json={})
+    assert result.status_code == 200, result.text
+    assert result.json()["kind"] == "knowledge"
+    assert client.get("/api/v1/map", headers=auth).json()["features"] == []
+
+
+def test_a_named_stay_still_becomes_a_place(client, auth, trip):
+    client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={"text": "Stay at Tremendo Hostel in Antigua, the rooftop is great.", "kind": "note"},
+    )
+    candidate = next(
+        c
+        for c in client.get("/api/v1/inbox", headers=auth).json()
+        if c["is_place_candidate"] and c["title"] == "Tremendo Hostel"
+    )
+    result = client.post(
+        f"/api/v1/candidates/{candidate['id']}/approve",
+        headers=auth,
+        json={"provider_place_id": candidate["resolutions"][0]["provider_place_id"]},
+    )
+    assert result.json()["kind"] == "place"

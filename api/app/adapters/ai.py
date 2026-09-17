@@ -123,6 +123,25 @@ def _shorten(text: str, limit: int = 120) -> str:
     return text[: limit - 1].rsplit(" ", 1)[0] + "…"
 
 
+def _gist(sentence: str, limit: int = 58) -> str:
+    """A short label for the review screen.
+
+    The card already shows the full sentence and the quote it came from, so a
+    title that repeats either is noise. This takes the leading clause and
+    trims it to something scannable.
+    """
+    cleaned = re.sub(r"\s+", " ", sentence).strip().rstrip(".!?")
+    for separator in (" — ", " - ", ", and ", "; ", ", but ", ", so "):
+        head = cleaned.split(separator)[0]
+        if 12 <= len(head) < len(cleaned):
+            cleaned = head
+            break
+    if len(cleaned) <= limit:
+        return cleaned[:1].upper() + cleaned[1:]
+    clipped = cleaned[:limit].rsplit(" ", 1)[0]
+    return (clipped[:1].upper() + clipped[1:]) + "…"
+
+
 def _destination_scope(text: str) -> str | None:
     lowered = normalize_name(text)
     for hint in DESTINATION_HINTS:
@@ -287,7 +306,8 @@ class FakeAIAdapter:
             confidence = round(min(0.8, 0.55 + 0.05 * len(pattern.findall(sentence))) - penalty, 3)
             return KnowledgeCandidate(
                 type=knowledge_type,
-                title=f"{category.title()}: {_shorten(sentence, 90)}",
+                # The type chip already says what this is; the title is a gist.
+                title=_gist(sentence),
                 body=sentence.strip(),
                 category=category,
                 destination_scope=_destination_scope(sentence) or scope,
@@ -299,7 +319,7 @@ class FakeAIAdapter:
         if price_hit:
             return KnowledgeCandidate(
                 type=KnowledgeType.PRICE,
-                title=f"Price: {_shorten(sentence, 90)}",
+                title=_gist(sentence),
                 body=sentence.strip(),
                 category="price",
                 destination_scope=_destination_scope(sentence) or scope,

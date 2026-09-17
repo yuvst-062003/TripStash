@@ -102,6 +102,10 @@ class ExtractionCandidate(IdMixin, TimestampMixin, Base):
     category: Mapped[str | None] = mapped_column(String(32))
     destination_scope: Mapped[str | None] = mapped_column(String(160))
     confidence: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    # Whether this candidate actually names a place. A stay or transport *tip*
+    # carries no location, so it becomes knowledge rather than a map pin even
+    # though its type sits in PLACE_LIKE_TYPES.
+    is_place_candidate: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Verbatim quote(s) backing the claim, with media timestamps where known.
     evidence_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     # Resolved place options for place-like candidates, best match first.

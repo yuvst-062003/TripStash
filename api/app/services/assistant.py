@@ -28,7 +28,12 @@ from app.models.ops import Expense, ItineraryItem
 from app.models.places import Place, PlaceFact, TripPlace
 from app.services import handoff
 from app.services.freshness import group_with_conflicts
-from app.services.spatial import haversine_km, nearby_trip_places, walking_minutes
+from app.services.spatial import (
+    haversine_km,
+    nearby_trip_places,
+    walking_minutes,
+    walking_minutes_if_walkable,
+)
 from app.services.text import normalize_name
 
 ASK_RADIUS_KM = 3.0
@@ -177,7 +182,7 @@ def _place_card(
         "is_favourite": trip_place.is_favourite,
         "why_saved": why or trip_place.reason_saved,
         "distance_km": round(distance_km, 2) if distance_km is not None else None,
-        "walking_minutes": walking_minutes(distance_km) if distance_km is not None else None,
+        "walking_minutes": walking_minutes_if_walkable(distance_km),
         "coordinates": {"lat": place.lat, "lon": place.lon},
         "facts": facts or [],
         "actions": handoff.serialise(handoff.for_place(place)),

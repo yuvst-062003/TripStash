@@ -86,6 +86,7 @@ def _serialise_candidate(candidate: ExtractionCandidate) -> CandidateResponse:
         category=candidate.category,
         destination_scope=candidate.destination_scope,
         confidence=candidate.confidence,
+        is_place_candidate=candidate.is_place_candidate,
         evidence=json.loads(candidate.evidence_json or "[]"),
         resolutions=json.loads(candidate.resolution_json or "[]"),
         duplicate_of_place_id=candidate.duplicate_of_place_id,

@@ -27,9 +27,21 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(a))
 
 
+# Beyond this, walking is not a real option and a minute figure is noise:
+# "1814 min walk" tells the traveller nothing that "136 km away" does not.
+WALKABLE_KM = 8.0
+
+
 def walking_minutes(distance_km: float, speed_kmh: float = 4.5) -> int:
     """Flat-ground walking estimate; labelled as an estimate everywhere it is shown."""
     return max(1, round(distance_km / speed_kmh * 60))
+
+
+def walking_minutes_if_walkable(distance_km: float | None) -> int | None:
+    """The estimate, or None when the distance is not walkable."""
+    if distance_km is None or distance_km > WALKABLE_KM:
+        return None
+    return walking_minutes(distance_km)
 
 
 def bbox_around(lat: float, lon: float, radius_km: float) -> tuple[float, float, float, float]:

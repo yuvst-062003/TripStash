@@ -33,6 +33,9 @@ class Resurfaced:
     knowledge_item_id: str | None = None
     trip_place_id: str | None = None
     place_id: str | None = None
+    # Lets the client show the right category art instead of a generic pin.
+    category: str | None = None
+    knowledge_type: str | None = None
     distance_km: float | None = None
 
     def to_dict(self) -> dict:
@@ -45,6 +48,8 @@ class Resurfaced:
             "knowledge_item_id": self.knowledge_item_id,
             "trip_place_id": self.trip_place_id,
             "place_id": self.place_id,
+            "category": self.category,
+            "knowledge_type": self.knowledge_type,
             "distance_km": round(self.distance_km, 2) if self.distance_km is not None else None,
         }
 
@@ -87,6 +92,7 @@ def _nearby_saves(session: Session, trip_id: str, lat: float, lon: float) -> lis
                 confidence=0.9 if trip_place.status == PlaceStatus.MUST_VISIT else 0.75,
                 trip_place_id=trip_place.id,
                 place_id=trip_place.place_id,
+                category=trip_place.place.category,
                 distance_km=distance,
             )
         )
@@ -123,6 +129,7 @@ def _airport_knowledge(
             reason="You are close to an airport and saved this about arrivals and rides.",
             confidence=0.85,
             knowledge_item_id=item.id,
+            knowledge_type=str(item.type),
         )
         for item in items
     ]
@@ -170,6 +177,7 @@ def _scoped_knowledge(
                 reason=reason,
                 confidence=confidence * max(item.confidence, 0.4),
                 knowledge_item_id=item.id,
+                knowledge_type=str(item.type),
             )
         )
     return out

@@ -204,8 +204,9 @@ def _persist_candidate(
     resolutions: list[dict] = []
     duplicate_place_id: str | None = None
     duplicate_reason: str | None = None
+    is_place_candidate = candidate.type in PLACE_LIKE_TYPES and candidate.place is not None
 
-    if candidate.type in PLACE_LIKE_TYPES and candidate.place is not None:
+    if is_place_candidate:
         resolved = _resolve_place(candidate)
         resolutions = [asdict(option) for option in resolved]
 
@@ -233,6 +234,7 @@ def _persist_candidate(
         category=candidate.category,
         destination_scope=candidate.destination_scope,
         confidence=candidate.confidence,
+        is_place_candidate=is_place_candidate,
         evidence_json=json.dumps([e.model_dump() for e in candidate.evidence], ensure_ascii=False),
         resolution_json=json.dumps(resolutions, ensure_ascii=False),
         duplicate_of_place_id=duplicate_place_id,
@@ -280,7 +282,9 @@ def approve_candidate(
     if candidate.status != CandidateStatus.PENDING:
         raise CaptureError("This candidate has already been decided.")
 
-    if KnowledgeType(candidate.type) in PLACE_LIKE_TYPES:
+    # Routed on the flag, not the type: "we stayed at a great hostel" is advice
+    # about accommodation, not a pin, and must not demand coordinates.
+    if candidate.is_place_candidate or merge_into_place_id or override_lat is not None:
         trip_place = _approve_place(
             session,
             candidate,

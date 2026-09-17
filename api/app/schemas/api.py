@@ -162,6 +162,7 @@ class CandidateResponse(ApiModel):
     category: str | None
     destination_scope: str | None
     confidence: float
+    is_place_candidate: bool
     evidence: list[EvidenceResponse]
     resolutions: list[ResolutionOption]
     duplicate_of_place_id: str | None

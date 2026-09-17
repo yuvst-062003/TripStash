@@ -24,7 +24,7 @@ from app.schemas.api import (
 )
 from app.services import handoff
 from app.services.freshness import group_with_conflicts
-from app.services.spatial import haversine_km, walking_minutes
+from app.services.spatial import haversine_km, walking_minutes_if_walkable
 
 router = APIRouter(tags=["places"])
 
@@ -57,7 +57,7 @@ def _summary(
         reason_saved=trip_place.reason_saved,
         source_count=source_count,
         distance_km=round(distance_km, 2) if distance_km is not None else None,
-        walking_minutes=walking_minutes(distance_km) if distance_km is not None else None,
+        walking_minutes=walking_minutes_if_walkable(distance_km),
     )
 
 
@@ -250,7 +250,7 @@ def place_page(
             "needs_review": trip_place.needs_review,
             "coordinates": {"lat": place.lat, "lon": place.lon},
             "distance_km": round(distance, 2) if distance is not None else None,
-            "walking_minutes": walking_minutes(distance) if distance is not None else None,
+            "walking_minutes": walking_minutes_if_walkable(distance),
         },
         "overview": {
             "why_saved": trip_place.reason_saved,
