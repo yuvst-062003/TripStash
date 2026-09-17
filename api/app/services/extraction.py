@@ -239,6 +239,8 @@ def _persist_candidate(
         resolution_json=json.dumps(resolutions, ensure_ascii=False),
         duplicate_of_place_id=duplicate_place_id,
         duplicate_reason=duplicate_reason,
+        happens_on=candidate.happens_on,
+        ends_on=candidate.ends_on,
     )
     session.add(row)
     session.flush()
@@ -549,6 +551,8 @@ def _approve_knowledge(
         provenance=source.provenance if source else Provenance.CREATOR,
         evidence_json=candidate.evidence_json,
         source_date=source.published_on if source else None,
+        happens_on=candidate.happens_on,
+        ends_on=candidate.ends_on,
         requires_official_verification=KnowledgeType(candidate.type) is KnowledgeType.BORDER,
     )
     session.add(item)

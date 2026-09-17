@@ -49,3 +49,86 @@ def test_binary_media_is_not_given_a_made_up_transcript():
         MediaPayload(kind="video", filename="clip.mp4", media_type="video/mp4", text="ignored")
     )
     assert transcript is None and ocr is None
+
+
+def test_a_dated_festival_becomes_an_event_with_its_date():
+    """Spec: things that happen are events, and the date comes through extraction."""
+    from datetime import date
+
+    from app.adapters.ai import FakeAIAdapter, parse_event_dates
+    from app.adapters.base import MediaPayload
+
+    assert parse_event_dates("Carnaval in Salvador is on 14 February 2027") == (
+        date(2027, 2, 14),
+        None,
+    )
+    start, end = parse_event_dates("the full moon party runs March 3-5, 2027")
+    assert (start, end) == (date(2027, 3, 3), date(2027, 3, 5))
+    assert parse_event_dates("a festival with no date") == (None, None)
+
+    result = FakeAIAdapter().extract(
+        MediaPayload(kind="note", text="Carnaval in Salvador is on 14 February 2027, wild.")
+    )
+    events = [c for c in result.candidates if c.type == "event"]
+    assert len(events) == 1
+    assert events[0].happens_on == date(2027, 2, 14)
+
+
+def test_anthropic_adapter_maps_the_models_reply_onto_the_contract():
+    """The real adapter validates the reply and drops any claim without a quote."""
+    from datetime import date
+    from types import SimpleNamespace
+
+    from app.adapters.ai import AnthropicAIAdapter, _ExtractionOut
+    from app.adapters.base import MediaPayload
+
+    reply = _ExtractionOut.model_validate(
+        {
+            "title": "Carnaval weekend",
+            "candidates": [
+                {
+                    "type": "event",
+                    "title": "Carnaval in Salvador",
+                    "body": "Carnaval in Salvador runs 14 to 17 February.",
+                    "destination_scope": "Salvador",
+                    "confidence": 0.8,
+                    "happens_on": "2027-02-14",
+                    "ends_on": "2027-02-17",
+                    "evidence": [{"quote": "Carnaval in Salvador runs 14 to 17 February"}],
+                },
+                {
+                    "type": "border",
+                    "title": "Onward ticket",
+                    "body": "They asked for proof of onward travel.",
+                    "confidence": 0.6,
+                    "evidence": [{"quote": "they asked for proof of onward travel"}],
+                },
+                {"type": "general", "title": "No quote, no claim", "confidence": 0.9},
+            ],
+        }
+    )
+
+    class Messages:
+        def __init__(self):
+            self.calls = []
+
+        def parse(self, **kwargs):
+            self.calls.append(kwargs)
+            return SimpleNamespace(stop_reason="end_turn", parsed_output=reply)
+
+    client = SimpleNamespace(messages=Messages())
+    adapter = AnthropicAIAdapter(api_key="unused", model="claude-opus-5", client=client)
+    result = adapter.extract(MediaPayload(kind="link", text="Carnaval in Salvador runs..."))
+
+    assert [c.type for c in result.candidates] == ["event", "border"]
+    assert result.candidates[0].happens_on == date(2027, 2, 14)
+    assert result.candidates[0].ends_on == date(2027, 2, 17)
+    assert result.candidates[1].requires_official_verification is True
+
+    call = client.messages.calls[0]
+    assert call["model"] == "claude-opus-5"
+    assert call["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert call["output_format"] is _ExtractionOut
+
+    empty = adapter.extract(MediaPayload(kind="video"))
+    assert empty.candidates == [] and empty.failure_reason

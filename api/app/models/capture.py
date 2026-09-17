@@ -113,6 +113,9 @@ class ExtractionCandidate(IdMixin, TimestampMixin, Base):
     duplicate_of_place_id: Mapped[str | None] = mapped_column(String(32))
     duplicate_reason: Mapped[str | None] = mapped_column(String(200))
     resolved_place_id: Mapped[str | None] = mapped_column(String(32))
+    # Events carry their date through review, so approving keeps it.
+    happens_on: Mapped[date | None] = mapped_column(Date)
+    ends_on: Mapped[date | None] = mapped_column(Date)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     source: Mapped[Source] = relationship(back_populates="candidates")
@@ -171,6 +174,9 @@ class KnowledgeItem(IdMixin, TimestampMixin, Base):
     provenance: Mapped[str] = mapped_column(String(20), default=Provenance.CREATOR, nullable=False)
     evidence_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     source_date: Mapped[date | None] = mapped_column(Date)
+    # Events: when it happens, so it can be brought back as the day nears.
+    happens_on: Mapped[date | None] = mapped_column(Date, index=True)
+    ends_on: Mapped[date | None] = mapped_column(Date)
     # Border and visa answers must be re-verified against official sources.
     requires_official_verification: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False

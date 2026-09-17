@@ -71,8 +71,55 @@ def resurface(
         out.extend(_airport_knowledge(session, trip_id, lat, lon))
 
     out.extend(_scoped_knowledge(session, trip_id, destination_scope))
+    out.extend(_upcoming_events(session, trip_id, on))
     out.sort(key=lambda item: (-item.confidence, item.distance_km or 0.0))
     return out[:limit]
+
+
+EVENT_HORIZON_DAYS = 45
+
+
+def _upcoming_events(session: Session, trip_id: str, on: date) -> list[Resurfaced]:
+    """Events within the horizon, nearest first; the sooner, the stronger the pull."""
+    stmt = select(KnowledgeItem).where(
+        KnowledgeItem.trip_id == trip_id,
+        KnowledgeItem.is_archived.is_(False),
+        KnowledgeItem.type == KnowledgeType.EVENT,
+        KnowledgeItem.happens_on.is_not(None),
+    )
+    out: list[Resurfaced] = []
+    for item in session.execute(stmt).scalars():
+        start = item.happens_on
+        end = item.ends_on or start
+        assert start is not None
+        if end < on or (start - on).days > EVENT_HORIZON_DAYS:
+            continue
+        days = (start - on).days
+        if days <= 0:
+            reason = (
+                "Happening today." if end == start or end == on else f"On now, until {end:%-d %B}."
+            )
+            confidence = 0.95
+        elif days == 1:
+            reason = "Tomorrow."
+            confidence = 0.92
+        else:
+            when = f"{start:%-d %B}" + (f" – {end:%-d %B}" if end != start else "")
+            reason = f"In {days} days, {when}."
+            confidence = max(0.5, 0.9 - days * 0.008)
+        out.append(
+            Resurfaced(
+                kind="knowledge",
+                title=item.title,
+                body=item.body,
+                reason=reason,
+                confidence=confidence,
+                knowledge_item_id=item.id,
+                knowledge_type=str(item.type),
+                category="event",
+            )
+        )
+    return out
 
 
 def _nearby_saves(session: Session, trip_id: str, lat: float, lon: float) -> list[Resurfaced]:

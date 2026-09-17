@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from typing import Literal
+
+from pydantic import BaseModel
 
 from app.adapters.base import MediaPayload
 from app.adapters.gazetteer import DESTINATION_HINTS, GAZETTEER
@@ -34,6 +37,74 @@ _PRICE = re.compile(
 )
 
 # Ordered by priority: the first rule a sentence matches claims it.
+_EVENT = re.compile(
+    r"\b(festival|carnival|carnaval|fiesta|parade|full[- ]moon party|market day|"
+    r"night market|concert|celebration|semana santa|d[ií]a de (los )?muertos|"
+    r"fireworks|feria|procession)\b",
+    re.IGNORECASE,
+)
+_MONTHS = (
+    "january|february|march|april|may|june|july|august|september|october|november|december|"
+    "jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec"
+)
+# "14 February", "February 14", "Feb 14-16", "on the 3rd of March", "2026-02-14".
+_DATE_PATTERNS = (
+    re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b"),
+    re.compile(
+        rf"\b(\d{{1,2}})(?:st|nd|rd|th)?(?: of)? ({_MONTHS})\b(?:[ ,]+(\d{{4}}))?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b({_MONTHS})\.? (\d{{1,2}})(?:st|nd|rd|th)?"
+        rf"(?:\s*[-–]\s*(\d{{1,2}}))?(?:[ ,]+(\d{{4}}))?\b",
+        re.IGNORECASE,
+    ),
+)
+
+
+_MONTH_KEYS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+
+
+def _month_number(name: str) -> int:
+    return _MONTH_KEYS.index(name.lower()[:3]) + 1
+
+
+def parse_event_dates(
+    sentence: str, reference: date | None = None
+) -> tuple[date | None, date | None]:
+    """The first date in a sentence, and a range end when one is written.
+
+    Without a year, the next occurrence from `reference` is assumed — a
+    festival mentioned in July "on 14 February" means next February.
+    """
+    today = reference or date.today()
+    iso = _DATE_PATTERNS[0].search(sentence)
+    if iso:
+        try:
+            return date(int(iso[1]), int(iso[2]), int(iso[3])), None
+        except ValueError:
+            return None, None
+    day_first = _DATE_PATTERNS[1].search(sentence)
+    month_first = _DATE_PATTERNS[2].search(sentence)
+    if day_first:
+        day, month, year = int(day_first[1]), _month_number(day_first[2]), day_first[3]
+        end_day = None
+    elif month_first:
+        month, day = _month_number(month_first[1]), int(month_first[2])
+        end_day, year = month_first[3], month_first[4]
+    else:
+        return None, None
+    try:
+        year_value = int(year) if year else today.year
+        start = date(year_value, month, day)
+        if not year and start < today:
+            start = date(today.year + 1, month, day)
+        end = date(start.year, month, int(end_day)) if end_day else None
+    except ValueError:
+        return None, None
+    return start, end
+
+
 _RULES: list[tuple[KnowledgeType, str, re.Pattern[str], bool]] = [
     (
         KnowledgeType.SAFETY,
@@ -297,6 +368,22 @@ class FakeAIAdapter:
     ) -> KnowledgeCandidate | None:
         price_hit = _PRICE.search(sentence)
 
+        # A dated happening is an event before it is anything else: "the
+        # carnival is on 14 February" must not become a transport tip.
+        if _EVENT.search(sentence):
+            happens_on, ends_on = parse_event_dates(sentence)
+            return KnowledgeCandidate(
+                type=KnowledgeType.EVENT,
+                title=_gist(sentence),
+                body=sentence.strip(),
+                category="event",
+                destination_scope=_destination_scope(sentence) or scope,
+                confidence=round((0.7 if happens_on else 0.5) - penalty, 3),
+                evidence=[Evidence(quote=_shorten(sentence, 400), channel=channel)],
+                happens_on=happens_on,
+                ends_on=ends_on,
+            )
+
         for knowledge_type, category, pattern, official in _RULES:
             match = pattern.search(sentence)
             if not match:
@@ -340,16 +427,28 @@ class FakeAIAdapter:
 class AnthropicAIAdapter:
     """Real extraction through the Claude API.
 
-    Deliberately thin: it hands the model the same schema the fake adapter
-    fills in, and validates the reply against it, so a malformed or refused
-    response fails loudly rather than reaching the review screen.
+    Deliberately thin: the model fills the same typed contract the fake
+    adapter fills, through structured outputs, and the reply is validated
+    against it — so a malformed or refused response fails loudly rather than
+    reaching the review screen. The rules the product enforces (verbatim
+    evidence, nothing invented, events carry dates, border advice flagged)
+    are in the system prompt, which is cached across calls.
     """
 
     name = "anthropic"
 
-    def __init__(self, api_key: str, model: str) -> None:
+    def __init__(self, api_key: str | None, model: str, client: object | None = None) -> None:
         self.api_key = api_key
         self.model = model
+        self._client = client
+
+    def _get_client(self):
+        if self._client is None:
+            # Imported here so the fake provider needs no SDK installed.
+            import anthropic
+
+            self._client = anthropic.Anthropic(api_key=self.api_key)
+        return self._client
 
     def transcribe(self, payload: MediaPayload) -> tuple[str | None, str | None]:
         raise NotImplementedError(
@@ -357,10 +456,169 @@ class AnthropicAIAdapter:
         )
 
     def extract(self, payload: MediaPayload) -> ExtractionResult:
-        raise NotImplementedError(
-            "Set TRIPSTASH_AI_PROVIDER=fake, or implement this call against the "
-            "Claude API using app/schemas/extraction.ExtractionResult as the tool schema."
+        channels = [
+            (name, text)
+            for name, text in (
+                ("caption", payload.text),
+                ("transcript", payload.transcript),
+                ("ocr", payload.ocr_text),
+            )
+            if text and text.strip()
+        ]
+        if not channels:
+            # The honest failure: nothing readable, nothing to invent.
+            return ExtractionResult(
+                failure_reason="No readable caption, transcript or text — paste the caption "
+                "or add a screenshot and try again."
+            )
+
+        parts = [f"[{name}]\n{text.strip()}" for name, text in channels]
+        if payload.url:
+            parts.insert(0, f"[url]\n{payload.url}")
+        user_message = (
+            f"Today is {today().isoformat()}.\n\n"
+            "Extract every travel claim from this capture:\n\n" + "\n\n".join(parts)
         )
+
+        response = self._get_client().messages.parse(
+            model=self.model,
+            max_tokens=16000,
+            system=[
+                {
+                    "type": "text",
+                    "text": _EXTRACTION_SYSTEM,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[{"role": "user", "content": user_message}],
+            output_format=_ExtractionOut,
+        )
+        if response.stop_reason == "refusal":
+            return ExtractionResult(failure_reason="The model declined to read this capture.")
+        parsed: _ExtractionOut | None = response.parsed_output
+        if parsed is None:
+            return ExtractionResult(failure_reason="The model returned nothing usable.")
+        return parsed.to_result()
+
+
+_EXTRACTION_SYSTEM = """You turn one piece of saved travel content — a Reel caption, a \
+transcript, a screenshot's text, a message — into typed, checkable claims for a private \
+travel memory.
+
+Rules, in order of importance:
+1. Never invent. Every candidate must be backed by a verbatim quote from the text, in \
+`evidence`. If the text names nothing concrete, return no candidates and say why in \
+`failure_reason`.
+2. One candidate per claim. A video that names a hostel, warns about a taxi scam and \
+quotes a shuttle price yields three candidates, not one.
+3. `type` is the kind of thing it is: `place` for somewhere you can go (attach `place` with \
+the best name, category and city/country hints; never guess coordinates), `accommodation` \
+for a stay, `safety` for a warning, `border` for entry/visa/customs, `transport` for getting \
+around, `route` for an order of stops, `price` for a cost, `packing` for what to bring, \
+`event` for something that happens on a date (festival, market day, party), `general` for \
+any other tip.
+4. Events carry their date in `happens_on` (ISO, and `ends_on` for a range) when the text \
+gives one; resolve a month-and-day to the next occurrence after today.
+5. `border` claims always set `requires_official_verification`.
+6. `confidence` is how sure you are the claim is real and correctly typed (0.3–0.9), lower \
+for hedged or second-hand statements.
+7. `title` is a short gist (under 60 characters); `body` is the claim in one plain sentence. \
+Keep the creator's language; do not translate.
+"""
+
+
+class _EvidenceOut(BaseModel):
+    quote: str
+    channel: Literal["text", "transcript", "ocr", "caption", "frame"] = "caption"
+    media_timestamp_seconds: float | None = None
+
+
+class _PlaceOut(BaseModel):
+    name: str
+    category: PlaceCategory = PlaceCategory.OTHER
+    address_hint: str | None = None
+    city_hint: str | None = None
+    country_hint: str | None = None
+
+
+class _CandidateOut(BaseModel):
+    type: KnowledgeType
+    title: str
+    body: str | None = None
+    destination_scope: str | None = None
+    confidence: float = 0.5
+    evidence: list[_EvidenceOut] = []
+    place: _PlaceOut | None = None
+    happens_on: str | None = None
+    ends_on: str | None = None
+    requires_official_verification: bool = False
+
+
+class _ExtractionOut(BaseModel):
+    """The model's side of the contract: plain strings for dates, no regex constraints."""
+
+    title: str | None = None
+    author: str | None = None
+    published_on: str | None = None
+    language: str | None = None
+    summary: str | None = None
+    candidates: list[_CandidateOut] = []
+    failure_reason: str | None = None
+
+    def to_result(self) -> ExtractionResult:
+        return ExtractionResult(
+            title=self.title,
+            author=self.author,
+            published_on=_iso_date(self.published_on),
+            language=self.language,
+            summary=self.summary,
+            failure_reason=self.failure_reason,
+            candidates=[
+                KnowledgeCandidate(
+                    type=c.type,
+                    title=c.title[:240],
+                    body=c.body,
+                    category=c.place.category if c.place else None,
+                    destination_scope=c.destination_scope,
+                    confidence=min(0.95, max(0.05, c.confidence)),
+                    evidence=[
+                        Evidence(
+                            quote=e.quote[:2000],
+                            channel=e.channel,
+                            media_timestamp_seconds=e.media_timestamp_seconds,
+                        )
+                        for e in c.evidence
+                        if e.quote.strip()
+                    ],
+                    place=(
+                        PlaceCandidate(
+                            name=c.place.name[:200],
+                            category=c.place.category,
+                            address_hint=c.place.address_hint,
+                            city_hint=c.place.city_hint,
+                            country_hint=c.place.country_hint,
+                        )
+                        if c.place
+                        else None
+                    ),
+                    happens_on=_iso_date(c.happens_on),
+                    ends_on=_iso_date(c.ends_on),
+                    requires_official_verification=c.requires_official_verification
+                    or c.type is KnowledgeType.BORDER,
+                )
+                for c in self.candidates
+                if c.evidence  # rule 1: no quote, no claim
+            ],
+        )
+
+
+def _iso_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value[:10])
+    except ValueError:
+        return None
 
 
 def today() -> date:

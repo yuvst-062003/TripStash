@@ -91,6 +91,8 @@ def _serialise_candidate(candidate: ExtractionCandidate) -> CandidateResponse:
         resolutions=json.loads(candidate.resolution_json or "[]"),
         duplicate_of_place_id=candidate.duplicate_of_place_id,
         duplicate_reason=candidate.duplicate_reason,
+        happens_on=candidate.happens_on,
+        ends_on=candidate.ends_on,
     )
 
 

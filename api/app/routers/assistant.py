@@ -13,10 +13,12 @@ from app.db import get_session
 from app.deps import current_trip, owned_or_404
 from app.models.capture import KnowledgeItem
 from app.models.core import Trip
+from app.models.enums import KnowledgeType, Provenance
 from app.models.ops import AgentRun, ItineraryItem
 from app.models.places import TripPlace
-from app.schemas.api import AskRequest, KnowledgeUpdate
+from app.schemas.api import AskRequest, KnowledgeCreate, KnowledgeUpdate
 from app.services.assistant import AskContext, ask
+from app.services.recommend import recommend
 from app.services.resurfacing import resurface
 
 router = APIRouter(tags=["assistant"])
@@ -118,6 +120,16 @@ def resurface_endpoint(
     return {"items": [item.to_dict() for item in items]}
 
 
+@router.get("/recommend")
+def recommend_for(
+    q: str = Query(min_length=1, max_length=120),
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> dict:
+    """What you stashed for a place, ranked for now. Read-only, grounded, never a web result."""
+    return recommend(session, trip=trip, query=q, on=datetime.now(UTC).date()).to_dict()
+
+
 @router.get("/knowledge")
 def list_knowledge(
     session: Session = Depends(get_session),
@@ -146,6 +158,8 @@ def list_knowledge(
             "provenance": item.provenance,
             "source_id": item.source_id,
             "source_date": item.source_date.isoformat() if item.source_date else None,
+            "happens_on": item.happens_on.isoformat() if item.happens_on else None,
+            "ends_on": item.ends_on.isoformat() if item.ends_on else None,
             "requires_official_verification": item.requires_official_verification,
             "user_edited": item.user_edited,
             "is_archived": item.is_archived,
@@ -153,6 +167,37 @@ def list_knowledge(
         }
         for item in session.execute(stmt.order_by(KnowledgeItem.created_at.desc())).scalars()
     ]
+
+
+@router.post("/knowledge", status_code=status.HTTP_201_CREATED)
+def create_knowledge(
+    body: KnowledgeCreate,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> dict:
+    """Something the traveller writes down directly — most often an event with a date.
+
+    It skips the review queue on purpose: the traveller is the source, so
+    there is nothing to confirm. Provenance says so.
+    """
+    if body.ends_on and body.happens_on and body.ends_on < body.happens_on:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "ends_on is before happens_on.")
+    item = KnowledgeItem(
+        trip_id=trip.id,
+        type=str(body.type),
+        title=body.title.strip(),
+        body=body.body.strip() if body.body else None,
+        category="event" if body.type is KnowledgeType.EVENT else None,
+        destination_scope=body.destination_scope,
+        confidence=1.0,
+        provenance=Provenance.USER,
+        happens_on=body.happens_on,
+        ends_on=body.ends_on,
+        user_edited=True,
+    )
+    session.add(item)
+    session.flush()
+    return {"id": item.id, "type": item.type, "title": item.title, "happens_on": body.happens_on}
 
 
 @router.patch("/knowledge/{item_id}")

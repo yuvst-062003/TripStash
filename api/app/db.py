@@ -53,6 +53,7 @@ def init_db() -> None:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
 
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
 
     if engine.dialect.name == "postgresql":
         with engine.begin() as conn:
@@ -62,6 +63,31 @@ def init_db() -> None:
                     "USING GIST ((ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography))"
                 )
             )
+
+
+# Columns added after the first release. `create_all` never alters an existing
+# table, so each one is added here when absent — additive only, which is safe
+# on both SQLite and Postgres. Anything more than this is Alembic's job.
+_ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("extraction_candidate", "happens_on", "DATE"),
+    ("extraction_candidate", "ends_on", "DATE"),
+    ("knowledge_item", "happens_on", "DATE"),
+    ("knowledge_item", "ends_on", "DATE"),
+)
+
+
+def _add_missing_columns() -> None:
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        for table, column, ddl in _ADDED_COLUMNS:
+            if table not in tables:
+                continue
+            present = {col["name"] for col in inspector.get_columns(table)}
+            if column not in present:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
 
 
 def get_session() -> Iterator[Session]:

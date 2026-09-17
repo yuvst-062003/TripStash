@@ -176,6 +176,8 @@ class CandidateResponse(ApiModel):
     resolutions: list[ResolutionOption]
     duplicate_of_place_id: str | None
     duplicate_reason: str | None
+    happens_on: date | None = None
+    ends_on: date | None = None
 
 
 class ApproveCandidate(ApiModel):
@@ -302,10 +304,23 @@ class ExpenseCreate(ApiModel):
     client_op_id: str | None = None
 
 
+class KnowledgeCreate(ApiModel):
+    """A thing the traveller writes down themselves: an event, a tip, a warning."""
+
+    type: KnowledgeType = KnowledgeType.GENERAL
+    title: str = Field(min_length=1, max_length=240)
+    body: str | None = None
+    destination_scope: str | None = None
+    happens_on: date | None = None
+    ends_on: date | None = None
+
+
 class KnowledgeUpdate(ApiModel):
     title: str | None = None
     body: str | None = None
     type: KnowledgeType | None = None
+    happens_on: date | None = None
+    ends_on: date | None = None
     category: str | None = None
     destination_scope: str | None = None
     is_archived: bool | None = None

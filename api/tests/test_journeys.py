@@ -494,3 +494,93 @@ def test_marking_a_stop_as_here_now_moves_the_flag(client, auth, trip):
         "/api/v1/trips/current/destinations/not-a-stop", headers=auth, json={"is_current": True}
     )
     assert missing.status_code == 404
+
+
+def test_an_event_is_brought_back_as_its_date_nears(client, auth, trip):
+    """A festival saved by hand shows on Home with how far away it is."""
+    from datetime import date, timedelta
+
+    soon = date.today() + timedelta(days=12)
+    created = client.post(
+        "/api/v1/knowledge",
+        headers=auth,
+        json={
+            "type": "event",
+            "title": "Carnaval in Salvador",
+            "body": "Blocos start in Barra around 16:00.",
+            "destination_scope": "Salvador",
+            "happens_on": soon.isoformat(),
+            "ends_on": (soon + timedelta(days=4)).isoformat(),
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    listed = client.get("/api/v1/knowledge", headers=auth, params={"type": "event"}).json()
+    assert listed[0]["happens_on"] == soon.isoformat()
+    assert listed[0]["provenance"] == "user"
+
+    home = client.get("/api/v1/home", headers=auth).json()
+    events = [r for r in home["resurfaced"] if r["knowledge_type"] == "event"]
+    assert events and events[0]["reason"].startswith("In 12 days")
+
+    far = client.post(
+        "/api/v1/knowledge",
+        headers=auth,
+        json={
+            "type": "event",
+            "title": "Inti Raymi",
+            "happens_on": (date.today() + timedelta(days=200)).isoformat(),
+        },
+    )
+    assert far.status_code == 201
+    home = client.get("/api/v1/home", headers=auth).json()
+    assert all(r["title"] != "Inti Raymi" for r in home["resurfaced"])
+
+    backwards = client.post(
+        "/api/v1/knowledge",
+        headers=auth,
+        json={
+            "type": "event",
+            "title": "Nope",
+            "happens_on": "2027-03-05",
+            "ends_on": "2027-03-01",
+        },
+    )
+    assert backwards.status_code == 422
+
+
+def test_recommendations_come_only_from_the_travellers_own_stash(client, auth, trip):
+    """Spec 5.5: grounded, read-only; a must-visit and a soon event lead."""
+    from datetime import date, timedelta
+
+    source = capture_reel(client, auth)
+    inbox = client.get("/api/v1/inbox", headers=auth).json()
+    place = next(c for c in inbox if c["is_place_candidate"] and c["resolutions"])
+    approved = client.post(
+        f"/api/v1/candidates/{place['id']}/approve",
+        headers=auth,
+        json={"provider_place_id": place["resolutions"][0]["provider_place_id"]},
+    )
+    assert approved.status_code == 200, approved.text
+    client.post(
+        "/api/v1/knowledge",
+        headers=auth,
+        json={
+            "type": "event",
+            "title": "Semana Santa processions",
+            "destination_scope": "Antigua",
+            "happens_on": (date.today() + timedelta(days=9)).isoformat(),
+        },
+    )
+    assert source["id"]
+
+    out = client.get("/api/v1/recommend", headers=auth, params={"q": "Antigua"}).json()
+    assert out["grounded"] is True
+    kinds = [c["type"] for c in out["cards"]]
+    assert "place" in kinds and "knowledge" in kinds
+    event = next(c for c in out["cards"] if c.get("knowledge_type") == "event")
+    assert event["when"] == "in 9 days"
+    assert "Antigua" in out["summary"]
+
+    nothing = client.get("/api/v1/recommend", headers=auth, params={"q": "Ushuaia"}).json()
+    assert nothing["cards"] == [] and "Nothing stashed" in nothing["summary"]
