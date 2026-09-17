@@ -110,6 +110,7 @@ def _serialise_candidate(candidate: ExtractionCandidate) -> CandidateResponse:
 def capture_link(
     body: LinkCapture,
     background: BackgroundTasks,
+    response: Response,
     session: Session = Depends(get_session),
     trip: Trip = Depends(current_trip),
 ) -> SourceResponse:
@@ -124,10 +125,15 @@ def capture_link(
             title=body.title,
             author=body.author,
             published_on=body.published_on,
+            lat=body.lat,
+            lon=body.lon,
         )
     except DuplicateSourceError as exc:
-        # Re-importing the same thing returns the original rather than a copy.
-        return _serialise_source(session, exc.source)
+        # Re-importing the same thing returns the original rather than a copy — and says so.
+        response.status_code = status.HTTP_200_OK
+        original = _serialise_source(session, exc.source)
+        original.duplicate = True
+        return original
     except CaptureError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
@@ -155,21 +161,26 @@ async def capture_upload(
     settings = get_settings()
     out: list[SourceResponse] = []
 
+    # Every file is checked before any is stored, so a bad one never leaves
+    # half a batch behind.
+    payloads: list[tuple[UploadFile, bytes]] = []
     for upload in files:
         data = await upload.read()
         if len(data) > settings.max_upload_bytes:
             raise HTTPException(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                f"{upload.filename} is larger than the {settings.max_upload_bytes // 1048576} MB "
-                "limit. Compress it or select a shorter clip.",
+                f"{upload.filename} is over the {settings.max_upload_bytes // 1048576} MB limit. "
+                "Trim it or pick a shorter clip.",
             )
         if upload.content_type and upload.content_type not in ALLOWED_MEDIA_TYPES:
             raise HTTPException(
                 status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                f"{upload.content_type} is not accepted. Supported: "
-                f"{', '.join(sorted(ALLOWED_MEDIA_TYPES))}.",
+                f"{upload.filename} is not a supported file. Use a photo (JPG, PNG, HEIC, WebP, "
+                "GIF), a video (MP4, MOV, WebM), a PDF or a text file.",
             )
+        payloads.append((upload, data))
 
+    for upload, data in payloads:
         kind = SourceKind.VIDEO if (upload.content_type or "").startswith("video") else (
             SourceKind.IMAGE if (upload.content_type or "").startswith("image") else SourceKind.NOTE
         )
@@ -184,7 +195,9 @@ async def capture_upload(
                 data=data,
             )
         except DuplicateSourceError as exc:
-            out.append(_serialise_source(session, exc.source))
+            original = _serialise_source(session, exc.source)
+            original.duplicate = True
+            out.append(original)
             continue
         except UnsupportedMediaError as exc:
             raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, str(exc)) from exc

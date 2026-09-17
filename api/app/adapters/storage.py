@@ -24,6 +24,7 @@ ALLOWED_MEDIA_TYPES = {
     "video/webm",
     "application/pdf",
     "text/plain",
+    "text/vtt",
 }
 
 

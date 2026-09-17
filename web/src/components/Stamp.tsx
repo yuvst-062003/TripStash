@@ -64,11 +64,14 @@ export function StampDrop({
   children,
   tone = 'teal',
   Icon,
+  onLand,
 }: {
   show: boolean
   children: ReactNode
   tone?: StampTone
   Icon?: IconComponent
+  /** Fires once the stamp has settled — what follows the act can start then. */
+  onLand?: () => void
 }) {
   const { reduced, stamp } = useMotionPrefs()
   return (
@@ -79,7 +82,10 @@ export function StampDrop({
           initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 1.9, rotate: -22 }}
           animate={{ opacity: 1, scale: 1, rotate: -8 }}
           exit={{ opacity: 0 }}
-          transition={{ ...stamp, opacity: { duration: 0.06, ease: 'linear' } }}
+          transition={reduced ? stamp : { ...stamp, opacity: { duration: 0.06, ease: 'linear' } }}
+          onAnimationComplete={(definition) => {
+            if (typeof definition === 'object' && 'scale' in definition) onLand?.()
+          }}
           style={{ display: 'inline-flex', transformOrigin: 'center' }}
         >
           <Stamp tone={tone} size="xl" Icon={Icon} flat>

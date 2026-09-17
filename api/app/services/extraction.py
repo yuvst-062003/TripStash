@@ -42,7 +42,7 @@ from app.models.enums import (
     SourceStatus,
 )
 from app.models.places import Place, PlaceFact, TripPlace
-from app.schemas.extraction import KnowledgeCandidate
+from app.schemas.extraction import Evidence, KnowledgeCandidate, PlaceCandidate
 from app.services.dedupe import find_duplicate, find_duplicate_for_resolved, merge_places
 from app.services.text import normalize_name
 
@@ -77,6 +77,8 @@ def create_source(
     data: bytes | None = None,
     duration_seconds: float | None = None,
     captured_at: datetime | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
 ) -> Source:
     """Persist the source before anything else can fail (step 1).
 
@@ -116,6 +118,8 @@ def create_source(
         byte_size=byte_size,
         duration_seconds=duration_seconds,
         captured_at=captured_at,
+        lat=lat,
+        lon=lon,
         fingerprint=digest,
         provenance=Provenance.USER if kind in (SourceKind.NOTE, SourceKind.MANUAL)
         else Provenance.CREATOR,
@@ -150,6 +154,23 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
     source.attempts += 1
     source.failure_reason = None
     session.flush()
+
+    if source.kind == SourceKind.MANUAL and source.lat is not None and source.lon is not None:
+        # "Here": the traveller is the source and the pin is where they stood.
+        # It still goes through review — nothing reaches the map unconfirmed.
+        name = (source.raw_text or "This spot").strip()[:200]
+        candidate = KnowledgeCandidate(
+            type=KnowledgeType.PLACE,
+            title=name,
+            confidence=1.0,
+            evidence=[Evidence(quote=name, channel="text")],
+            place=PlaceCandidate(name=name, lat=source.lat, lon=source.lon),
+        )
+        rows = [_persist_candidate(session, source, candidate)]
+        source.status = SourceStatus.NEEDS_REVIEW
+        source.processed_at = datetime.now(UTC)
+        session.flush()
+        return rows
 
     ai = get_ai()
     payload = MediaPayload(
@@ -190,8 +211,8 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
     source.status = SourceStatus.NEEDS_REVIEW if candidates else SourceStatus.COMPLETED
     if not candidates:
         source.failure_reason = (
-            "Nothing extractable was found. The source is kept - attach it to a place "
-            "manually or add a note explaining why it matters."
+            "Nothing worth saving was found in it. The original is kept under Sources — "
+            "add a caption or a note about why it matters and retry."
         )
     source.processed_at = datetime.now(UTC)
     session.flush()
@@ -209,6 +230,21 @@ def _persist_candidate(
     if is_place_candidate:
         resolved = _resolve_place(candidate)
         resolutions = [asdict(option) for option in resolved]
+        if candidate.place.lat is not None and candidate.place.lon is not None:
+            # The spot itself is always an option: exactly where you stood.
+            resolutions.append(
+                asdict(
+                    ResolvedPlace(
+                        provider="you",
+                        provider_place_id=f"here:{candidate.place.lat:.5f},{candidate.place.lon:.5f}",
+                        name=candidate.place.name,
+                        lat=candidate.place.lat,
+                        lon=candidate.place.lon,
+                        category=str(candidate.place.category),
+                        match_confidence=1.0,
+                    )
+                )
+            )
 
         probe = resolved[0] if resolved else None
         match = (

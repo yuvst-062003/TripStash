@@ -21,7 +21,7 @@ def capture_reel(client, auth) -> dict:
             "published_on": "2026-07-04",
         },
     )
-    assert response.status_code == 201, response.text
+    assert response.status_code in (200, 201), response.text
     return response.json()
 
 
@@ -158,7 +158,7 @@ def test_oversized_and_unsupported_uploads_are_refused_with_an_explanation(clien
         files={"files": ("payload.exe", b"MZ", "application/x-msdownload")},
     )
     assert response.status_code == 415
-    assert "not accepted" in response.json()["detail"]
+    assert "not a supported file" in response.json()["detail"]
 
 
 # -------------------------------------------------------- map and place page
@@ -869,3 +869,66 @@ def test_confirming_the_same_proposal_twice_plans_it_once(client, auth, trip):
     second = client.post("/api/v1/ask/confirm", headers=auth, json=proposal).json()
     assert first["itinerary_item_id"] == second["itinerary_item_id"]
     assert len(client.get("/api/v1/itinerary", headers=auth, params={"on": today}).json()) == 1
+
+
+# ------------------------------------------------------------ the save sheet
+
+
+def test_saving_where_you_stand_keeps_the_location_for_review(client, auth, trip):
+    saved = client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={
+            "kind": "manual",
+            "text": "Rooftop with the volcano view",
+            "lat": 14.5586,
+            "lon": -90.7295,
+        },
+    )
+    assert saved.status_code == 201, saved.text
+    assert saved.json()["pending_count"] == 1
+    candidate = next(
+        c for c in client.get("/api/v1/inbox", headers=auth).json()
+        if c["source_id"] == saved.json()["id"]
+    )
+    assert candidate["type"] == "place" and candidate["is_place_candidate"]
+    here = next(r for r in candidate["resolutions"] if r["provider"] == "you")
+    assert (here["lat"], here["lon"]) == (14.5586, -90.7295)
+    approved = client.post(
+        f"/api/v1/candidates/{candidate['id']}/approve",
+        headers=auth,
+        json={"provider_place_id": here["provider_place_id"]},
+    )
+    assert approved.status_code == 200, approved.text
+    place = next(
+        p for p in client.get("/api/v1/places", headers=auth).json()
+        if p["trip_place_id"] == approved.json()["trip_place_id"]
+    )
+    assert place["name"] == "Rooftop with the volcano view"
+    assert abs(place["lat"] - 14.5586) < 1e-6
+
+
+def test_a_repeat_capture_says_so_instead_of_failing(client, auth, trip):
+    first = capture_reel(client, auth)
+    again = client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={"url": "https://www.example-social.test/reel/abc123", "text": REEL_TRANSCRIPT},
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["id"] == first["id"]
+    assert again.json()["duplicate"] is True
+    assert client.post(
+        "/api/v1/sources", headers=auth, json={"text": "A fresh note about the shuttle"}
+    ).json()["duplicate"] is False
+
+
+def test_a_bad_file_in_a_batch_stores_nothing(client, auth, trip):
+    files = [
+        ("files", ("ok.png", b"\x89PNG\r\n\x1a\n" + b"0" * 64, "image/png")),
+        ("files", ("bad.svg", b"<svg/>", "image/svg+xml")),
+    ]
+    response = client.post("/api/v1/sources/upload", headers=auth, files=files)
+    assert response.status_code == 415
+    assert "bad.svg" in response.json()["detail"]
+    assert client.get("/api/v1/sources", headers=auth).json() == []

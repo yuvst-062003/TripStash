@@ -115,6 +115,9 @@ class LinkCapture(ApiModel):
     author: str | None = None
     published_on: date | None = None
     kind: SourceKind = SourceKind.LINK
+    # Where you stood when you saved it (the "Here" capture).
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
 
 
 class SourceResponse(ApiModel):
@@ -135,6 +138,9 @@ class SourceResponse(ApiModel):
     candidate_count: int = 0
     pending_count: int = 0
     file_url: str | None = None
+    # True when this capture was already saved: the original is returned.
+    duplicate: bool = False
+
 
 
 class EvidenceResponse(ApiModel):

@@ -55,6 +55,7 @@ export interface SourceSummary {
   candidate_count: number
   pending_count: number
   file_url: string | null
+  duplicate?: boolean
 }
 
 export interface Evidence {

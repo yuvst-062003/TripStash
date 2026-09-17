@@ -81,6 +81,7 @@ export const SOURCE_LABEL: Record<string, string> = {
   message: 'Message',
   note: 'Note',
   manual: 'Added by hand',
+  event: 'Event',
 }
 
 /** Where a piece of knowledge came from. Official facts and creator advice stay distinct. */
@@ -527,15 +528,17 @@ export function Sheet({
   children,
   action,
   className,
+  subhead,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
   action?: ReactNode
   className?: string
+  subhead?: ReactNode
 }) {
   return (
-    <Drawer title={title} onClose={onClose} action={action} className={className}>
+    <Drawer title={title} onClose={onClose} action={action} className={className} subhead={subhead}>
       {children}
     </Drawer>
   )

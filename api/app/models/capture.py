@@ -58,6 +58,8 @@ class Source(IdMixin, TimestampMixin, Base):
     media_type: Mapped[str | None] = mapped_column(String(120))
     byte_size: Mapped[int | None] = mapped_column(Integer)
     duration_seconds: Mapped[float | None] = mapped_column(Float)
+    lat: Mapped[float | None] = mapped_column(Float)
+    lon: Mapped[float | None] = mapped_column(Float)
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
     captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

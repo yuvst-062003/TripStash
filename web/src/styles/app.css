@@ -34,11 +34,15 @@ code { font: inherit; font-weight: 600; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  /* Sheets drop their slide but keep a short fade, so a change is still seen. */
-  .drawer { transform: none !important; transition: opacity 150ms linear !important; }
-  .drawer[data-state='closed'] { opacity: 0; }
-  .drawer-overlay { transition: opacity 150ms linear !important; }
+  /* Sheets drop their slide but keep a short fade (an animation, so the
+     presence layer waits for it), so a change is still seen. */
+  .drawer, .drawer-overlay { animation-duration: 150ms !important; animation-timing-function: linear !important; }
+  .drawer { transform: none !important; }
+  .drawer[data-state='open'] { animation-name: fadeIn !important; }
+  .drawer[data-state='closed'] { animation-name: fadeOut !important; }
 }
+/* vaul's default slide is 500 ms; the app's ceiling is 400. */
+[data-vaul-drawer], [data-vaul-overlay] { animation-duration: 400ms; transition-duration: 400ms; }
 
 /* ---------------------------------------------------------------------------
    Type
@@ -414,7 +418,7 @@ code { font: inherit; font-weight: 600; }
   position: relative;
   display: flex;
   gap: 2px;
-  padding: 3px;
+  padding: 0;
   margin: var(--s-2) var(--s-4) 0;
   background: var(--paper-2);
   border-radius: var(--r-pill);
@@ -425,7 +429,7 @@ code { font: inherit; font-weight: 600; }
 .seg__item {
   position: relative;
   flex: 1 0 auto;
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 10px; /* four tabs and a count fit a 360px phone */
   border: 0;
   border-radius: var(--r-pill);
@@ -443,7 +447,7 @@ code { font: inherit; font-weight: 600; }
 .seg__label { position: relative; z-index: 1; }
 .seg__pill {
   position: absolute;
-  inset: 0;
+  inset: 3px;
   border-radius: var(--r-pill);
   background: var(--primary-gradient);
   z-index: 0;
@@ -667,6 +671,44 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
 }
 /* A sheet whose content changes size (the assistant) keeps one height; the body scrolls. */
 .drawer--tall { height: 94dvh; }
+.drawer--save { height: min(94dvh, 720px); }
+.drawer__subhead { flex: none; padding-bottom: var(--s-2); }
+/* The Save form fills the sheet; its primary sits on the same line whatever the kind. */
+.save__form { display: flex; flex-direction: column; min-height: 100%; }
+.save__foot { margin-top: auto; padding-top: var(--s-5); position: sticky; bottom: 0; background: var(--paper); padding-bottom: var(--s-2); }
+/* A quiet disabled primary: coral only when it can be pressed. */
+.btn--coral:disabled { opacity: 1; background: var(--paper-2); color: var(--ink-3); }
+/* The media dropzone: a real boundary, a state for a drag, a state once files are chosen. */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 112px;
+  padding: var(--s-4);
+  border: 2px dashed color-mix(in srgb, var(--ink) 35%, transparent);
+  border-radius: var(--r-md);
+  background: var(--card);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.dropzone:focus-within { outline: 3px solid var(--teal); outline-offset: 2px; }
+.dropzone[data-over='true'] { border-color: var(--teal); background: var(--teal-soft); }
+.dropzone[data-chosen='true'] { border-style: solid; border-color: var(--teal-ink); }
+.dropzone:active { transform: scale(0.985); transition-duration: 0ms; }
+.thumbs { display: flex; gap: var(--s-2); overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.thumb { position: relative; flex: none; width: 56px; height: 56px; border-radius: 10px; background: var(--paper-2); overflow: hidden; display: grid; place-items: center; color: var(--ink-3); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.thumb__x { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; border: 0; border-radius: 50%; background: var(--ink); color: var(--paper); display: grid; place-items: center; cursor: pointer; }
+/* The capture, shown as what it is, with the stamp landing on its corner. */
+.capture { position: relative; margin-top: var(--s-4); padding: var(--s-8) var(--s-4) var(--s-4); border-radius: var(--r-md); background: var(--card); border: 1px solid var(--line); }
+.capture__stamp { position: absolute; top: -22px; right: var(--s-3); }
+.capture .t-head { padding-right: var(--s-4); }
+input[type='date'].input { height: 48px; }
+input[type='date'].input:invalid::-webkit-datetime-edit { color: var(--ink-3); }
+.field + .btn, .stack > .btn--block { margin-top: var(--s-2); }
 
 /* The assistant's field and its send disc. */
 textarea.ask__field { min-height: 48px; max-height: 160px; padding-right: 56px; resize: none; field-sizing: content; overflow: auto; }
@@ -699,10 +741,16 @@ textarea.ask__field { min-height: 48px; max-height: 160px; padding-right: 56px; 
   letter-spacing: -0.02em;
 }
 .drawer__body {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-bottom: calc(var(--s-8) + env(safe-area-inset-bottom));
 }
+/* In a fixed-height sheet the body owns the height, so a form can fill it. */
+.drawer--save .drawer__body { display: flex; flex-direction: column; padding-bottom: 0; }
+.drawer--save .save__form { flex: 1 0 auto; min-height: 0; }
+.save__foot { padding-bottom: calc(var(--s-4) + env(safe-area-inset-bottom)); }
 /* Content inside a drawer settles in just after the sheet does, top to bottom —
    once; what arrives later (an answer) brings its own motion. */
 .drawer__body > * { animation: rise-in 240ms var(--ease-out) both; }

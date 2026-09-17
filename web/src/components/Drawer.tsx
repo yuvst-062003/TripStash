@@ -10,6 +10,9 @@ import { X } from './icons'
  * parent to unmount, so the sheet never just vanishes. Focus comes back to
  * whatever opened it.
  */
+/** A button that closes the sheet the right way: slide-out, focus return, then onClose. */
+export const DrawerClose = Vaul.Close
+
 export default function Drawer({
   title,
   onClose,
@@ -17,14 +20,17 @@ export default function Drawer({
   action,
   description,
   className,
+  subhead,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
   action?: ReactNode
   description?: string
-  /** `drawer--tall` fixes the height for content that changes size (the assistant). */
+  /** `drawer--tall` / `drawer--save` fix the height for content that changes size. */
   className?: string
+  /** Sits between the title and the scrolling body and never moves (a kind switcher). */
+  subhead?: ReactNode
 }) {
   const [open, setOpen] = useState(true)
   // Children rise in as the sheet lands; after that they just change.
@@ -64,10 +70,13 @@ export default function Drawer({
               <Vaul.Description className="sr-only">{title}</Vaul.Description>
             )}
             {action}
-            <button className="icon-btn" onClick={() => setOpen(false)} aria-label="Close">
-              <X size={20} />
-            </button>
+            <Vaul.Close asChild>
+              <button className="icon-btn" aria-label="Close">
+                <X size={20} />
+              </button>
+            </Vaul.Close>
           </div>
+          {subhead && <div className="drawer__subhead">{subhead}</div>}
           <div className="drawer__body">{children}</div>
         </Vaul.Content>
       </Vaul.Portal>

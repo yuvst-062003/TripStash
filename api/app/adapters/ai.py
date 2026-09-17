@@ -256,9 +256,9 @@ class FakeAIAdapter:
         if not channels:
             return ExtractionResult(
                 failure_reason=(
-                    "No readable text, transcript or OCR output was available for this "
-                    "source. It stays in Inbox - add a caption, screenshot or note, or "
-                    "enter the place manually."
+                    "Nothing readable came out of it — no caption, transcript or text in "
+                    "the image. It is kept under Sources: add a caption or a screenshot "
+                    "of the text and retry."
                 )
             )
 
