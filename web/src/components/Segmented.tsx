@@ -1,5 +1,6 @@
 import { useId, useRef } from 'react'
 import { motion } from 'motion/react'
+import { tick } from '../lib/haptics'
 import { useMotionPrefs } from '../lib/motion'
 
 /**
@@ -26,6 +27,11 @@ export default function Segmented<T extends string>({
   const base = name ?? id
   const { spring } = useMotionPrefs()
   const tabs = useRef<Map<T, HTMLButtonElement>>(new Map())
+  const choose = (next: T) => {
+    if (next === value) return
+    tick()
+    onChange(next)
+  }
 
   function onKeyDown(event: React.KeyboardEvent) {
     const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
@@ -33,7 +39,7 @@ export default function Segmented<T extends string>({
     event.preventDefault()
     const at = options.findIndex((option) => option.value === value)
     const next = options[(at + step + options.length) % options.length]
-    onChange(next.value)
+    choose(next.value)
     tabs.current.get(next.value)?.focus()
   }
 
@@ -55,10 +61,16 @@ export default function Segmented<T extends string>({
             aria-selected={selected}
             aria-controls={name ? `${name}-panel-${option.value}` : undefined}
             tabIndex={selected ? 0 : -1}
-            onClick={() => onChange(option.value)}
+            onClick={() => choose(option.value)}
           >
             {selected && (
-              <motion.span className="seg__pill" layoutId={`seg-${id}`} transition={spring} aria-hidden />
+              <motion.span
+                className="seg__pill"
+                layoutId={`seg-${id}`}
+                transition={spring}
+                style={{ borderRadius: 19 }}
+                aria-hidden
+              />
             )}
             <span className="seg__label">
               {option.label}

@@ -4,10 +4,11 @@ import { useApp } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import { LANGS, setLang, setTheme, usePrefs, type Theme } from '../lib/prefs'
 import Drawer from './Drawer'
+import ExportButton from './ExportButton'
 import Segmented from './Segmented'
 import { Stamp } from './Stamp'
 import { SectionLabel } from './ui'
-import { Download, Globe, LogOut, Moon, Sun, SunMoon } from './icons'
+import { Globe, LogOut, Moon, Sun, SunMoon } from './icons'
 
 const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [
   { value: 'auto', label: 'Auto', Icon: SunMoon },
@@ -78,10 +79,7 @@ export default function ProfileSheet({ onClose }: { onClose: () => void }) {
 
       <SectionLabel>Account</SectionLabel>
       <div className="pad stack">
-        <a className="btn btn--block" href={api.exportUrl} download>
-          <Download size={16} strokeWidth={2.2} />
-          Export everything
-        </a>
+        <ExportButton />
         <motion.button className="btn btn--ghost btn--block" whileTap={{ scale: 0.98 }} onClick={signOut}>
           <LogOut size={16} strokeWidth={2.2} />
           Sign out

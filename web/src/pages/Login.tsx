@@ -1,15 +1,12 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ApiError, api, token } from '../lib/api'
 import { useMotionPrefs } from '../lib/motion'
-import Globe, { type GlobePoint } from '../components/Globe'
+import type { GlobePoint } from '../components/Globe'
 import Logo from '../components/Logo'
+import Planet from '../components/Planet'
 import Starfield from '../components/Starfield'
 import { Note } from '../components/ui'
-
-// The photographed Earth is three.js plus a 2K texture, so it arrives after
-// the page does; the vector globe stands in for the first moments.
-const EarthGlobe = lazy(() => import('../components/EarthGlobe'))
 
 /**
  * Illustrative pins for the sign-in globe. The app is for any trip, so the
@@ -172,9 +169,7 @@ export default function Login({ onAuthenticated }: { onAuthenticated: () => void
         }
         transition={landed ? landing : { type: 'spring', stiffness: 220, damping: 28 }}
       >
-        <Suspense fallback={<Globe {...globeProps} vivid />}>
-          <EarthGlobe {...globeProps} />
-        </Suspense>
+        <Planet {...globeProps} />
       </motion.div>
 
       {/* The opening beat: the name, small, under the globe. */}

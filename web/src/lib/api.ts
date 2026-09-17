@@ -6,8 +6,10 @@
  */
 import type {
   AskResponse,
+  Booking,
   Candidate,
   HomePayload,
+  ItineraryRow,
   KnowledgeItem,
   MapFeature,
   PlacePage,
@@ -49,6 +51,10 @@ function describeDetail(detail: unknown): string | null {
       const field = String(entry.loc?.[entry.loc.length - 1] ?? '')
       if (field === 'email') return 'Enter a valid email address.'
       if (field === 'password') return 'Use at least 10 characters.'
+      if (field === 'amount') return 'Enter an amount above 0.'
+      if (field === 'currency') return 'Use a 3-letter code like GTQ.'
+      if (field === 'start_time' || field === 'end_time') return 'Use a time like 09:30.'
+      if (field === 'on_date' || field === 'spent_on') return 'Use a date like 2026-09-17.'
       return entry.msg?.replace(/^Value error, /, '') ?? null
     })
     const text = parts.filter(Boolean).join(' ')
@@ -180,15 +186,12 @@ export const api = {
     patch<unknown>(`/api/v1/knowledge/${id}`, body),
 
   // trip operations
-  itinerary: (on?: string) =>
-    get<{ id: string; title: string; on_date: string; start_time: string | null; trip_place_id: string | null }[]>(
-      '/api/v1/itinerary',
-      { on },
-    ),
+  itinerary: (on?: string) => get<ItineraryRow[]>('/api/v1/itinerary', { on }),
   addToPlan: (body: Record<string, unknown>) => post<unknown>('/api/v1/itinerary', body),
   removeFromPlan: (id: string) => del<void>(`/api/v1/itinerary/${id}`),
-  bookings: () => get<Record<string, unknown>[]>('/api/v1/bookings'),
-  addBooking: (body: Record<string, unknown>) => post<unknown>('/api/v1/bookings', body),
+  bookings: () => get<Booking[]>('/api/v1/bookings'),
+  addBooking: (body: Record<string, unknown>) => post<{ id: string; title: string }>('/api/v1/bookings', body),
+  removeBooking: (id: string) => del<void>(`/api/v1/bookings/${id}`),
   expenses: () =>
     get<{
       currency: string
@@ -204,9 +207,20 @@ export const api = {
         note: string | null
       }[]
     }>('/api/v1/expenses'),
-  addExpense: (body: Record<string, unknown>) => post<unknown>('/api/v1/expenses', body),
+  addExpense: (body: Record<string, unknown>) =>
+    post<{ id: string; amount_base: number; rate_used: number; currency: string }>('/api/v1/expenses', body),
+  removeExpense: (id: string) => del<void>(`/api/v1/expenses/${id}`),
 
   // account
   offlineBundle: () => get<Record<string, unknown>>('/api/v1/offline-bundle'),
   exportUrl: '/api/v1/export',
+  /** The export needs the bearer token, which a plain link cannot carry. */
+  exportBlob: async (): Promise<Blob> => {
+    const headers = new Headers()
+    const accessToken = token.get()
+    if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+    const response = await fetch('/api/v1/export', { headers })
+    if (!response.ok) throw new ApiError(response.status, `Request failed (${response.status})`)
+    return response.blob()
+  },
 }

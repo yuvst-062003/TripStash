@@ -695,3 +695,62 @@ def test_a_duplicate_candidate_names_the_place_it_matches(client, auth, trip):
     assert duplicates
     for candidate in duplicates:
         assert candidate["duplicate_of_name"]
+
+
+# ------------------------------------------------- the trip screen's numbers
+
+
+def test_leaving_the_plan_reverts_the_promotion(client, auth, trip):
+    capture_reel(client, auth)
+    saved = approve_all_places(client, auth)[0]
+    row = client.post(
+        "/api/v1/itinerary",
+        headers=auth,
+        json={"trip_place_id": saved["trip_place_id"], "on_date": "2026-09-18"},
+    )
+    assert row.status_code == 201, row.text
+    def status_of(trip_place_id: str) -> str:
+        places = client.get("/api/v1/places", headers=auth).json()
+        return next(p["status"] for p in places if p["trip_place_id"] == trip_place_id)
+
+    assert status_of(saved["trip_place_id"]) == "planned"
+    removed = client.delete(f"/api/v1/itinerary/{row.json()['id']}", headers=auth)
+    assert removed.status_code == 204
+    assert status_of(saved["trip_place_id"]) == "saved"
+
+
+def test_plan_times_are_real_clock_times_and_untimed_rows_come_last(client, auth, trip):
+    bad = client.post(
+        "/api/v1/itinerary",
+        headers=auth,
+        json={"title": "Sunrise", "on_date": "2026-09-18", "start_time": "25:99"},
+    )
+    assert bad.status_code == 422
+    client.post(
+        "/api/v1/itinerary", headers=auth, json={"title": "Sometime", "on_date": "2026-09-18"}
+    )
+    client.post(
+        "/api/v1/itinerary",
+        headers=auth,
+        json={"title": "Sunrise", "on_date": "2026-09-18", "start_time": "06:00"},
+    )
+    titles = [r["title"] for r in client.get("/api/v1/itinerary", headers=auth).json()]
+    assert titles == ["Sunrise", "Sometime"]
+
+
+def test_bookings_and_expenses_can_be_taken_back(client, auth, trip):
+    booking = client.post("/api/v1/bookings", headers=auth, json={"title": "Hostel, 2 nights"})
+    assert booking.status_code == 201
+    expense = client.post(
+        "/api/v1/expenses",
+        headers=auth,
+        json={"spent_on": "2026-09-17", "amount": 7200, "currency": "USD", "category": "other"},
+    )
+    assert expense.status_code == 201
+    booking_url = f"/api/v1/bookings/{booking.json()['id']}"
+    expense_url = f"/api/v1/expenses/{expense.json()['id']}"
+    assert client.delete(booking_url, headers=auth).status_code == 204
+    assert client.delete(expense_url, headers=auth).status_code == 204
+    assert client.get("/api/v1/bookings", headers=auth).json() == []
+    assert client.get("/api/v1/expenses", headers=auth).json()["total"] == 0
+    assert client.delete(expense_url, headers=auth).status_code == 404

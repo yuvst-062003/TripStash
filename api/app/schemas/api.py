@@ -272,8 +272,8 @@ class ItineraryCreate(ApiModel):
     on_date: date
     trip_place_id: str | None = None
     destination_id: str | None = None
-    start_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
-    end_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    start_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    end_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     notes: str | None = None
 
 

@@ -535,7 +535,7 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.stepper__item--current .stepper__num { background: var(--teal); border-color: var(--teal); color: var(--on-teal); }
+.stepper__item--current .stepper__num { background: var(--teal-ink); border-color: var(--teal-ink); color: var(--on-teal); }
 .stepper__item--past .stepper__num { background: var(--paper-2); color: var(--ink-3); }
 .stepper__body { flex: 1; min-width: 0; padding-top: 6px; }
 .stepper__name { font: var(--head); }
@@ -1175,7 +1175,7 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
 .card--ink .arc__track { stroke: rgba(255, 255, 255, 0.18); }
 .card--ink .arc__value { stroke: var(--gold); }
 .arc__value { stroke: var(--teal); }
-.arc__value--over { stroke: var(--coral); }
+.arc__value--over, .card--ink .arc__value--over { stroke: var(--coral); }
 
 /* ---------------------------------------------------------------------------
    Login backdrop — topographic contours, drawn once, drifting slowly.
@@ -1325,8 +1325,12 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
   min-height: 236px;
   border-radius: var(--r-lg);
   color: #f2f6ff;
+  /* A night sky in either scheme, so its stamp keeps the night palette too. */
+  --coral-ink: #ff8a5b;
+  --on-stamp: #061224;
   background:
     radial-gradient(80% 60% at 70% 40%, rgba(63, 139, 255, 0.22) 0%, transparent 60%),
+    radial-gradient(45% 45% at 78% 42%, rgba(63, 139, 255, 0.28) 0%, transparent 70%),
     linear-gradient(160deg, #061224 0%, #0b1c34 100%);
   box-shadow: var(--shadow-float);
 }
@@ -1338,7 +1342,6 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
   width: 300px;
   height: 300px;
   cursor: grab;
-  filter: drop-shadow(0 20px 40px rgba(63, 139, 255, 0.25));
 }
 .journey__copy {
   position: relative;
@@ -1522,7 +1525,9 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
   font-weight: 600;
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
+  transition: transform var(--dur) var(--ease);
 }
+.journey__open:active { transform: scale(0.97); transition-duration: 0ms; }
 
 /* What you stashed for a stop — a glass card above the search. */
 .stash {

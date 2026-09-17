@@ -218,6 +218,32 @@ export interface PlacePage {
   suggested_questions: string[]
 }
 
+export interface ItineraryRow {
+  id: string
+  title: string
+  on_date: string
+  start_time: string | null
+  end_time: string | null
+  trip_place_id: string | null
+  destination_id?: string | null
+  notes?: string | null
+  is_done: boolean
+}
+
+export interface Booking {
+  id: string
+  kind: string
+  title: string
+  provider: string | null
+  confirmation_code: string | null
+  place_id: string | null
+  start_at: string | null
+  end_at: string | null
+  cancellation_deadline: string | null
+  amount: number | null
+  currency: string | null
+}
+
 export interface HandoffAction {
   key: string
   label: string

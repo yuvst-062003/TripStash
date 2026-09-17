@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { api } from '../lib/api'
@@ -6,15 +6,15 @@ import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import { useMotionPrefs } from '../lib/motion'
 import { tick } from '../lib/haptics'
-import Globe, { type GlobePoint } from '../components/Globe'
+import type { GlobePoint } from '../components/Globe'
 import type { Flight } from '../components/EarthGlobe'
+import Planet from '../components/Planet'
 import Starfield from '../components/Starfield'
 import { Stamp } from '../components/Stamp'
 import { Glyph, KNOWLEDGE_LABEL, Note, categoryTint, knowledgeTint } from '../components/ui'
 import type { AskCard, Recommendation } from '../lib/types'
 import { CATEGORY_ICON, Check, KNOWLEDGE_ICON, MapPin, Plus, Search, Sparkles, X } from '../components/icons'
 
-const EarthGlobe = lazy(() => import('../components/EarthGlobe'))
 
 interface Suggestion {
   name: string
@@ -169,9 +169,7 @@ export default function Journey() {
       <Starfield count={140} />
 
       <div className="journey-screen__globe" style={{ width: globeSize, height: globeSize, marginLeft: -globeSize / 2 }}>
-        <Suspense fallback={<Globe points={points} route={stops} focus={focus} size={globeSize} spin={0.0016} vivid />}>
-          <EarthGlobe points={points} route={stops} focus={focus} flight={flight} size={globeSize} spin={0.0016} />
-        </Suspense>
+        <Planet points={points} route={stops} focus={focus} flight={flight} size={globeSize} spin={0.0016} />
       </div>
 
       <header className="journey-screen__top">

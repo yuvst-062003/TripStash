@@ -207,7 +207,12 @@ def list_itinerary(
     stmt = select(ItineraryItem).where(ItineraryItem.trip_id == trip.id)
     if on:
         stmt = stmt.where(ItineraryItem.on_date == on)
-    rows = session.execute(stmt.order_by(ItineraryItem.on_date, ItineraryItem.start_time)).scalars()
+    # Timed rows in clock order; whatever has no time yet waits at the end of the day.
+    rows = session.execute(
+        stmt.order_by(
+            ItineraryItem.on_date, ItineraryItem.start_time.is_(None), ItineraryItem.start_time
+        )
+    ).scalars()
     return [
         {
             "id": item.id,
@@ -263,7 +268,17 @@ def remove_from_plan(
     trip: Trip = Depends(current_trip),
 ) -> None:
     item = owned_or_404(session.get(ItineraryItem, item_id), trip, "Plan entry not found.")
+    trip_place_id = item.trip_place_id
     session.delete(item)
+    session.flush()
+    # Adding to the plan promoted the place; leaving it entirely lets it go back.
+    if trip_place_id:
+        remaining = session.execute(
+            select(func.count(ItineraryItem.id)).where(ItineraryItem.trip_place_id == trip_place_id)
+        ).scalar_one()
+        trip_place = session.get(TripPlace, trip_place_id)
+        if remaining == 0 and trip_place is not None and trip_place.status == PlaceStatus.PLANNED:
+            trip_place.status = PlaceStatus.SAVED
 
 
 # --------------------------------------------------------------- bookings
@@ -325,6 +340,17 @@ def import_booking(
     session.add(booking)
     session.flush()
     return {"id": booking.id, "title": booking.title}
+
+
+@router.delete("/bookings/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_booking(
+    booking_id: str,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> None:
+    """A confirmation brought in by mistake can be taken back out."""
+    booking = owned_or_404(session.get(Booking, booking_id), trip, "Booking not found.")
+    session.delete(booking)
 
 
 # ------------------------------------------------------------------ money
@@ -413,3 +439,14 @@ def add_expense(
         "rate_used": round(rate, 6),
         "currency": trip.base_currency,
     }
+
+
+@router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_expense(
+    expense_id: str,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> None:
+    """A mistyped amount must not sit in the total for the rest of the trip."""
+    expense = owned_or_404(session.get(Expense, expense_id), trip, "Expense not found.")
+    session.delete(expense)

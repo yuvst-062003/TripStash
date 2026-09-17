@@ -1,6 +1,10 @@
+import { useEffect } from 'react'
 import NumberFlow from '@number-flow/react'
-import { motion } from 'motion/react'
+import { motion, useSpring, useTransform } from 'motion/react'
 import { useMotionPrefs } from '../lib/motion'
+
+// The figure lands with the arc: one ease, 450 ms, for every part of the card.
+const TIMING = { duration: 450, easing: 'cubic-bezier(0.2, 0, 0, 1)' }
 
 /**
  * A rolling money figure. Digits animate between values so a new expense
@@ -24,6 +28,9 @@ export function MoneyFigure({
         value={amount}
         format={{ minimumFractionDigits: decimals, maximumFractionDigits: decimals }}
         animated={!reduced}
+        transformTiming={TIMING}
+        spinTiming={TIMING}
+        opacityTiming={TIMING}
       />
       <span className="t-head dimmer" style={{ letterSpacing: 0 }}>
         {currency}
@@ -34,7 +41,8 @@ export function MoneyFigure({
 
 /**
  * Budget as an arc. The track is the whole budget; the drawn stroke is what
- * has gone. Past the budget the stroke turns coral and the arc fills.
+ * has gone. Past the budget the stroke turns coral and the arc fills, while
+ * the number keeps telling the truth ("108%").
  */
 export function BudgetArc({
   spent,
@@ -46,14 +54,22 @@ export function BudgetArc({
   label?: string
 }) {
   const { reduced } = useMotionPrefs()
-  const ratio = budget > 0 ? Math.min(1, spent / budget) : 0
+  const percent = budget > 0 ? (spent / budget) * 100 : 0
   const over = budget > 0 && spent > budget
   // A 240° arc, open at the bottom.
   const r = 52
   const c = 2 * Math.PI * r
   const arcLength = c * (240 / 360)
+  // One spring drives the stroke and the number, so they never disagree.
+  const value = useSpring(percent, { stiffness: 170, damping: 26 })
+  useEffect(() => {
+    if (reduced) value.jump(percent)
+    else value.set(percent)
+  }, [percent, reduced, value])
+  const offset = useTransform(value, (v) => arcLength * (1 - Math.min(1, v / 100)))
+  const text = useTransform(value, (v) => `${Math.round(v)}%`)
   return (
-    <svg className="arc" viewBox="0 0 120 92" role="img" aria-label={label ?? `${Math.round(ratio * 100)}% of budget spent`}>
+    <svg className="arc" viewBox="0 0 120 92" role="img" aria-label={label ?? `${Math.round(percent)}% of budget spent`}>
       <path
         className="arc__track"
         d="M 14.98 87 A 52 52 0 1 1 105.02 87"
@@ -68,13 +84,11 @@ export function BudgetArc({
         strokeWidth="10"
         strokeLinecap="round"
         strokeDasharray={arcLength}
-        initial={false}
-        animate={{ strokeDashoffset: arcLength * (1 - ratio) }}
-        transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 170, damping: 26 }}
+        style={{ strokeDashoffset: offset }}
       />
-      <text
+      <motion.text
         x="60"
-        y="66"
+        y="72"
         textAnchor="middle"
         fontFamily="var(--font)"
         fontWeight="800"
@@ -82,11 +96,8 @@ export function BudgetArc({
         fill="currentColor"
         style={{ fontVariantNumeric: 'tabular-nums' }}
       >
-        {Math.round(ratio * 100)}%
-      </text>
-      <text x="60" y="82" textAnchor="middle" fontFamily="var(--font)" fontWeight="500" fontSize="9" fill="currentColor" opacity="0.8">
-        of budget
-      </text>
+        {text}
+      </motion.text>
     </svg>
   )
 }

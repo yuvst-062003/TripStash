@@ -243,13 +243,26 @@ export default function Globe({
       context.stroke()
     }
 
+    let visible = true
     const tick = () => {
+      frame = 0
+      if (!visible) return
       if (!reduced && !drag.current) rotation.current = [rotation.current[0] + spin * 57.3, rotation.current[1]]
       draw()
       frame = requestAnimationFrame(tick)
     }
-    if (reduced) draw()
-    else frame = requestAnimationFrame(tick)
+    const wake = () => {
+      if (frame) return
+      if (reduced) draw()
+      else frame = requestAnimationFrame(tick)
+    }
+    wake()
+    // Off screen, the globe stops turning until it is back.
+    const intersection = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting
+      if (visible) wake()
+    })
+    intersection.observe(canvas)
 
     const observer = new ResizeObserver(([entry]) => {
       const next = Math.round(entry.contentRect.width) || size
@@ -263,6 +276,7 @@ export default function Globe({
 
     return () => {
       cancelAnimationFrame(frame)
+      intersection.disconnect()
       observer.disconnect()
     }
     // Points and route change identity every render; compare by content.
