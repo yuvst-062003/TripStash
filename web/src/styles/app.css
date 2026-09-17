@@ -22,6 +22,8 @@ h1, h2, h3, h4, p, figure, blockquote { margin: 0; }
 ul, ol { margin: 0; padding: 0; list-style: none; }
 a { color: inherit; text-decoration: none; }
 button { font: inherit; color: inherit; }
+/* One typeface means one: inline code keeps the family, just heavier. */
+code { font: inherit; font-weight: 600; }
 
 :focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; border-radius: 6px; }
 
@@ -299,11 +301,15 @@ button { font: inherit; color: inherit; }
     transform var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 .btn:hover:not(:disabled) { background: var(--paper-2); }
-.btn:active:not(:disabled) { transform: scale(0.97); }
+/* Press is instant; release eases back over the normal duration. */
+.btn:active:not(:disabled) { transform: scale(0.97); transition-duration: 0ms; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Working, not broken: a busy button keeps its colour and breathes. */
+.btn[aria-busy='true'] { opacity: 1; cursor: progress; animation: breathe 900ms ease-in-out infinite alternate; }
+@keyframes breathe { to { opacity: 0.78; } }
 
 .btn--ink { background: var(--primary-gradient); border-color: transparent; color: #ffffff; }
-.btn--ink:hover:not(:disabled) { filter: brightness(1.06); }
+.btn--ink:hover:not(:disabled) { background: var(--primary-gradient); filter: brightness(1.06); }
 .btn--teal { background: var(--teal); border-color: transparent; color: var(--on-teal); }
 .btn--teal:hover:not(:disabled) { background: var(--teal-hover); }
 .btn--coral { background: var(--coral); border-color: transparent; color: var(--on-coral); }

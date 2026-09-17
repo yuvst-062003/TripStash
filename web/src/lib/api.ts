@@ -41,6 +41,22 @@ export const token = {
   clear: () => localStorage.removeItem(TOKEN_KEY),
 }
 
+/** Turns FastAPI's `detail` — a string, or Pydantic's list of field errors — into a sentence. */
+function describeDetail(detail: unknown): string | null {
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const parts = detail.map((entry: { loc?: unknown[]; msg?: string }) => {
+      const field = String(entry.loc?.[entry.loc.length - 1] ?? '')
+      if (field === 'email') return 'Enter a valid email address.'
+      if (field === 'password') return 'Use at least 10 characters.'
+      return entry.msg?.replace(/^Value error, /, '') ?? null
+    })
+    const text = parts.filter(Boolean).join(' ')
+    return text || null
+  }
+  return null
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
@@ -61,7 +77,9 @@ async function request<T>(
   const response = await fetch(url.toString(), { ...init, headers })
   const fromCache = response.headers.get('x-tripstash-offline') === 'true'
 
-  if (response.status === 401) {
+  // A 401 anywhere but the sign-in endpoints means the token is dead. On
+  // sign-in itself it means a wrong password, and the API's own words apply.
+  if (response.status === 401 && !path.startsWith('/api/v1/auth/')) {
     token.clear()
     throw new ApiError(401, 'Your session expired. Sign in again.')
   }
@@ -70,7 +88,7 @@ async function request<T>(
     let detail = `Request failed (${response.status})`
     try {
       const body = await response.json()
-      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+      detail = describeDetail(body.detail) ?? detail
     } catch {
       /* keep the generic message */
     }
