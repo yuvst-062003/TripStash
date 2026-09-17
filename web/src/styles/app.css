@@ -1013,6 +1013,9 @@ textarea.input { min-height: 84px; resize: vertical; }
 .stamp--paper { --stamp-colour: var(--paper); }
 
 .stamp--filled { background: var(--stamp-colour); color: var(--paper); }
+.stamp-btn { background: none; border: 0; padding: 6px 4px; cursor: pointer; border-radius: 10px; }
+.stamp-btn:disabled { opacity: 0.5; cursor: wait; }
+.stamp-btn:active .stamp { transform: rotate(var(--stamp-rotate, -6deg)) scale(0.94); }
 .stamp--filled::after { border-color: var(--paper); }
 .stamp--flat { transform: none; }
 

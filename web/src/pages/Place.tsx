@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { motion, useScroll, useTransform } from 'motion/react'
 import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import type { PlaceStatus } from '../lib/types'
 import MiniMap from '../components/MiniMap'
+import { STATUS_STAMP, Stamp, StatusStamp } from '../components/Stamp'
 import {
   Banner,
   CacheNote,
@@ -13,12 +15,15 @@ import {
   Glyph,
   KNOWLEDGE_LABEL,
   Meta,
+  MotionList,
+  MotionRow,
   Note,
   Pill,
   SectionLabel,
   SkeletonRows,
-  STATUS_META,
+  knowledgeTint,
   pairText,
+  stampToneFor,
 } from '../components/ui'
 import {
   AlertTriangle,
@@ -40,6 +45,10 @@ export default function Place() {
   const { position, openAsk } = useApp()
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
+  const { scrollY } = useScroll()
+  // The compact bar fades in as the hero title scrolls under it.
+  const barOpacity = useTransform(scrollY, [180, 240], [0, 1])
+  const barY = useTransform(scrollY, [180, 240], [-8, 0])
 
   const page = useAsync(
     () => api.place(tripPlaceId!, { lat: position?.lat, lon: position?.lon }),
@@ -53,7 +62,7 @@ export default function Place() {
   if (page.loading && !page.data) {
     return (
       <div className="screen">
-        <div className="skeleton" style={{ height: 172, borderRadius: 0 }} />
+        <div className="skeleton" style={{ height: 260, borderRadius: 0 }} />
         <SkeletonRows rows={4} />
       </div>
     )
@@ -93,47 +102,71 @@ export default function Place() {
     page.reload()
   }
 
+  const distance =
+    header.walking_minutes != null
+      ? `${header.walking_minutes} min walk`
+      : header.distance_km != null
+        ? `${Math.round(header.distance_km)} km away`
+        : null
+
   return (
     <div className="screen">
-      <div style={{ position: 'relative' }}>
-        <MiniMap lat={header.coordinates.lat} lon={header.coordinates.lon} label={header.name} />
-        <button
-          className="icon-btn icon-btn--raised"
-          onClick={() => navigate(-1)}
-          aria-label="Back"
-          style={{ position: 'absolute', top: 'var(--s-3)', left: 'var(--s-3)', zIndex: 500 }}
-        >
+      <motion.header
+        className="topbar topbar--divided"
+        style={{ position: 'fixed', left: 0, right: 0, opacity: barOpacity, y: barY, pointerEvents: 'none' }}
+        aria-hidden
+      >
+        <span style={{ width: 44 }} />
+        <h2 className="topbar__title clamp-1 grow" style={{ fontSize: '1.125rem' }}>
+          {header.name}
+        </h2>
+      </motion.header>
+
+      <div className="hero-map">
+        <MiniMap
+          lat={header.coordinates.lat}
+          lon={header.coordinates.lon}
+          label={header.name}
+          category={header.category}
+          fill
+        />
+        <div className="hero-map__overlay" />
+        <button className="icon-btn icon-btn--glass hero-map__back" onClick={() => navigate(-1)} aria-label="Back">
           <ArrowLeft size={19} />
         </button>
+        <div className="hero-map__stamp">
+          <StatusStamp status={header.status} size="lg" rotate={8} />
+        </div>
       </div>
 
-      <div className="pad" style={{ paddingTop: 'var(--s-4)' }}>
+      <div className="place-title">
         <div className="row between row--top">
-          <div className="grow">
-            <h1 className="t-xl">{header.name}</h1>
-            <Meta
-              wrap
-              parts={[
-                STATUS_META[header.status].label,
-                header.category,
-                [header.city, header.country].filter(Boolean).join(', '),
-                header.walking_minutes != null
-                  ? `${header.walking_minutes} min walk`
-                  : header.distance_km != null && `${Math.round(header.distance_km)} km away`,
-              ]}
-            />
-          </div>
-          <button
-            className="icon-btn"
+          <h1 className="t-display grow" style={{ fontSize: 'clamp(2rem, 9vw, 2.75rem)' }}>
+            {header.name}
+          </h1>
+          <motion.button
+            className="icon-btn icon-btn--raised"
+            whileTap={{ scale: 0.9 }}
             aria-label={header.is_favourite ? 'Remove favourite' : 'Mark favourite'}
+            aria-pressed={header.is_favourite}
             onClick={() =>
               api.updatePlace(tripPlaceId!, { is_favourite: !header.is_favourite }).then(page.reload)
             }
-            style={header.is_favourite ? { color: 'var(--accent)' } : undefined}
+            style={header.is_favourite ? { color: 'var(--tint-view)' } : undefined}
           >
             <Star size={19} fill={header.is_favourite ? 'currentColor' : 'none'} />
-          </button>
+          </motion.button>
         </div>
+        <Meta
+          wrap
+          className="mt"
+          parts={[
+            header.category,
+            [header.city, header.country].filter(Boolean).join(', '),
+            distance,
+            `${header.coordinates.lat.toFixed(4)}, ${header.coordinates.lon.toFixed(4)}`,
+          ]}
+        />
 
         {header.needs_review && (
           <div style={{ marginTop: 'var(--s-3)' }}>
@@ -143,8 +176,8 @@ export default function Place() {
           </div>
         )}
 
-        <div className="row" style={{ marginTop: 'var(--s-4)', gap: 'var(--s-2)' }}>
-          <a className="btn btn--accent" href={actions.primary[0].url} target="_blank" rel="noreferrer">
+        <div className="row" style={{ marginTop: 'var(--s-5)', gap: 'var(--s-2)' }}>
+          <a className="btn btn--ink grow" href={actions.primary[0].url} target="_blank" rel="noreferrer">
             <Navigation size={16} strokeWidth={2.2} />
             Navigate
           </a>
@@ -155,9 +188,8 @@ export default function Place() {
             <Sparkles size={16} strokeWidth={2.1} />
             Ask
           </button>
-          <button className="btn btn--plain" onClick={addToToday} disabled={busy}>
-            <CalendarDays size={16} strokeWidth={2.1} />
-            {busy ? '…' : 'Today'}
+          <button className="btn btn--ghost" onClick={addToToday} disabled={busy} aria-label="Add to today">
+            <CalendarDays size={17} strokeWidth={2.1} />
           </button>
         </div>
       </div>
@@ -167,27 +199,27 @@ export default function Place() {
       <SectionLabel>Why you saved it</SectionLabel>
       <div className="pad">
         {overview.why_saved ? (
-          <p className="t" style={{ whiteSpace: 'pre-line' }}>
+          <blockquote className="quote" style={{ whiteSpace: 'pre-line' }}>
             {overview.why_saved}
-          </p>
+          </blockquote>
         ) : (
-          <p className="t-sm dimmer">No reason was recorded for this one.</p>
+          <p className="t-small dimmer">No reason was recorded for this one.</p>
         )}
         {overview.notes && (
-          <p className="t-sm dim" style={{ marginTop: 'var(--s-2)' }}>
+          <p className="t-small dim" style={{ marginTop: 'var(--s-3)' }}>
             {overview.notes}
           </p>
         )}
       </div>
 
-      <SectionLabel>Saved content · {sources.length}</SectionLabel>
+      <SectionLabel count={sources.length}>Saved content</SectionLabel>
       {sources.length === 0 ? (
-        <p className="pad t-sm dimmer">No source is attached to this place yet.</p>
+        <p className="pad t-small dimmer">No source is attached to this place yet.</p>
       ) : (
         <ul className="list">
           {sources.map((source) => (
             <li key={source.source_id}>
-              <div className="item" style={{ cursor: 'default' }}>
+              <div className="item item--static">
                 <div className="item__body">
                   <p className="item__title clamp-1">{source.title || source.url || source.kind}</p>
                   <Meta
@@ -200,17 +232,17 @@ export default function Place() {
                     ]}
                   />
                   {source.quote && (
-                    <blockquote className="quote" style={{ marginTop: 'var(--s-2)' }}>
+                    <blockquote className="quote" style={{ marginTop: 'var(--s-3)' }}>
                       “{source.quote}”
                     </blockquote>
                   )}
                   {source.url && (
                     <a
-                      className="btn btn--sm btn--plain"
+                      className="btn btn--sm btn--ghost"
                       href={source.url}
                       target="_blank"
                       rel="noreferrer"
-                      style={{ marginTop: 6, paddingInline: 0 }}
+                      style={{ marginTop: 8, paddingInline: 0 }}
                     >
                       Open original
                       <ArrowUpRight size={14} strokeWidth={2.2} />
@@ -225,14 +257,14 @@ export default function Place() {
 
       <SectionLabel>Live information</SectionLabel>
       {live.facts.length === 0 ? (
-        <p className="pad t-sm dimmer">
+        <p className="pad t-small dimmer">
           Nothing verified yet. TripStash will not guess opening hours or prices.
         </p>
       ) : (
         <ul className="list">
           {live.facts.map((fact) => (
             <li key={fact.kind}>
-              <div className="item" style={{ cursor: 'default' }}>
+              <div className="item item--static">
                 <div className="item__body">
                   <div className="row between" style={{ gap: 'var(--s-2)' }}>
                     <p className="t grow">
@@ -264,7 +296,7 @@ export default function Place() {
           ))}
         </ul>
       )}
-      <p className="pad t-sm dimmer" style={{ marginTop: 'var(--s-2)' }}>
+      <p className="pad t-small dimmer" style={{ marginTop: 'var(--s-3)' }}>
         Weather {live.weather.summary.toLowerCase()}, {Math.round(live.weather.temperature_c)}°C ·{' '}
         {Math.round(live.weather.precipitation_probability * 100)}% rain · checked{' '}
         {live.weather.checked_at.slice(11, 16)} UTC
@@ -272,30 +304,37 @@ export default function Place() {
 
       {knowledge.length > 0 && (
         <>
-          <SectionLabel>Related knowledge</SectionLabel>
-          <ul className="list">
+          <SectionLabel count={knowledge.length}>Related knowledge</SectionLabel>
+          <MotionList>
             {knowledge.map((item) => {
               const Icon = KNOWLEDGE_ICON[item.type] ?? KNOWLEDGE_ICON.general
+              const tint = knowledgeTint(item.type)
               const { headline, detail } = pairText(item.title, item.body)
               return (
-                <li key={item.id}>
-                  <div className="item" style={{ cursor: 'default' }}>
-                    <Glyph Icon={Icon} />
+                <MotionRow key={item.id}>
+                  <div className="item item--static">
+                    <Glyph Icon={Icon} tint={tint} />
                     <div className="item__body">
-                      <p className="item__title">{headline}</p>
-                      {detail && <p className="t-sm dim">{detail}</p>}
-                      <Meta parts={[KNOWLEDGE_LABEL[item.type]]} />
+                      <div className="row between row--top" style={{ gap: 'var(--s-2)' }}>
+                        <p className="item__title grow">{headline}</p>
+                        <Stamp tone={stampToneFor(tint)} size="sm" rotate={-5}>
+                          {KNOWLEDGE_LABEL[item.type]}
+                        </Stamp>
+                      </div>
+                      {detail && <p className="t-small dim mt">{detail}</p>}
                       {item.requires_official_verification && (
-                        <Note tone="warn" Icon={Flag}>
-                          Confirm against the official source.
-                        </Note>
+                        <div style={{ marginTop: 6 }}>
+                          <Note tone="warn" Icon={Flag}>
+                            Confirm against the official source.
+                          </Note>
+                        </div>
                       )}
                     </div>
                   </div>
-                </li>
+                </MotionRow>
               )
             })}
-          </ul>
+          </MotionList>
         </>
       )}
 
@@ -304,6 +343,7 @@ export default function Place() {
         {questions.map((question) => (
           <Pill
             key={question}
+            Icon={Sparkles}
             onClick={() => openAsk({ surface: 'place', tripPlaceId, question, contextLabel: header.name })}
           >
             {question}
@@ -312,23 +352,37 @@ export default function Place() {
       </div>
 
       <SectionLabel>Status</SectionLabel>
-      <div className="rail">
-        {STATUSES.map((status) => (
-          <Pill key={status} on={header.status === status} onClick={() => setStatus(status)}>
-            {STATUS_META[status].label}
-          </Pill>
-        ))}
+      <div className="rail" style={{ paddingBlock: 'var(--s-2)', gap: 'var(--s-3)' }}>
+        {STATUSES.map((status, index) => {
+          const meta = STATUS_STAMP[status]
+          const on = header.status === status
+          return (
+            <button
+              key={status}
+              type="button"
+              className="stamp-btn"
+              onClick={() => setStatus(status)}
+              disabled={busy}
+              aria-pressed={on}
+            >
+              <Stamp tone={meta.tone} Icon={meta.Icon} filled={on} rotate={index % 2 ? 4 : -5}>
+                {meta.label}
+              </Stamp>
+            </button>
+          )
+        })}
       </div>
 
       {plan.length > 0 && (
         <>
-          <SectionLabel>Planned</SectionLabel>
+          <SectionLabel count={plan.length}>Planned</SectionLabel>
           <ul className="list">
             {plan.map((item) => (
               <li key={item.id}>
-                <div className="item" style={{ cursor: 'default' }}>
+                <div className="item item--static">
+                  <Glyph Icon={CalendarDays} tint="teal" />
                   <div className="item__body">
-                    <p className="t num">
+                    <p className="t-head num">
                       {item.on_date}
                       {item.start_time && ` · ${item.start_time}`}
                     </p>
@@ -342,17 +396,17 @@ export default function Place() {
 
       {record.visits.length > 0 && (
         <>
-          <SectionLabel>Your visits</SectionLabel>
+          <SectionLabel count={record.visits.length}>Your visits</SectionLabel>
           <ul className="list">
             {record.visits.map((visit) => (
               <li key={visit.id}>
-                <div className="item" style={{ cursor: 'default' }}>
+                <div className="item item--static">
                   <div className="item__body">
-                    <p className="t num">
+                    <p className="t-head num">
                       {visit.visited_on}
                       {visit.rating && ` · ${visit.rating}/5`}
                     </p>
-                    {visit.notes && <p className="t-sm dim">{visit.notes}</p>}
+                    {visit.notes && <p className="t-small dim">{visit.notes}</p>}
                   </div>
                 </div>
               </li>
@@ -370,18 +424,18 @@ export default function Place() {
                 <p className="item__title">{action.label}</p>
                 {action.note && <Meta parts={[action.note]} />}
               </div>
-              <ArrowUpRight size={17} className="dimmer" style={{ flex: 'none', marginTop: 9 }} />
+              <ArrowUpRight size={17} className="item__chev" />
             </a>
           </li>
         ))}
       </ul>
-      <p className="pad t-sm dimmer" style={{ marginTop: 'var(--s-3)' }}>
+      <p className="pad t-small dimmer" style={{ marginTop: 'var(--s-3)' }}>
         Opening any of these hands you to that service. TripStash never completes a booking or a
         purchase on your behalf.
       </p>
 
       <div className="pad" style={{ marginTop: 'var(--s-6)' }}>
-        <Link className="btn btn--block btn--plain" to="/map">
+        <Link className="btn btn--block btn--ghost" to="/map">
           Back to map
         </Link>
       </div>
