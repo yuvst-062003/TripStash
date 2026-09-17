@@ -98,7 +98,7 @@ export default function Home() {
           {queue.pending_candidates > 0 && (
             <li>
               <Link to="/saved" className="item">
-                <Glyph Icon={Inbox} accent />
+                <Glyph Icon={Inbox} tint="teal" />
                 <div className="item__body">
                   <p className="item__title">
                     {queue.pending_candidates} item{queue.pending_candidates === 1 ? '' : 's'} to

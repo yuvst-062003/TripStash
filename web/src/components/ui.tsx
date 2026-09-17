@@ -1,33 +1,26 @@
 import type { ReactNode } from 'react'
 import { useEffect } from 'react'
+import { motion } from 'motion/react'
+import { cn } from '../lib/cn'
+import { STAGGER_LIST, STAGGER_ROW, useMotionPrefs } from '../lib/motion'
 import type { PlaceStatus } from '../lib/types'
-import {
-  AlertTriangle,
-  CheckCheck,
-  CircleDashed,
-  Clock,
-  type IconComponent,
-  MapPin,
-  Route,
-  Star,
-  X,
-} from './icons'
+import Drawer from './Drawer'
+import Segmented from './Segmented'
+import { STATUS_STAMP, Stamp, StatusStamp } from './Stamp'
+import { AlertTriangle, Clock, type IconComponent } from './icons'
 
 /* -------------------------------------------------------------------------
-   Status vocabulary. Icon and word carry the meaning; colour is only a third
-   signal (specification 12.1).
+   Vocabulary
 ------------------------------------------------------------------------- */
 
-export const STATUS_META: Record<
-  PlaceStatus,
-  { label: string; Icon: IconComponent; colour: string }
-> = {
-  inbox: { label: 'In review', Icon: CircleDashed, colour: 'var(--status-inbox)' },
-  saved: { label: 'Saved', Icon: MapPin, colour: 'var(--status-saved)' },
-  must_visit: { label: 'Must visit', Icon: Star, colour: 'var(--status-must)' },
-  planned: { label: 'Planned', Icon: Route, colour: 'var(--status-planned)' },
-  visited: { label: 'Visited', Icon: CheckCheck, colour: 'var(--status-visited)' },
-  archived: { label: 'Archived', Icon: X, colour: 'var(--status-archived)' },
+/** Kept for callers that still read the old name; the stamp is the source. */
+export const STATUS_META: Record<PlaceStatus, { label: string; Icon: IconComponent; colour: string }> = {
+  inbox: { ...STATUS_STAMP.inbox, colour: 'var(--status-inbox)' },
+  saved: { ...STATUS_STAMP.saved, colour: 'var(--status-saved)' },
+  must_visit: { ...STATUS_STAMP.must_visit, colour: 'var(--status-must)' },
+  planned: { ...STATUS_STAMP.planned, colour: 'var(--status-planned)' },
+  visited: { ...STATUS_STAMP.visited, colour: 'var(--status-visited)' },
+  archived: { ...STATUS_STAMP.archived, colour: 'var(--status-archived)' },
 }
 
 export const KNOWLEDGE_LABEL: Record<string, string> = {
@@ -42,12 +35,49 @@ export const KNOWLEDGE_LABEL: Record<string, string> = {
   general: 'Tip',
 }
 
+export type Tint = 'food' | 'stay' | 'nature' | 'view' | 'transport' | 'other' | 'teal' | 'coral' | 'gold'
+
+/** Category → tint. Food is coral, stays are teal, nature is green, views are gold. */
+export function categoryTint(category: string | null | undefined): Tint {
+  switch (category) {
+    case 'restaurant':
+    case 'cafe':
+    case 'bar':
+      return 'food'
+    case 'accommodation':
+      return 'stay'
+    case 'nature':
+    case 'activity':
+      return 'nature'
+    case 'viewpoint':
+    case 'attraction':
+      return 'view'
+    case 'transport':
+      return 'transport'
+    default:
+      return 'other'
+  }
+}
+
+export function knowledgeTint(type: string | null | undefined): Tint {
+  switch (type) {
+    case 'safety':
+    case 'border':
+      return 'coral'
+    case 'price':
+      return 'gold'
+    case 'accommodation':
+      return 'stay'
+    case 'transport':
+    case 'route':
+      return 'transport'
+    default:
+      return 'teal'
+  }
+}
+
 /* -------------------------------------------------------------------------
    Text pairing
-
-   A typed item carries a short title and the sentence it came from. When the
-   title is only a truncation of that sentence, showing both is noise, so one
-   rule decides the headline and whether a detail line survives.
 ------------------------------------------------------------------------- */
 
 export function pairText(
@@ -67,18 +97,21 @@ export function pairText(
    Primitives
 ------------------------------------------------------------------------- */
 
-/** One line of dot-separated metadata, the way a map app writes it. */
 export function Meta({
   parts,
   wrap,
+  className,
 }: {
   parts: (string | number | null | undefined | false)[]
   wrap?: boolean
+  className?: string
 }) {
-  const kept = parts.filter((part): part is string | number => part !== null && part !== undefined && part !== false && part !== '')
+  const kept = parts.filter(
+    (part): part is string | number => part !== null && part !== undefined && part !== false && part !== '',
+  )
   if (kept.length === 0) return null
   return (
-    <p className={wrap ? 'meta' : 'meta clamp-1'}>
+    <p className={cn('meta', !wrap && 'clamp-1', className)}>
       {kept.map((part, index) => (
         <span key={index}>{part}</span>
       ))}
@@ -89,27 +122,21 @@ export function Meta({
 export function Glyph({
   Icon,
   size = 'md',
-  accent,
+  tint = 'other',
 }: {
   Icon: IconComponent
   size?: 'md' | 'lg'
-  accent?: boolean
+  tint?: Tint
 }) {
   return (
-    <span className={`glyph${size === 'lg' ? ' glyph--lg' : ''}${accent ? ' glyph--accent' : ''}`}>
-      <Icon size={size === 'lg' ? 20 : 17} strokeWidth={1.9} />
+    <span className={cn('glyph', size === 'lg' && 'glyph--lg', `glyph--${tint}`)}>
+      <Icon size={size === 'lg' ? 22 : 18} strokeWidth={2} />
     </span>
   )
 }
 
 export function StatusLabel({ status }: { status: PlaceStatus }) {
-  const meta = STATUS_META[status]
-  return (
-    <span className="row t-sm" style={{ gap: 4, color: meta.colour, flex: 'none' }}>
-      <meta.Icon size={13} strokeWidth={2.4} />
-      {meta.label}
-    </span>
-  )
+  return <StatusStamp status={status} />
 }
 
 export function Pill({
@@ -125,63 +152,47 @@ export function Pill({
   onClick?: () => void
   title?: string
 }) {
-  const className = `pill${on ? ' pill--on' : ''}`
+  const className = cn('chip', on && 'chip--on', !onClick && 'chip--static')
   if (!onClick) {
     return (
-      <span className={className} title={title} style={{ cursor: 'default' }}>
-        {Icon && <Icon size={14} strokeWidth={2} />}
+      <span className={className} title={title}>
+        {Icon && <Icon size={14} strokeWidth={2.2} />}
         {children}
       </span>
     )
   }
   return (
     <button type="button" className={className} onClick={onClick} aria-pressed={on} title={title}>
-      {Icon && <Icon size={14} strokeWidth={2} />}
+      {Icon && <Icon size={14} strokeWidth={2.2} />}
       {children}
     </button>
   )
 }
 
-export function Tabs<T extends string>({
-  value,
-  onChange,
-  options,
-  label,
-}: {
+export function Tabs<T extends string>(props: {
   value: T
   onChange: (next: T) => void
   options: { value: T; label: string; badge?: number }[]
   label: string
 }) {
-  return (
-    <div className="tabs" role="tablist" aria-label={label}>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          role="tab"
-          type="button"
-          className="tabs__item"
-          aria-selected={value === option.value}
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-          {option.badge ? <span className="dimmer num"> {option.badge}</span> : null}
-        </button>
-      ))}
-    </div>
-  )
+  return <Segmented {...props} />
 }
 
 export function SectionLabel({
   children,
   action,
+  count,
 }: {
   children: ReactNode
   action?: ReactNode
+  count?: number
 }) {
   return (
-    <div className="section-label">
-      <h2 className="t-xs">{children}</h2>
+    <div className="section">
+      <h2 className="section__title">
+        {children}
+        {count !== undefined && <span className="section__count num">{count}</span>}
+      </h2>
       {action}
     </div>
   )
@@ -198,8 +209,8 @@ export function Note({
 }) {
   const Chosen = Icon ?? AlertTriangle
   return (
-    <p className={`note${tone === 'neutral' ? '' : ` note--${tone}`}`}>
-      <Chosen size={15} strokeWidth={2} />
+    <p className={cn('note', tone !== 'neutral' && `note--${tone}`)}>
+      <Chosen size={15} strokeWidth={2.2} />
       <span>{children}</span>
     </p>
   )
@@ -216,25 +227,40 @@ export function Banner({
 }) {
   const Chosen = Icon ?? AlertTriangle
   return (
-    <div className={`banner${tone === 'neutral' ? '' : ` banner--${tone}`}`}>
-      <Chosen size={15} strokeWidth={2} />
+    <div className={cn('banner', tone !== 'neutral' && `banner--${tone}`)}>
+      <Chosen size={15} strokeWidth={2.2} />
       <div className="grow">{children}</div>
     </div>
   )
 }
 
-export function Empty({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
+export function Empty({
+  title,
+  body,
+  action,
+  stamp,
+}: {
+  title: string
+  body?: string
+  action?: ReactNode
+  stamp?: string
+}) {
   return (
     <div className="empty">
-      <p className="t-md" style={{ color: 'var(--ink-2)' }}>
-        {title}
-      </p>
+      {stamp && (
+        <div style={{ marginBottom: 'var(--s-4)' }}>
+          <Stamp tone="muted" size="lg" rotate={-8}>
+            {stamp}
+          </Stamp>
+        </div>
+      )}
+      <p className="empty__title">{title}</p>
       {body && (
-        <p className="t-sm" style={{ marginTop: 6, maxWidth: '36ch', marginInline: 'auto' }}>
+        <p className="t-small" style={{ marginTop: 8, maxWidth: '34ch', marginInline: 'auto' }}>
           {body}
         </p>
       )}
-      {action && <div style={{ marginTop: 'var(--s-4)' }}>{action}</div>}
+      {action && <div style={{ marginTop: 'var(--s-5)' }}>{action}</div>}
     </div>
   )
 }
@@ -244,10 +270,10 @@ export function SkeletonRows({ rows = 4 }: { rows?: number }) {
     <ul className="list" aria-hidden>
       {Array.from({ length: rows }).map((_, index) => (
         <li key={index}>
-          <div className="item">
-            <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 'var(--r-md)' }} />
+          <div className="item item--static">
+            <div className="skeleton" style={{ width: 40, height: 40, borderRadius: 12 }} />
             <div className="item__body">
-              <div className="skeleton" style={{ height: 13, width: '58%' }} />
+              <div className="skeleton" style={{ height: 14, width: '58%' }} />
               <div className="skeleton" style={{ height: 11, width: '36%', marginTop: 8 }} />
             </div>
           </div>
@@ -259,13 +285,13 @@ export function SkeletonRows({ rows = 4 }: { rows?: number }) {
 
 export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="pad" style={{ paddingBlock: 'var(--s-3)' }}>
+    <div className="pad pad-y">
       <div className="banner banner--danger">
-        <AlertTriangle size={15} strokeWidth={2} />
+        <AlertTriangle size={15} strokeWidth={2.2} />
         <div className="grow row between">
           <span className="grow">{message}</span>
           {onRetry && (
-            <button className="btn btn--sm btn--plain" onClick={onRetry}>
+            <button className="btn btn--sm btn--ghost" onClick={onRetry}>
               Retry
             </button>
           )}
@@ -275,7 +301,6 @@ export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () 
   )
 }
 
-/** Shown whenever data came from the cache, so nothing stale looks current. */
 export function CacheNote({ visible }: { visible: boolean }) {
   if (!visible) return null
   return (
@@ -287,33 +312,67 @@ export function CacheNote({ visible }: { visible: boolean }) {
   )
 }
 
-/**
- * Freshness is an exception report. A fresh value is expected, so it stays
- * quiet; only ageing and stale values are called out.
- */
+/** Freshness is an exception report: only an ageing value gets a stamp. */
 export function Freshness({ status, label }: { status: string; label: string }) {
   if (status === 'fresh') {
-    return <span className="t-sm dimmer">{label}</span>
+    return <span className="t-small dimmer">{label}</span>
   }
   return (
-    <span className="row t-sm" style={{ gap: 4, color: 'var(--warn)', flex: 'none' }}>
-      <Clock size={13} strokeWidth={2.2} />
+    <Stamp tone="warn" size="sm" Icon={Clock} rotate={-4}>
       {label}
-    </span>
+    </Stamp>
   )
 }
 
 export function Confidence({ value }: { value: number }) {
   const pct = Math.round(value * 100)
   return (
-    <span className="t-sm dimmer num" title={`Extraction confidence ${pct}%`}>
-      {pct}% confident
+    <span className="confidence" title={`Extraction confidence ${pct}%`}>
+      <span className="confidence__bar" aria-hidden>
+        <span style={{ width: `${pct}%` }} />
+      </span>
+      <span className="num">{pct}% sure</span>
     </span>
   )
 }
 
 /* -------------------------------------------------------------------------
-   Sheet shell
+   Animated list — rows stagger in once, then stay put.
+------------------------------------------------------------------------- */
+
+export function MotionList({
+  children,
+  className = 'list',
+  as: Tag = 'ul',
+}: {
+  children: ReactNode
+  className?: string
+  as?: 'ul' | 'ol'
+}) {
+  const { reduced } = useMotionPrefs()
+  const Component = Tag === 'ol' ? motion.ol : motion.ul
+  return (
+    <Component
+      className={className}
+      variants={STAGGER_LIST}
+      initial={reduced ? false : 'hidden'}
+      animate="show"
+    >
+      {children}
+    </Component>
+  )
+}
+
+export function MotionRow({ children, className, layout }: { children: ReactNode; className?: string; layout?: boolean }) {
+  return (
+    <motion.li className={className} variants={STAGGER_ROW} layout={layout}>
+      {children}
+    </motion.li>
+  )
+}
+
+/* -------------------------------------------------------------------------
+   Sheet shell — now a vaul drawer
 ------------------------------------------------------------------------- */
 
 export function useEscapeToClose(onClose: () => void) {
@@ -330,30 +389,16 @@ export function Sheet({
   title,
   onClose,
   children,
+  action,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
+  action?: ReactNode
 }) {
-  useEscapeToClose(onClose)
   return (
-    <div
-      className="sheet-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      onClick={onClose}
-    >
-      <div className="sheet" onClick={(event) => event.stopPropagation()}>
-        <div className="sheet__grip" />
-        <div className="sheet__head">
-          <h2 className="t-lg grow clamp-1">{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="sheet__body">{children}</div>
-      </div>
-    </div>
+    <Drawer title={title} onClose={onClose} action={action}>
+      {children}
+    </Drawer>
   )
 }
