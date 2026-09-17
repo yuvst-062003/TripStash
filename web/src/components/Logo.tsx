@@ -15,20 +15,25 @@ import { useMotionPrefs } from '../lib/motion'
 export default function Logo({
   size = 72,
   animate = false,
+  delay = 0,
   className,
 }: {
   size?: number
   animate?: boolean
+  /** Seconds to hold before the sequence starts, so it never competes with a bigger move. */
+  delay?: number
   className?: string
 }) {
-  const { reduced, stamp } = useMotionPrefs()
+  const { reduced } = useMotionPrefs()
   const play = animate && !reduced
   const ease = [0.16, 1, 0.3, 1] as const
+  const at = (offset: number) => (play ? delay + offset : 0)
+  const drop = { type: 'spring', stiffness: 320, damping: 24 } as const
 
   const panel = (index: number) => ({
     initial: play ? { scaleX: 0, opacity: 0 } : undefined,
     animate: { scaleX: 1, opacity: 1 },
-    transition: { duration: 0.42, delay: play ? 0.1 + index * 0.12 : 0, ease },
+    transition: { duration: 0.28, delay: at(0.05 + index * 0.05), ease },
   })
 
   return (
@@ -68,7 +73,7 @@ export default function Logo({
         fill="var(--paper)"
         initial={play ? { scale: 0, opacity: 0 } : undefined}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ ...stamp, delay: play ? 0.5 : 0 }}
+        transition={{ ...drop, delay: at(0.2) }}
         style={{ transformOrigin: '14px 34px' }}
       />
 
@@ -82,14 +87,14 @@ export default function Logo({
         strokeDasharray="3.5 3.5"
         initial={play ? { pathLength: 0, opacity: 0 } : undefined}
         animate={{ pathLength: 1, opacity: 0.85 }}
-        transition={{ duration: 0.55, delay: play ? 0.7 : 0, ease }}
+        transition={{ duration: 0.3, delay: at(0.3), ease }}
       />
 
       {/* The plan: a pin, dropped in with the stamp spring where the route ends. */}
       <motion.g
         initial={play ? { y: -26, opacity: 0, scale: 1.25 } : undefined}
         animate={{ y: 0, opacity: 1, scale: 1 }}
-        transition={{ ...stamp, delay: play ? 1.05 : 0 }}
+        transition={{ ...drop, delay: at(0.45) }}
         style={{ transformOrigin: '48px 34px' }}
       >
         <ellipse cx="48" cy="35" rx="6" ry="2.2" fill="rgba(0,0,0,0.28)" />

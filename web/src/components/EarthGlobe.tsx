@@ -115,6 +115,10 @@ export default function EarthGlobe({
   const hostRef = useRef<HTMLDivElement | null>(null)
   const drag = useRef<{ x: number; y: number; ry: number; rx: number } | null>(null)
   const rotation = useRef({ y: facing(focus ? focus[1] : -70), x: focus ? (-focus[0] * Math.PI) / 180 * 0.5 : 0.25 })
+  // Spin is read through a ref so changing it never rebuilds the scene.
+  const spinRef = useRef(spin)
+  spinRef.current = spin
+  const renderRef = useRef<(() => void) | null>(null)
   const { reduced } = useMotionPrefs()
 
   useEffect(() => {
@@ -124,8 +128,10 @@ export default function EarthGlobe({
     let frame = 0
     let disposed = false
 
-    const renderer = new WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' })
-    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
+    const dpr = window.devicePixelRatio || 1
+    // 1.5× is plenty for a textured sphere and halves the fill cost on 3× phones.
+    const renderer = new WebGLRenderer({ alpha: true, antialias: dpr < 2, powerPreference: 'low-power' })
+    renderer.setPixelRatio(Math.min(1.5, dpr))
     renderer.setSize(width, width)
     renderer.outputColorSpace = SRGBColorSpace
     host.appendChild(renderer.domElement)
@@ -225,6 +231,7 @@ export default function EarthGlobe({
       world.rotation.x = rotation.current.x
       renderer.render(scene, camera)
     }
+    renderRef.current = render
     const tick = () => {
       if (flightCurve) {
         const t = Math.min(1, (performance.now() - flightStart) / FLIGHT_MS)
@@ -249,7 +256,7 @@ export default function EarthGlobe({
           }, 600)
         }
       } else if (!reduced && !drag.current) {
-        rotation.current.y -= spin
+        rotation.current.y -= spinRef.current
       }
       render()
       frame = requestAnimationFrame(tick)
@@ -269,6 +276,7 @@ export default function EarthGlobe({
 
     return () => {
       disposed = true
+      renderRef.current = null
       cancelAnimationFrame(frame)
       observer.disconnect()
       geometry.dispose()
@@ -290,7 +298,7 @@ export default function EarthGlobe({
     }
     // Points and route change identity every render; compare by content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(points), JSON.stringify(route), size, spin, reduced, flight?.key])
+  }, [JSON.stringify(points), JSON.stringify(route), size, reduced, flight?.key])
 
   return (
     <div
@@ -317,6 +325,8 @@ export default function EarthGlobe({
           y: drag.current.ry + (event.clientX - drag.current.x) * 0.006,
           x: Math.max(-1, Math.min(1, drag.current.rx + (event.clientY - drag.current.y) * 0.004)),
         }
+        // Reduced motion stops the idle spin, not the person's own hand.
+        if (reduced) renderRef.current?.()
       }}
       onPointerUp={() => {
         drag.current = null

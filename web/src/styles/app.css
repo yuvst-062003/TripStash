@@ -1086,19 +1086,26 @@ textarea.input { min-height: 84px; resize: vertical; }
 
 .login { position: relative; min-height: 100dvh; overflow: hidden; }
 
-/* A dark sky regardless of the colour scheme: the planet needs it. */
+/* A dark sky regardless of the colour scheme: the planet needs it. Every
+   semantic token the screen can show is overridden, so light-mode users
+   never get a light-mode red on a navy card. */
 .login--space {
   --paper: #061224;
   --paper-2: rgba(255, 255, 255, 0.08);
-  --card: rgba(10, 24, 46, 0.62);
+  --card: rgba(10, 24, 46, 0.82);
   --ink: #f2f6ff;
   --ink-2: #b9c7dd;
   --ink-3: #7f92ad;
   --line: rgba(255, 255, 255, 0.14);
   --teal: #35d6b0;
+  --teal-hover: #63e4c2;
   --teal-deep: #0b7a6a;
+  --on-teal: #06201a;
   --coral: #ff7a4d;
-  --primary-gradient: linear-gradient(135deg, #35d6b0 0%, #0b7a6a 100%);
+  --danger: #ff7b72;
+  --danger-soft: rgba(255, 123, 114, 0.16);
+  --warn: #f2b84b;
+  --warn-soft: rgba(242, 184, 75, 0.16);
   --shadow-float: 0 18px 50px -18px rgba(0, 0, 0, 0.7);
   color: var(--ink);
   color-scheme: dark;
@@ -1114,15 +1121,23 @@ textarea.input { min-height: 84px; resize: vertical; }
   z-index: 0;
   pointer-events: none;
 }
+/* Position and size come from Login.tsx (one constant); no filter here — a
+   drop-shadow on a scaling, per-frame canvas is re-rasterised every frame. */
 .login__globe {
   position: absolute;
-  top: 150px;
   left: 50%;
-  margin-left: -200px;
   z-index: 1;
   pointer-events: auto;
   cursor: grab;
-  filter: drop-shadow(0 30px 60px rgba(63, 139, 255, 0.25));
+}
+.login__globe::before {
+  content: '';
+  position: absolute;
+  inset: -12%;
+  z-index: -1;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 58%, rgba(63, 139, 255, 0.28) 0%, rgba(63, 139, 255, 0) 62%);
 }
 /* Fades the planet's lower half into the sky so the form sits on it cleanly. */
 .login__veil {
@@ -1143,22 +1158,28 @@ textarea.input { min-height: 84px; resize: vertical; }
   padding: calc(var(--s-6) + env(safe-area-inset-top)) var(--s-4) calc(var(--s-6) + env(safe-area-inset-bottom));
 }
 .login__head { display: flex; align-items: center; gap: var(--s-3); }
+.login__head > svg { margin-left: -3px; }
 .login__wordmark { font-size: clamp(2rem, 9.5vw, 2.6rem); }
 .login__tagline { margin-top: var(--s-3); max-width: 34ch; color: var(--ink-2); text-wrap: pretty; }
+/* Solid, not blurred: the veil already makes what sits behind the card near-solid. */
 .login__form {
   margin-top: auto;
   padding: var(--s-5);
   border-radius: var(--r-lg);
   background: var(--card);
   border: 1px solid var(--line);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
   box-shadow: var(--shadow-float);
 }
+.login__hint { display: block; min-height: 18px; }
+.login__error { min-height: 22px; }
 .login--space .input { background: rgba(255, 255, 255, 0.08); color: var(--ink); border-color: rgba(255, 255, 255, 0.08); }
 .login--space .input:focus { background: rgba(255, 255, 255, 0.12); border-color: var(--teal); }
+.login--space .input[aria-invalid='true'] { border-color: var(--danger); }
 .login--space .input::placeholder { color: var(--ink-3); }
-.login--space .btn--ghost { color: var(--ink-2); }
+/* The one action on the screen: dark text on solid teal reads at 9:1. */
+.login--space .btn--ink { background: var(--teal); color: var(--on-teal); }
+.login--space .btn--ink:hover:not(:disabled) { background: var(--teal-hover); filter: none; }
+.login__switch { font: var(--body); font-weight: 500; color: var(--ink-2); }
 .login--space .btn--ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); color: var(--ink); }
 .login--space code { color: var(--ink-2); }
 @media (min-width: 720px) {
