@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import Globe, { type GlobePoint } from './Globe'
 import type { Flight } from './EarthGlobe'
 
@@ -18,7 +18,10 @@ export default function Planet({
   flight,
   size,
   spin,
+  sway,
+  zoom,
   interactive,
+  touchAction,
   className,
   style,
 }: {
@@ -28,20 +31,32 @@ export default function Planet({
   flight?: Flight | null
   size: number
   spin?: number
+  sway?: number
+  zoom?: number
   interactive?: boolean
+  touchAction?: 'none' | 'pan-y'
   className?: string
   style?: React.CSSProperties
 }) {
   const [ready, setReady] = useState(false)
+  const [standIn, setStandIn] = useState(true)
+  // The stand-in stays under the Earth for the length of its fade, then goes.
+  useEffect(() => {
+    if (!ready) return
+    const id = window.setTimeout(() => setStandIn(false), 260)
+    return () => window.clearTimeout(id)
+  }, [ready])
   return (
     <div className={className} style={{ position: 'relative', width: size, height: size, maxWidth: '100%', ...style }}>
-      {!ready && (
+      {standIn && (
         <Globe
           points={points}
           route={route}
           focus={focus}
           size={size}
           spin={spin}
+          sway={sway}
+          interactive={!ready && interactive}
           vivid
           style={{ position: 'absolute', inset: 0 }}
         />
@@ -54,7 +69,10 @@ export default function Planet({
           flight={flight}
           size={size}
           spin={spin}
+          sway={sway}
+          zoom={zoom}
           interactive={interactive}
+          touchAction={touchAction}
           onReady={() => setReady(true)}
           style={{ position: 'absolute', inset: 0 }}
         />

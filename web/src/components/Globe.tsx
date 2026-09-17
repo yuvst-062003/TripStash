@@ -3,6 +3,7 @@ import { geoDistance, geoGraticule10, geoInterpolate, geoOrthographic, geoPath }
 import { feature } from 'topojson-client'
 import type { Topology, GeometryCollection } from 'topojson-specification'
 import land110 from 'world-atlas/land-110m.json'
+import { drift } from '../lib/globeClock'
 import { useMotionPrefs } from '../lib/motion'
 
 export interface GlobePoint {
@@ -105,6 +106,7 @@ export default function Globe({
   focus,
   size = 320,
   spin = 0.004,
+  sway = 0,
   interactive = true,
   vivid = false,
   className,
@@ -115,6 +117,8 @@ export default function Globe({
   focus?: [number, number]
   size?: number
   spin?: number
+  /** Radians of idle drift either side of home instead of a full turn. */
+  sway?: number
   interactive?: boolean
   /** Saturated seas and a gold rim — for the sign-in globe. */
   vivid?: boolean
@@ -123,7 +127,9 @@ export default function Globe({
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const drag = useRef<{ x: number; y: number; lambda: number; phi: number } | null>(null)
-  const rotation = useRef<[number, number]>([focus ? -focus[1] : 0, focus ? -focus[0] * 0.6 : -18])
+  const rotation = useRef<[number, number]>([focus ? -focus[1] : 0, focus ? -focus[0] : -18])
+  // Home is where the hand last left it; idle drift is measured from there.
+  const home = useRef<[number, number]>([...rotation.current])
   const { reduced } = useMotionPrefs()
 
   useEffect(() => {
@@ -247,7 +253,9 @@ export default function Globe({
     const tick = () => {
       frame = 0
       if (!visible) return
-      if (!reduced && !drag.current) rotation.current = [rotation.current[0] + spin * 57.3, rotation.current[1]]
+      if (!reduced && !drag.current) {
+        rotation.current = [home.current[0] + drift(performance.now(), spin, sway) * 57.3, home.current[1]]
+      }
       draw()
       frame = requestAnimationFrame(tick)
     }
@@ -281,7 +289,7 @@ export default function Globe({
     }
     // Points and route change identity every render; compare by content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(points), JSON.stringify(route), size, spin, reduced, vivid])
+  }, [JSON.stringify(points), JSON.stringify(route), size, spin, sway, reduced, vivid])
 
   return (
     <canvas
@@ -312,9 +320,17 @@ export default function Globe({
       }}
       onPointerUp={() => {
         drag.current = null
+        home.current = [
+          rotation.current[0] - drift(performance.now(), spin, sway) * 57.3,
+          rotation.current[1],
+        ]
       }}
       onPointerCancel={() => {
         drag.current = null
+        home.current = [
+          rotation.current[0] - drift(performance.now(), spin, sway) * 57.3,
+          rotation.current[1],
+        ]
       }}
     />
   )

@@ -152,7 +152,7 @@ export default function Login({ onAuthenticated }: { onAuthenticated: () => void
 
   return (
     <motion.div
-      className="login login--space"
+      className="login login--space night"
       onPointerDown={() => !landed && setPhase('page')}
       animate={leaving ? { opacity: 0 } : { opacity: 1 }}
       transition={{ duration: 0.2, ease: 'easeIn' }}

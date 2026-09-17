@@ -189,7 +189,7 @@ export default function TripScreen() {
       {/* The journey: the whole route on the planet, and where you are on it. */}
       <div className="pad">
         <motion.section
-          className="journey"
+          className="journey night"
           initial={reduced ? false : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ ...spring, delay: 0.08 }}

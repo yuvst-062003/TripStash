@@ -1204,7 +1204,10 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
 /* A dark sky regardless of the colour scheme: the planet needs it. Every
    semantic token the screen can show is overridden, so light-mode users
    never get a light-mode red on a navy card. */
-.login--space {
+/* The night palette: sign-in, the journey card and the journey screen are
+   dark in either scheme ("a planet needs a night sky"), so every token they
+   use is set here once and none of the paper tokens can leak in. */
+.night {
   --paper: #061224;
   --paper-2: rgba(255, 255, 255, 0.08);
   --card: rgba(10, 24, 46, 0.82);
@@ -1215,15 +1218,31 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
   --teal: #35d6b0;
   --teal-hover: #63e4c2;
   --teal-deep: #0b7a6a;
+  --teal-soft: rgba(53, 214, 176, 0.16);
+  --teal-ink: #35d6b0;
   --on-teal: #06201a;
-  --coral: #ff7a4d;
+  --coral: #ff8a5b;
+  --coral-ink: #ff8a5b;
+  --coral-soft: rgba(255, 138, 91, 0.16);
+  --on-stamp: #061224;
+  --gold: #ffd166;
+  --gold-soft: rgba(255, 209, 102, 0.16);
+  --sky: #5db8ec;
+  --sky-soft: rgba(93, 184, 236, 0.16);
   --danger: #ff7b72;
   --danger-soft: rgba(255, 123, 114, 0.16);
   --warn: #f2b84b;
   --warn-soft: rgba(242, 184, 75, 0.16);
+  --tint-nature: #5fc47f;
+  --tint-nature-soft: rgba(95, 196, 127, 0.16);
+  --tint-view: #e3b341;
+  --tint-view-soft: rgba(227, 179, 65, 0.16);
+  --glass: rgba(10, 24, 46, 0.55);
   --shadow-float: 0 18px 50px -18px rgba(0, 0, 0, 0.7);
   color: var(--ink);
   color-scheme: dark;
+}
+.login--space {
   background:
     radial-gradient(90% 55% at 50% 42%, rgba(63, 139, 255, 0.22) 0%, transparent 60%),
     linear-gradient(180deg, #030913 0%, #061224 45%, #0b1c34 100%);
@@ -1324,10 +1343,6 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
   overflow: hidden;
   min-height: 236px;
   border-radius: var(--r-lg);
-  color: #f2f6ff;
-  /* A night sky in either scheme, so its stamp keeps the night palette too. */
-  --coral-ink: #ff8a5b;
-  --on-stamp: #061224;
   background:
     radial-gradient(80% 60% at 70% 40%, rgba(63, 139, 255, 0.22) 0%, transparent 60%),
     radial-gradient(45% 45% at 78% 42%, rgba(63, 139, 255, 0.28) 0%, transparent 70%),
@@ -1394,17 +1409,7 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
 --------------------------------------------------------------------------- */
 
 .journey-screen {
-  --paper: #061224;
-  --paper-2: rgba(255, 255, 255, 0.08);
   --card: rgba(10, 24, 46, 0.7);
-  --ink: #f2f6ff;
-  --ink-2: #b9c7dd;
-  --ink-3: #7f92ad;
-  --line: rgba(255, 255, 255, 0.14);
-  --teal: #35d6b0;
-  --glass: rgba(10, 24, 46, 0.55);
-  color: var(--ink);
-  color-scheme: dark;
   position: relative;
   min-height: 100dvh;
   overflow: hidden;
@@ -1412,64 +1417,73 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
     radial-gradient(90% 55% at 50% 38%, rgba(63, 139, 255, 0.24) 0%, transparent 60%),
     linear-gradient(180deg, #030913 0%, #061224 45%, #0b1c34 100%);
 }
+/* No filter on the canvas parent (it would re-rasterise every frame): the
+   glow is a static gradient beneath it. */
 .journey-screen__globe {
   position: absolute;
   left: 50%;
-  top: 80px;
+  top: 104px;
   z-index: 1;
   cursor: grab;
-  filter: drop-shadow(0 30px 60px rgba(63, 139, 255, 0.25));
 }
+.journey-screen__globe::before {
+  content: '';
+  position: absolute;
+  inset: -12%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(63, 139, 255, 0.28) 0%, transparent 70%);
+}
+/* The name of the trip, one line, on a scrim the sky fades out of. */
 .journey-screen__top {
   position: relative;
   z-index: 3;
   display: flex;
   align-items: center;
   gap: var(--s-3);
-  padding: calc(var(--s-3) + env(safe-area-inset-top)) var(--s-4) 0;
+  padding: calc(var(--s-3) + env(safe-area-inset-top)) var(--s-4) var(--s-4);
+  background: linear-gradient(to bottom, #030913 0%, rgba(3, 9, 19, 0.6) 60%, transparent 100%);
 }
-.journey-screen__title {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: var(--s-2) var(--s-4);
-  border-radius: var(--r-pill);
-  background: var(--glass);
-  border: 1px solid var(--line);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-}
+.journey-screen__title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.journey-screen__title h1 { font-variation-settings: 'opsz' 48, 'wdth' 90; }
 .journey-screen__panel {
   position: absolute;
   inset: auto 0 0;
   z-index: 3;
-  padding: var(--s-5) var(--s-4) calc(var(--s-6) + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, #061224 55%, rgba(6, 18, 36, 0.9) 75%, transparent);
+  max-height: calc(100dvh - 72px);
+  overflow-y: auto;
+  padding: var(--s-4) var(--s-4) calc(var(--s-5) + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, #061224 40%, rgba(6, 18, 36, 0.85) 65%, transparent);
 }
+.rail--bleed { margin-inline: calc(-1 * var(--s-4)); padding-inline: var(--s-4); margin-bottom: var(--s-3); }
 .searchbar--space {
   background: var(--card);
   border-color: var(--line);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
+  transition: border-color var(--dur) var(--ease);
 }
+.searchbar--space:focus-within { border-color: var(--teal); }
 .searchbar--space input { color: var(--ink); }
 .stop-chip {
   display: flex;
   align-items: center;
   gap: var(--s-3);
-  width: 176px;
-  padding: var(--s-3) var(--s-4);
+  width: 156px;
+  min-height: 64px;
+  padding: var(--s-2) var(--s-3);
   border-radius: var(--r-md);
   border: 1.5px dashed var(--line);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--card);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
   transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.stop-chip--current { border-style: solid; border-color: var(--teal); background: rgba(53, 214, 176, 0.14); }
+/* Where you are: a coral hairline and the stamp; the number stays quiet. */
+.stop-chip--current { border-style: solid; border-color: var(--coral); }
 .stop-chip__num {
   flex: none;
   display: grid;
@@ -1477,13 +1491,14 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: var(--teal);
-  color: #06201a;
+  border: 1.5px dashed var(--ink-3);
+  color: var(--ink-2);
   font: var(--tiny);
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 .suggest {
-  margin-top: var(--s-2);
+  margin-bottom: var(--s-2);
   border-radius: var(--r-md);
   background: var(--card);
   border: 1px solid var(--line);
@@ -1506,6 +1521,7 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
 }
 .suggest__row:hover { background: rgba(255, 255, 255, 0.06); }
 .suggest__row svg { color: var(--teal); flex: none; }
+.suggest__wait { display: flex; align-items: center; min-height: 48px; padding: 0 var(--s-4); }
 
 .journey__open {
   position: absolute;
@@ -1533,12 +1549,16 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
 .stash {
   margin-bottom: var(--s-3);
   padding: var(--s-4);
+  min-height: 168px; /* room for the rows, so the answer never jumps the panel */
   border-radius: var(--r-md);
   background: var(--card);
   border: 1px solid var(--line);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
 }
+.stash__body { max-height: min(220px, 30dvh); overflow-y: auto; scrollbar-width: thin; padding-right: 2px; }
 .stash__list { margin-top: var(--s-3); display: flex; flex-direction: column; gap: var(--s-2); }
-.stash__row { display: flex; align-items: center; gap: var(--s-3); }
+.stash__row { display: flex; align-items: center; gap: var(--s-3); color: inherit; text-decoration: none; }
+.stash__row--link { border-radius: 10px; transition: transform var(--dur) var(--ease); }
+.stash__row--link:active { transform: scale(0.98); transition-duration: 0ms; }
 .stash__row .glyph { width: 34px; height: 34px; border-radius: 10px; }

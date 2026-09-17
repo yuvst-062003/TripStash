@@ -23,6 +23,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three'
+import { drift } from '../lib/globeClock'
 import { useMotionPrefs } from '../lib/motion'
 import type { GlobePoint } from './Globe'
 
@@ -96,9 +97,19 @@ export interface Flight {
   from: [number, number]
   to: [number, number]
   key: number
+  /** Too short for a plane to read: the new bead lands instead of a flight. */
+  short?: boolean
 }
 
 const FLIGHT_MS = 2200
+/** Legs shorter than this (about 8°) are too short for a plane to read; the bead lands instead. */
+const SHORT_LEG = 0.14
+const LANDING_MS = 450
+
+/** Whether a leg is too short to fly (under about 8° on the sphere). */
+export function isShortLeg(from: [number, number], to: [number, number]): boolean {
+  return toVector(from[0], from[1]).angleTo(toVector(to[0], to[1])) < SHORT_LEG
+}
 
 /** Points along a lifted great circle between two stops, the same curve the ribbon uses. */
 function legCurve(from: [number, number], to: [number, number]): CatmullRomCurve3 {
@@ -121,7 +132,10 @@ export default function EarthGlobe({
   flight,
   size = 320,
   spin = 0.0025,
+  sway = 0,
+  zoom = 3.4,
   interactive = true,
+  touchAction = 'pan-y',
   onReady,
   className,
   style,
@@ -133,23 +147,37 @@ export default function EarthGlobe({
   flight?: Flight | null
   size?: number
   spin?: number
+  /** Radians of idle drift either side of where it was left, instead of turning away. */
+  sway?: number
+  /** Camera distance: 3.4 matches the vector stand-in's silhouette; ~2 fills the frame with a region. */
+  zoom?: number
   interactive?: boolean
+  /** 'none' where the globe is the whole screen; 'pan-y' inside a scrolling page. */
+  touchAction?: 'none' | 'pan-y'
   /** Fires once the photographed Earth is on screen, so a stand-in can leave. */
   onReady?: () => void
   className?: string
   style?: React.CSSProperties
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
-  const drag = useRef<{ x: number; y: number; ry: number; rx: number } | null>(null)
-  const rotation = useRef({ y: facing(focus ? focus[1] : -70), x: focus ? (-focus[0] * Math.PI) / 180 * 0.5 : 0.25 })
-  // Spin is read through a ref so changing it never rebuilds the scene.
+  const drag = useRef<{ x: number; y: number; ry: number; rx: number; vy: number; t: number } | null>(null)
+  const momentum = useRef(0)
+  const aim = (at: [number, number]) => ({ y: facing(at[1]), x: (at[0] * Math.PI) / 180 })
+  const rotation = useRef(focus ? aim(focus) : { y: facing(-70), x: 0.25 })
+  // Home is where the globe was left; idle drift is measured from it, and a
+  // new home (the current stop changed) is turned to, not cut to.
+  const home = useRef({ ...rotation.current })
+  const turning = useRef(false)
+  // Spin and sway are read through refs so changing them never rebuilds the scene.
   const spinRef = useRef(spin)
   spinRef.current = spin
+  const swayRef = useRef(sway)
+  swayRef.current = sway
   const renderRef = useRef<(() => void) | null>(null)
   const { reduced } = useMotionPrefs()
 
   // The scene, built once per size; markers and flights live in their own
-  // group so a new pin never rebuilds the renderer or re-uploads the texture.
+  // groups so a new pin never rebuilds the renderer or re-uploads the texture.
   const sceneRef = useRef<{
     world: Group
     markers: Group
@@ -158,8 +186,22 @@ export default function EarthGlobe({
     wake: () => void
   } | null>(null)
   const flightRef = useRef<{ curve: CatmullRomCurve3; start: number; target: number } | null>(null)
+  const landingRef = useRef<{ bead: Mesh; start: number } | null>(null)
   const readyRef = useRef(onReady)
   readyRef.current = onReady
+
+  const focusKey = focus ? `${focus[0]},${focus[1]}` : ''
+  const firstFocus = useRef(true)
+  useEffect(() => {
+    if (!focus) return
+    home.current = aim(focus)
+    // First paint and reduced motion land on it directly; otherwise it is a turn.
+    if (firstFocus.current || reduced) rotation.current = { ...home.current }
+    else turning.current = true
+    firstFocus.current = false
+    if (reduced) renderRef.current?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey])
 
   useEffect(() => {
     const host = hostRef.current
@@ -182,7 +224,7 @@ export default function EarthGlobe({
 
     const scene = new Scene()
     const camera = new PerspectiveCamera(35, 1, 0.1, 20)
-    camera.position.set(0, 0, 3.3)
+    camera.position.set(0, 0, zoom)
 
     const sun = new DirectionalLight(0xffffff, 2.6)
     sun.position.set(-2.2, 1.6, 2.6)
@@ -202,16 +244,17 @@ export default function EarthGlobe({
     const haloGeometry = new SphereGeometry(1.12, 48, 48)
     scene.add(new Mesh(haloGeometry, ATMOSPHERE))
 
-    // The plane: a white fuselage with a wing, hidden until there is a leg to fly.
+    // The plane: gold — what is happening now — big enough to tell from a pin,
+    // hidden until there is a leg to fly.
     const plane = new Group()
-    const white = new MeshBasicMaterial({ color: 0xffffff })
-    const fuselage = new Mesh(new ConeGeometry(0.012, 0.05, 8), white)
+    const goldPaint = new MeshBasicMaterial({ color: new Color('#ffd166') })
+    const fuselage = new Mesh(new ConeGeometry(0.012, 0.05, 8), goldPaint)
     fuselage.rotation.x = Math.PI / 2
-    const wing = new Mesh(new BoxGeometry(0.06, 0.004, 0.014), white)
-    const tail = new Mesh(new BoxGeometry(0.02, 0.004, 0.008), white)
+    const wing = new Mesh(new BoxGeometry(0.06, 0.004, 0.014), goldPaint)
+    const tail = new Mesh(new BoxGeometry(0.02, 0.004, 0.008), goldPaint)
     tail.position.set(0, 0.008, -0.02)
     plane.add(fuselage, wing, tail)
-    plane.scale.setScalar(0.62)
+    plane.scale.setScalar(1.1 * (zoom / 3.4))
     plane.visible = false
     world.add(plane)
 
@@ -221,12 +264,22 @@ export default function EarthGlobe({
       renderer.render(scene, camera)
     }
     renderRef.current = render
+    const shortest = (delta: number) => Math.atan2(Math.sin(delta), Math.cos(delta))
     const tick = () => {
       frame = 0
       if (!visible) return
+      const now = performance.now()
       const flight = flightRef.current
+      const landing = landingRef.current
+      if (landing) {
+        // The new bead lands: big and soft, then settles.
+        const t = Math.min(1, (now - landing.start) / LANDING_MS)
+        const eased = 1 - Math.pow(1 - t, 3)
+        landing.bead.scale.setScalar(landing.bead.userData.radius * (2.2 - 1.2 * eased))
+        if (t >= 1) landingRef.current = null
+      }
       if (flight) {
-        const t = Math.min(1, (performance.now() - flight.start) / FLIGHT_MS)
+        const t = Math.min(1, (now - flight.start) / FLIGHT_MS)
         // Ease in and out so the plane leaves and arrives gently.
         const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
         const at = flight.curve.getPointAt(eased)
@@ -236,18 +289,36 @@ export default function EarthGlobe({
         plane.lookAt(ahead)
         if (!drag.current) {
           // Shortest way round to the leg's midpoint, then settle.
-          let delta = flight.target - rotation.current.y
-          delta = Math.atan2(Math.sin(delta), Math.cos(delta))
-          rotation.current.y += delta * 0.06
+          rotation.current.y += shortest(flight.target - rotation.current.y) * 0.06
         }
         if (t >= 1) {
           flightRef.current = null
+          home.current = { ...rotation.current }
           window.setTimeout(() => {
             plane.visible = false
           }, 600)
         }
       } else if (!reduced && !drag.current) {
-        rotation.current.y -= spinRef.current
+        if (Math.abs(momentum.current) > 0.0004) {
+          // The hand's speed carries on, fading, before the drift takes over.
+          rotation.current.y += momentum.current
+          momentum.current *= 0.94
+          if (Math.abs(momentum.current) <= 0.0004) {
+            momentum.current = 0
+            home.current = { x: rotation.current.x, y: rotation.current.y - drift(now, spinRef.current, swayRef.current) }
+          }
+        } else {
+          const target = home.current.y + drift(now, spinRef.current, swayRef.current)
+          if (turning.current) {
+            const delta = shortest(target - rotation.current.y)
+            rotation.current.y += delta * 0.06
+            rotation.current.x += (home.current.x - rotation.current.x) * 0.06
+            if (Math.abs(delta) < 0.002) turning.current = false
+          } else {
+            rotation.current.y = target
+            rotation.current.x = home.current.x
+          }
+        }
       }
       render()
       frame = requestAnimationFrame(tick)
@@ -298,23 +369,26 @@ export default function EarthGlobe({
       geometry.dispose()
       haloGeometry.dispose()
       material.dispose()
-      white.dispose()
+      goldPaint.dispose()
       fuselage.geometry.dispose()
       wing.geometry.dispose()
       tail.geometry.dispose()
       renderer.dispose()
       renderer.domElement.remove()
     }
-  }, [size, reduced])
+  }, [size, reduced, zoom])
 
-  // Pins, the route ribbon and the current flight: rebuilt in place when they change.
+  // Pins and the route ribbon: rebuilt in place when they change.
   useEffect(() => {
     const scene = sceneRef.current
     if (!scene) return
-    const { markers, plane } = scene
+    const { markers } = scene
     const disposables: { dispose: () => void }[] = []
+    // Closer camera, smaller marks: a bead should read the same size on screen.
+    const k = zoom / 3.4
 
-    // Pins: a coral bead with a soft white collar, sitting just above the surface.
+    // Pins: a bead with a soft white collar, sitting just above the surface.
+    // Coral is the current stop; gold is a saved place; teal is the route.
     const pinGeometry = new SphereGeometry(1, 12, 12)
     const coral = new MeshBasicMaterial({ color: new Color('#ff6a3d') })
     const gold = new MeshBasicMaterial({ color: new Color('#ffc83d') })
@@ -325,42 +399,69 @@ export default function EarthGlobe({
       const bead = new Mesh(pinGeometry, fill)
       bead.position.copy(toVector(lat, lon, lift))
       bead.scale.setScalar(radius)
+      bead.userData.radius = radius
       markers.add(bead)
       const ring = new Mesh(pinGeometry, collar)
       ring.position.copy(bead.position)
       ring.scale.setScalar(radius * 1.5)
       markers.add(ring)
+      return bead
     }
-    for (const point of points) addBead(point.lat, point.lon, (point.size ?? 0.06) * 0.28, point.hot ? coral : gold)
+    for (const point of points) addBead(point.lat, point.lon, (point.size ?? 0.06) * 0.28 * k, point.hot ? coral : gold)
 
     // Route: a teal ribbon along the great circle, lifted like a flight path —
     // the longer the hop, the higher it arcs — with a stop dot at each end.
     for (let index = 1; index < route.length; index += 1) {
-      const tube = new TubeGeometry(legCurve(route[index - 1], route[index]), 48, 0.008, 8, false)
+      const tube = new TubeGeometry(legCurve(route[index - 1], route[index]), 48, 0.011 * k, 8, false)
       disposables.push(tube)
       markers.add(new Mesh(tube, teal))
     }
-    route.forEach(([lat, lon], index) => addBead(lat, lon, index === 0 ? 0.018 : 0.013, teal, 1.014))
-
-    if (flight && !reduced) {
-      flightRef.current = {
-        curve: legCurve(flight.from, flight.to),
-        start: performance.now(),
-        // Turn so the middle of the leg faces the viewer while the plane is in the air.
-        target: facing((flight.from[1] + flight.to[1]) / 2),
-      }
-      plane.visible = true
+    const beads = route.map(([lat, lon], index) => addBead(lat, lon, (index === 0 ? 0.018 : 0.013) * k, teal, 1.014))
+    // A leg just added and too short to fly: its new bead lands instead.
+    if (flight && beads.length && flight.short) {
+      landingRef.current = { bead: beads[beads.length - 1], start: performance.now() }
     }
     scene.wake()
     if (reduced) scene.render()
 
     return () => {
+      landingRef.current = null
       markers.clear()
       disposables.forEach((item) => item.dispose())
     }
     // Points and route change identity every render; compare by content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(points), JSON.stringify(route), reduced, flight?.key, size])
+  }, [JSON.stringify(points), JSON.stringify(route), reduced, size, zoom, flight?.key])
+
+  // The flight: keyed on the leg alone, so a trip reload mid-air never restarts it.
+  useEffect(() => {
+    const scene = sceneRef.current
+    if (!scene || !flight) return
+    const { plane } = scene
+    const mid = facing((flight.from[1] + flight.to[1]) / 2)
+    if (reduced) {
+      // No plane: the globe is simply turned to the new leg.
+      rotation.current = { ...rotation.current, y: mid }
+      home.current = { ...rotation.current }
+      scene.render()
+      return
+    }
+    if (flight.short) {
+      home.current = { ...home.current, y: mid }
+      turning.current = true
+      scene.wake()
+      return
+    }
+    flightRef.current = {
+      curve: legCurve(flight.from, flight.to),
+      start: performance.now(),
+      // Turn so the middle of the leg faces the viewer while the plane is in the air.
+      target: mid,
+    }
+    plane.visible = true
+    scene.wake()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flight?.key, reduced])
 
   return (
     <div
@@ -371,30 +472,55 @@ export default function EarthGlobe({
         height: size,
         maxWidth: '100%',
         aspectRatio: '1',
-        touchAction: 'pan-y',
+        touchAction,
         cursor: interactive ? 'grab' : 'default',
         ...style,
       }}
       aria-hidden
       onPointerDown={(event) => {
         if (!interactive) return
-        drag.current = { x: event.clientX, y: event.clientY, ry: rotation.current.y, rx: rotation.current.x }
+        momentum.current = 0
+        drag.current = {
+          x: event.clientX,
+          y: event.clientY,
+          ry: rotation.current.y,
+          rx: rotation.current.x,
+          vy: 0,
+          t: performance.now(),
+        }
         event.currentTarget.setPointerCapture(event.pointerId)
       }}
       onPointerMove={(event) => {
         if (!drag.current) return
+        const next = drag.current.ry + (event.clientX - drag.current.x) * 0.006
+        const now = performance.now()
+        // Speed over the last move, in radians per frame, for the let-go.
+        const dt = Math.max(1, now - drag.current.t)
+        drag.current.vy = ((next - rotation.current.y) / dt) * 16.7
+        drag.current.t = now
         rotation.current = {
-          y: drag.current.ry + (event.clientX - drag.current.x) * 0.006,
+          y: next,
           x: Math.max(-1, Math.min(1, drag.current.rx + (event.clientY - drag.current.y) * 0.004)),
         }
         // Reduced motion stops the idle spin, not the person's own hand.
         if (reduced) renderRef.current?.()
       }}
       onPointerUp={() => {
+        if (!drag.current) return
+        momentum.current = reduced ? 0 : Math.max(-0.08, Math.min(0.08, drag.current.vy))
         drag.current = null
+        turning.current = false
+        home.current = {
+          x: rotation.current.x,
+          y: rotation.current.y - drift(performance.now(), spinRef.current, swayRef.current),
+        }
       }}
       onPointerCancel={() => {
         drag.current = null
+        home.current = {
+          x: rotation.current.x,
+          y: rotation.current.y - drift(performance.now(), spinRef.current, swayRef.current),
+        }
       }}
     />
   )

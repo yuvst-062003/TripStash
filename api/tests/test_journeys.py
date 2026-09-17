@@ -754,3 +754,37 @@ def test_bookings_and_expenses_can_be_taken_back(client, auth, trip):
     assert client.get("/api/v1/bookings", headers=auth).json() == []
     assert client.get("/api/v1/expenses", headers=auth).json()["total"] == 0
     assert client.delete(expense_url, headers=auth).status_code == 404
+
+
+def test_recommendations_find_a_stop_whatever_its_accents(client, auth, trip):
+    """Lake Atitlán, Lanquín: the stash matches on letters, not on diacritics."""
+    from datetime import date, timedelta
+
+    capture_reel(client, auth)
+    approve_all_places(client, auth)
+    client.post(
+        "/api/v1/knowledge",
+        headers=auth,
+        json={"type": "safety", "title": "Taxis overcharge", "destination_scope": "Antigua"},
+    )
+    client.post(
+        "/api/v1/knowledge",
+        headers=auth,
+        json={
+            "type": "event",
+            "title": "Semana Santa processions",
+            "destination_scope": "Antigua",
+            "happens_on": (date.today() + timedelta(days=9)).isoformat(),
+        },
+    )
+    lake = client.get("/api/v1/recommend", headers=auth, params={"q": "Lake Atitlán"}).json()
+    assert [c["title"] for c in lake["cards"]], lake["summary"]
+    plain = client.get("/api/v1/recommend", headers=auth, params={"q": "lake atitlan"}).json()
+    assert [c["title"] for c in plain["cards"]] == [c["title"] for c in lake["cards"]]
+
+    # What matters first: the warning, then the next event, then the places.
+    antigua = client.get("/api/v1/recommend", headers=auth, params={"q": "Antigua"}).json()
+    kinds = [c.get("knowledge_type") or c["type"] for c in antigua["cards"]]
+    assert kinds[0] == "safety"
+    assert kinds[1] == "event"
+    assert "place" in kinds[2:]

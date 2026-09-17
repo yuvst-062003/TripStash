@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.adapters import get_ai
@@ -48,29 +48,30 @@ def recommend(
             query=query, summary="Type a city or a place to see what you stashed for it."
         )
 
-    like = f"%{needle}%"
-    places = list(
-        session.execute(
+    # Both sides are normalised: "Lake Atitlán" and "lake atitlan" are one stop.
+    def mentions(*values: str | None) -> bool:
+        return any(needle in normalize_name(value) for value in values if value)
+
+    places = [
+        tp
+        for tp in session.execute(
             select(TripPlace)
             .join(Place)
-            .where(
-                TripPlace.trip_id == trip.id,
-                TripPlace.status != PlaceStatus.ARCHIVED,
-                or_(Place.city.ilike(like), Place.name.ilike(like), Place.country.ilike(like)),
-            )
+            .where(TripPlace.trip_id == trip.id, TripPlace.status != PlaceStatus.ARCHIVED)
         ).scalars()
-    )
-    knowledge = list(
-        session.execute(
+        if mentions(tp.place.city, tp.place.name, tp.place.country)
+    ]
+    knowledge = [
+        k
+        for k in session.execute(
             select(KnowledgeItem).where(
-                KnowledgeItem.trip_id == trip.id,
-                KnowledgeItem.is_archived.is_(False),
-                or_(KnowledgeItem.destination_scope.ilike(like), KnowledgeItem.title.ilike(like)),
+                KnowledgeItem.trip_id == trip.id, KnowledgeItem.is_archived.is_(False)
             )
         ).scalars()
-    )
+        if mentions(k.destination_scope, k.title)
+    ]
 
-    # Must-visits first, then events by date, then the rest by confidence.
+    # Must-visits first among places; the rest by confidence.
     places.sort(
         key=lambda tp: (tp.status != PlaceStatus.MUST_VISIT, tp.status == PlaceStatus.VISITED)
     )
@@ -87,16 +88,22 @@ def recommend(
         key=lambda k: (k.type not in (KnowledgeType.SAFETY, KnowledgeType.BORDER), -k.confidence),
     )
 
+    # What matters first: warnings, the next event, then must-visits and the
+    # rest of the places, then everything else you noted.
+    warnings = [k for k in other if k.type in (KnowledgeType.SAFETY, KnowledgeType.BORDER)]
+    notes = [k for k in other if k not in warnings]
     cards: list[dict] = []
-    for tp in places[:limit]:
-        cards.append(_place_card(tp))
+    for item in warnings:
+        cards.append(_knowledge_card(item))
     for item in events:
         card = _knowledge_card(item)
         days = (item.happens_on - on).days if item.happens_on else None
         card["happens_on"] = item.happens_on.isoformat() if item.happens_on else None
         card["when"] = "today" if days == 0 else f"in {days} days" if days and days > 0 else None
         cards.append(card)
-    for item in other:
+    for tp in places:
+        cards.append(_place_card(tp))
+    for item in notes:
         cards.append(_knowledge_card(item))
     cards = cards[:limit]
 
