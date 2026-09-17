@@ -88,6 +88,16 @@ def confirm_action(
         session.get(TripPlace, payload.get("trip_place_id")), trip, "Place not found."
     )
     on = date.fromisoformat(payload.get("on_date") or datetime.now(UTC).date().isoformat())
+    # A second tap on the same proposal is the same plan, not a second entry.
+    existing = session.execute(
+        select(ItineraryItem).where(
+            ItineraryItem.trip_id == trip.id,
+            ItineraryItem.trip_place_id == trip_place.id,
+            ItineraryItem.on_date == on,
+        )
+    ).scalars().first()
+    if existing is not None:
+        return {"applied": action_type, "itinerary_item_id": existing.id, "on_date": on.isoformat()}
     item = ItineraryItem(
         trip_id=trip.id,
         trip_place_id=trip_place.id,

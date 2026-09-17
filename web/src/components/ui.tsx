@@ -65,9 +65,10 @@ export function checkedAgo(iso: string | null | undefined): string | null {
   const minutes = Math.max(0, Math.round((Date.now() - then) / 60_000))
   if (minutes < 2) return 'checked just now'
   if (minutes < 60) return `checked ${minutes} min ago`
-  const hours = Math.round(minutes / 60)
+  // Floors, like the API's own label, so the prose and the card agree.
+  const hours = Math.floor(minutes / 60)
   if (hours < 24) return `checked ${hours} h ago`
-  return `checked ${Math.round(hours / 24)} d ago`
+  return `checked ${Math.floor(hours / 24)} d ago`
 }
 
 /** What a capture was, in the traveller's words rather than the pipeline's. */
@@ -525,14 +526,16 @@ export function Sheet({
   onClose,
   children,
   action,
+  className,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
   action?: ReactNode
+  className?: string
 }) {
   return (
-    <Drawer title={title} onClose={onClose} action={action}>
+    <Drawer title={title} onClose={onClose} action={action} className={className}>
       {children}
     </Drawer>
   )

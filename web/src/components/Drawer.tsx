@@ -1,12 +1,14 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Drawer as Vaul } from 'vaul'
+import { cn } from '../lib/cn'
 import { X } from './icons'
 
 /**
  * Bottom sheet with real drag physics (vaul).
  *
  * Mounted open; closing plays the slide-out first and only then tells the
- * parent to unmount, so the sheet never just vanishes.
+ * parent to unmount, so the sheet never just vanishes. Focus comes back to
+ * whatever opened it.
  */
 export default function Drawer({
   title,
@@ -14,14 +16,25 @@ export default function Drawer({
   children,
   action,
   description,
+  className,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
   action?: ReactNode
   description?: string
+  /** `drawer--tall` fixes the height for content that changes size (the assistant). */
+  className?: string
 }) {
   const [open, setOpen] = useState(true)
+  // Children rise in as the sheet lands; after that they just change.
+  const [settled, setSettled] = useState(false)
+  const opener = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    opener.current = document.activeElement as HTMLElement | null
+    const id = window.setTimeout(() => setSettled(true), 450)
+    return () => window.clearTimeout(id)
+  }, [])
   return (
     <Vaul.Root
       open={open}
@@ -29,13 +42,19 @@ export default function Drawer({
         if (!next) setOpen(false)
       }}
       onAnimationEnd={(next) => {
-        if (!next) onClose()
+        if (!next) {
+          opener.current?.focus?.()
+          onClose()
+        }
       }}
       repositionInputs={false}
     >
       <Vaul.Portal>
         <Vaul.Overlay className="drawer-overlay" />
-        <Vaul.Content className="drawer" aria-describedby={undefined}>
+        <Vaul.Content
+          className={cn('drawer', settled && 'drawer--settled', className)}
+          aria-describedby={undefined}
+        >
           <div className="drawer__grip" aria-hidden />
           <div className="drawer__head">
             <Vaul.Title className="drawer__title grow clamp-1">{title}</Vaul.Title>

@@ -34,6 +34,10 @@ code { font: inherit; font-weight: 600; }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  /* Sheets drop their slide but keep a short fade, so a change is still seen. */
+  .drawer { transform: none !important; transition: opacity 150ms linear !important; }
+  .drawer[data-state='closed'] { opacity: 0; }
+  .drawer-overlay { transition: opacity 150ms linear !important; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -388,6 +392,20 @@ code { font: inherit; font-weight: 600; }
 .chip:hover { border-color: var(--ink-3); }
 .chip:active { transform: scale(0.96); transition-duration: 0ms; }
 .chip--on { background: var(--teal-ink); border-color: transparent; color: var(--on-teal); }
+/* A chip that can be taken off: the × is its own 28px target inside the pill. */
+.chip__x {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: -6px -4px -6px 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  color: inherit;
+  cursor: pointer;
+}
+.chip__x:active { transform: scale(0.9); }
 .chip--on:hover { border-color: transparent; }
 .chip--static { cursor: default; }
 
@@ -645,7 +663,28 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   height: 5px;
   margin: var(--s-3) auto 0;
   border-radius: var(--r-pill);
-  background: var(--line);
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+/* A sheet whose content changes size (the assistant) keeps one height; the body scrolls. */
+.drawer--tall { height: 94dvh; }
+
+/* The assistant's field and its send disc. */
+textarea.ask__field { min-height: 48px; max-height: 160px; padding-right: 56px; resize: none; field-sizing: content; overflow: auto; }
+.ask__send {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  color: var(--ink-3);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.ask__send[data-armed='true'] { background: var(--ink); color: var(--paper); }
+.ask__send[data-armed='true']:hover { background: var(--ink); color: var(--paper); }
+/* A proposal is a decision, not information: dashed ring, no tint, one real button. */
+.ask__proposal {
+  padding: var(--s-4);
+  border: 1.5px dashed var(--line);
+  border-radius: var(--r-md);
+  min-height: 132px;
 }
 .drawer__head {
   flex: none;
@@ -664,8 +703,10 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   overscroll-behavior: contain;
   padding-bottom: calc(var(--s-8) + env(safe-area-inset-bottom));
 }
-/* Content inside a drawer settles in just after the sheet does, top to bottom. */
+/* Content inside a drawer settles in just after the sheet does, top to bottom —
+   once; what arrives later (an answer) brings its own motion. */
 .drawer__body > * { animation: rise-in 240ms var(--ease-out) both; }
+.drawer--settled .drawer__body > * { animation: none; }
 .drawer__body > :nth-child(1) { animation-delay: 60ms; }
 .drawer__body > :nth-child(2) { animation-delay: 100ms; }
 .drawer__body > :nth-child(3) { animation-delay: 140ms; }

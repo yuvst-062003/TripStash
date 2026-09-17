@@ -99,7 +99,17 @@ class Answer:
         }
 
 
+# The subject of a question decides before its phrasing does: "what did I
+# save about safety" is a safety question, not a "why did I save this" one.
 _INTENTS: list[tuple[str, re.Pattern[str]]] = [
+    ("budget", re.compile(r"\b(budget|spend|spent|cost|money|daily burn|afford)\b", re.I)),
+    ("stay", re.compile(r"\b(hostel|hotel|stay|accommodation|sleep|dorm)\b", re.I)),
+    (
+        "transport",
+        re.compile(r"\b(bus|shuttle|ferry|boat|taxi|uber|get to|travel to|transport)\b", re.I),
+    ),
+    ("border", re.compile(r"\b(visa|border|entry|immigration|onward|stamp)\b", re.I)),
+    ("safety", re.compile(r"\b(safe|safety|scam|dangerous|careful)\b", re.I)),
     (
         "nearby",
         re.compile(r"\b(near|nearby|around me|close by|walking distance|what'?s here)\b", re.I),
@@ -109,14 +119,6 @@ _INTENTS: list[tuple[str, re.Pattern[str]]] = [
         re.compile(r"\b(open|now|today|worth going|should i go|is it worth|time to)\b", re.I),
     ),
     ("why", re.compile(r"\b(why|what did i save|remind me|who recommended)\b", re.I)),
-    ("budget", re.compile(r"\b(budget|spend|spent|cost|money|daily burn|afford)\b", re.I)),
-    ("stay", re.compile(r"\b(hostel|hotel|stay|accommodation|sleep|dorm)\b", re.I)),
-    (
-        "transport",
-        re.compile(r"\b(bus|shuttle|ferry|boat|taxi|uber|get to|travel to|transport)\b", re.I),
-    ),
-    ("border", re.compile(r"\b(visa|border|entry|immigration|onward|stamp)\b", re.I)),
-    ("safety", re.compile(r"\b(safe|safety|scam|dangerous|careful)\b", re.I)),
 ]
 
 
@@ -132,7 +134,7 @@ def ask(session: Session, *, trip: Trip, question: str, context: AskContext) -> 
     on = context.on or datetime.now(UTC).date()
     intent = classify(question)
 
-    focus = _focus_place(session, trip, context)
+    focus = _focus_place(session, trip, context) or _place_by_name(session, trip, question)
     handlers = {
         "nearby": _answer_nearby,
         "practical": _answer_practical,
@@ -326,13 +328,15 @@ def _answer_practical(session, trip, question, context, on, focus, intent) -> An
         lines.append("I have no opening hours on record, so I cannot say whether it is open.")
 
     lines.append(
-        f"Weather for {on.isoformat()}: {weather.summary.lower()}, {weather.temperature_c:.0f}°C, "
+        f"Today: {weather.summary.lower()}, {weather.temperature_c:.0f}°C, "
         f"{int(weather.precipitation_probability * 100)}% chance of rain."
     )
     if distance_km is not None:
+        walk = walking_minutes_if_walkable(distance_km)
         lines.append(
-            f"You are {distance_km:.1f} km away - roughly "
-            f"{walking_minutes(distance_km)} min walking."
+            f"You are {distance_km:.1f} km away — about {walk} min on foot."
+            if walk is not None
+            else f"You are {distance_km:.0f} km away — not a walk."
         )
     if already_planned:
         lines.append("It is already on today's plan.")
@@ -342,8 +346,8 @@ def _answer_practical(session, trip, question, context, on, focus, intent) -> An
         proposed.append(
             {
                 "type": "add_to_today",
-                "label": f"Add {place.name} to {on.isoformat()}",
-                "preview": f"Creates a plan entry for {on.isoformat()}. Nothing is booked.",
+                "label": f"Add {place.name} to today's plan",
+                "preview": "Goes on today's plan. Nothing is booked.",
                 "payload": {"trip_place_id": focus.id, "on_date": on.isoformat()},
             }
         )
@@ -376,7 +380,7 @@ def _answer_why(session, trip, question, context, on, focus, intent) -> Answer:
         else f"You saved {target.place.name}, but no reason was recorded."
     )
     if citations:
-        text += f" It came from {len(citations)} saved source(s), all still attached."
+        text += f" It came from {_plural(len(citations), 'saved source')}, all still attached."
 
     return Answer(
         text=text,
@@ -396,19 +400,24 @@ def _answer_budget(session, trip, question, context, on, focus, intent) -> Answe
         )
     ).scalar_one()
 
+    cur = trip.base_currency
     lines = [
-        f"Recorded spending so far: {spent:.2f} {trip.base_currency}; "
-        f"{today_spent:.2f} today."
+        f"Spent so far: {spent:,.0f} {cur}"
+        + (f", {today_spent:,.0f} of it today." if today_spent else ", nothing today.")
     ]
     remaining: float | None = None
     if trip.total_budget:
         remaining = trip.total_budget - spent
-        lines.append(f"That leaves {remaining:.2f} of a {trip.total_budget:.2f} budget.")
-        if trip.end_date and trip.end_date >= on:
+        lines.append(
+            f"That leaves {remaining:,.0f} of a {trip.total_budget:,.0f} {cur} budget."
+            if remaining >= 0
+            else f"That is {-remaining:,.0f} {cur} over the {trip.total_budget:,.0f} budget."
+        )
+        if trip.end_date and trip.end_date >= on and remaining > 0:
             days_left = (trip.end_date - on).days + 1
             lines.append(
-                f"Across {days_left} remaining day(s) that is "
-                f"{remaining / days_left:.2f} {trip.base_currency} per day."
+                f"Across the {_plural(days_left, 'day')} left, that is "
+                f"{remaining / days_left:,.0f} {cur} a day."
             )
     else:
         lines.append("No total budget is set, so I cannot forecast a daily allowance.")
@@ -424,7 +433,7 @@ def _answer_budget(session, trip, question, context, on, focus, intent) -> Answe
     )
     if price_notes:
         lines.append(
-            f"You captured {len(price_notes)} price expectation(s) - shown below to compare."
+            f"You noted {_plural(len(price_notes), 'expected price')} — shown below to compare."
         )
 
     return Answer(
@@ -484,8 +493,9 @@ def _answer_stay(session, trip, question, context, on, focus, intent) -> Answer:
     )
 
     text = (
-        f"You have {len(saved)} saved stay(s) and {len(knowledge)} saved recommendation(s) "
-        f"for {where}. I have not checked availability or prices - open a provider for that."
+        f"You have {_plural(len(saved), 'saved stay')} and "
+        f"{_plural(len(knowledge), 'saved recommendation')} for {where}. "
+        "I have not checked availability or prices — open a provider for that."
     )
     return Answer(
         text=text,
@@ -523,9 +533,10 @@ def _answer_knowledge_type(session, trip, question, context, on, focus, intent) 
         disclaimers = [OFFICIAL_NOTE]
 
     oldest = min((i.source_date for i in items if i.source_date), default=None)
-    text = f"You saved {len(items)} {intent} note(s)."
+    text = f"You saved {_plural(len(items), f'{intent} note')}."
     if oldest:
-        text += f" The oldest is from {oldest.isoformat()} - check whether it still holds."
+        when = oldest.strftime("%-d %b %Y")
+        text += f" The oldest is from {when} — check whether it still holds."
 
     return Answer(
         text=text,
@@ -540,7 +551,7 @@ def _answer_general(session, trip, question, context, on, focus, intent) -> Answ
     if focus is not None:
         return _answer_why(session, trip, question, context, on, focus, intent)
 
-    tokens = {t for t in normalize_name(question).split() if len(t) > 3}
+    tokens = {t for t in normalize_name(question).split() if len(t) > 3} - _QUESTION_WORDS
     items = list(
         session.execute(
             select(KnowledgeItem).where(
@@ -548,13 +559,18 @@ def _answer_general(session, trip, question, context, on, focus, intent) -> Answ
             )
         ).scalars()
     )
+    places = _search_places(session, trip, tokens)
+    place_words = {t for tp in places for t in normalize_name(tp.place.name).split()}
     scored = [
         (item, len(tokens & {t for t in normalize_name(f"{item.title} {item.body or ''}").split()}))
         for item in items
     ]
-    hits = [item for item, score in sorted(scored, key=lambda p: -p[1]) if score > 0][:5]
-
-    places = _search_places(session, trip, tokens)
+    # One shared word is chance; two, or a saved place's name, is a match.
+    hits = [
+        item
+        for item, score in sorted(scored, key=lambda p: -p[1])
+        if score >= 2 or (score >= 1 and place_words & set(normalize_name(item.title).split()))
+    ][:5]
 
     if not hits and not places:
         return Answer(
@@ -568,12 +584,25 @@ def _answer_general(session, trip, question, context, on, focus, intent) -> Answ
 
     return Answer(
         text=(
-            f"Found {len(places)} saved place(s) and {len(hits)} saved note(s) matching that."
+            f"Found {_plural(len(places), 'saved place')} and "
+            f"{_plural(len(hits), 'saved note')} matching that."
         ),
         cards=[_place_card(tp) for tp in places] + [_knowledge_card(i) for i in hits],
         citations=[c for c in (_cite_source(session, i.source_id) for i in hits) if c],
         tools_used=["knowledge:search", "places:search"],
     )
+
+
+# Words that ask, not name: never a match on their own.
+_QUESTION_WORDS = {
+    "about", "tell", "what", "where", "which", "when", "should", "could", "would", "there",
+    "this", "that", "these", "those", "have", "with", "from", "into", "know", "anything",
+    "something", "saved", "save", "trip", "place", "places", "again", "more", "some",
+}
+
+
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
 
 def _search_places(session: Session, trip: Trip, tokens: set[str]) -> list[TripPlace]:
@@ -591,7 +620,7 @@ def _search_places(session: Session, trip: Trip, tokens: set[str]) -> list[TripP
 
 
 def _place_by_name(session: Session, trip: Trip, question: str) -> TripPlace | None:
-    tokens = {t for t in normalize_name(question).split() if len(t) > 2}
+    tokens = {t for t in normalize_name(question).split() if len(t) > 2} - _QUESTION_WORDS
     matches = _search_places(session, trip, tokens)
     return matches[0] if matches else None
 

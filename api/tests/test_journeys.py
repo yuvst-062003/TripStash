@@ -788,3 +788,84 @@ def test_recommendations_find_a_stop_whatever_its_accents(client, auth, trip):
     assert kinds[0] == "safety"
     assert kinds[1] == "event"
     assert "place" in kinds[2:]
+
+
+# ------------------------------------------------------------ ask, honestly
+
+
+def test_asking_what_was_saved_about_safety_gets_the_safety_notes(client, auth, trip):
+    capture_reel(client, auth)
+    for candidate in client.get("/api/v1/inbox", headers=auth).json():
+        if candidate["type"] == "safety":
+            client.post(f"/api/v1/candidates/{candidate['id']}/approve", headers=auth, json={})
+    answer = client.post(
+        "/api/v1/ask", headers=auth, json={"question": "What did I save about safety?"}
+    ).json()
+    assert "intent:safety" in answer["tools_used"]
+    assert answer["cards"] and answer["cards"][0]["knowledge_type"] == "safety"
+    assert "note(s)" not in answer["answer"]
+
+
+def test_a_named_place_is_found_without_a_location_or_context(client, auth, trip):
+    capture_reel(client, auth)
+    saved = approve_all_places(client, auth)
+    name = client.get("/api/v1/places", headers=auth).json()[0]["name"]
+    assert saved
+    answer = client.post(
+        "/api/v1/ask",
+        headers=auth,
+        json={"question": f"Is now a good time for {name}?", "surface": "home"},
+    ).json()
+    assert answer["cards"] and answer["cards"][0]["title"] == name
+    assert "location" not in answer["answer"].lower()
+    assert any(a["type"] == "add_to_today" for a in answer["proposed_actions"])
+    proposal = answer["proposed_actions"][0]
+    assert "today" in proposal["label"].lower()
+    assert "2026-" not in proposal["label"] and "2026-" not in proposal["preview"]
+
+
+def test_a_far_place_is_not_given_a_walking_time(client, auth, trip):
+    capture_reel(client, auth)
+    saved = approve_all_places(client, auth)
+    answer = client.post(
+        "/api/v1/ask",
+        headers=auth,
+        json={
+            "question": "Is it open now?",
+            "surface": "place",
+            "trip_place_id": saved[0]["trip_place_id"],
+            "lat": 17.222,
+            "lon": -89.6237,
+        },
+    ).json()
+    assert "min walking" not in answer["answer"]
+    assert "km away" in answer["answer"]
+
+
+def test_stopwords_never_match_a_note(client, auth, trip):
+    capture_reel(client, auth)
+    for candidate in client.get("/api/v1/inbox", headers=auth).json():
+        if not candidate["is_place_candidate"]:
+            client.post(f"/api/v1/candidates/{candidate['id']}/approve", headers=auth, json={})
+    answer = client.post(
+        "/api/v1/ask", headers=auth, json={"question": "Tell me about Tokyo"}
+    ).json()
+    assert answer["cards"] == []
+    assert "could not match" in answer["answer"]
+
+
+def test_confirming_the_same_proposal_twice_plans_it_once(client, auth, trip):
+    capture_reel(client, auth)
+    saved = approve_all_places(client, auth)
+    today = datetime.now(UTC).date().isoformat()
+    answer = client.post(
+        "/api/v1/ask",
+        headers=auth,
+        json={"question": "Does it make sense to go now?", "surface": "place",
+              "trip_place_id": saved[0]["trip_place_id"], **ANTIGUA},
+    ).json()
+    proposal = next(a for a in answer["proposed_actions"] if a["type"] == "add_to_today")
+    first = client.post("/api/v1/ask/confirm", headers=auth, json=proposal).json()
+    second = client.post("/api/v1/ask/confirm", headers=auth, json=proposal).json()
+    assert first["itinerary_item_id"] == second["itinerary_item_id"]
+    assert len(client.get("/api/v1/itinerary", headers=auth, params={"on": today}).json()) == 1
