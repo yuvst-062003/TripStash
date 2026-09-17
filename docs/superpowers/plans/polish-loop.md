@@ -5,9 +5,9 @@ motion & interaction, UX/copy/correctness), blocker + should findings applied,
 re-captured light + dark at 390×844, committed on `redesign`; lint/build and
 API tests green; screenshots refreshed; pushed and deployed.
 
-**Current state (2026-09-17):** `redesign` at `a7b2091`, live at
-https://app-production-f91d.up.railway.app. Local: API :8010, web :5176, demo DB
-re-seeded with one upcoming event (Semana Santa, Antigua, in 9 days).
+**Current state (2026-09-17, end of loop):** all 12 screens reviewed and
+committed on `redesign`; demo DB re-seeded (one upcoming event: Semana Santa,
+Antigua, in 9 days); docs/screenshots refreshed; API at 62 passing tests.
 
 **Plan cost:** 12 screen tasks + 1 cross-cutting task; 3 reviewers each;
 sequential fixes so the working tree stays coherent.
@@ -34,7 +34,7 @@ replan; captures fail → restart the dev server by PID, retry once; deploy fail
 | 9 | Ask drawer | done | A 8 / B 8 / C 8 → 24 applied, 0 skipped | 5339ad8 |
 | 10 | Save drawer | done | A 8 / B 8 / C 8 → 23 applied, 1 skipped (a tinted map strip on Here) | d041095 |
 | 11 | You / profile | done | A 8 / B 8 / C 8 → 22 applied, 2 skipped (HeroActions on the map bar; reduced-motion pill fade, on-spec) | 3c559ab |
-| 12 | New trip + empty states | done | A 8 / B 8 / C 8 → 23 applied, 2 skipped (PATCH /trips for dates and budget; Ask starters aware of an empty stash) | (this commit) |
+| 12 | New trip + empty states | done | A 8 / B 8 / C 8 → 23 applied, 2 skipped (PATCH /trips for dates and budget; Ask starters aware of an empty stash) | 0b2b569 |
 
 ## Trajectory
 
