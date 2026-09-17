@@ -115,7 +115,8 @@ def _plain_summary(
 ) -> str:
     if not places and not events and not other:
         return (
-            f"Nothing stashed for {query} yet. Save a Reel, a note or a place and it will show here."
+            f"Nothing stashed for {query} yet. "
+            "Save a Reel, a note or a place and it will show here."
         )
     bits = []
     if places:
