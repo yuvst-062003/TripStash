@@ -171,6 +171,7 @@ button { font: inherit; color: inherit; }
   scrollbar-width: none;
   padding: var(--s-1) var(--s-4);
   scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--s-4);
 }
 .rail::-webkit-scrollbar { display: none; }
 .rail > * { flex: 0 0 auto; scroll-snap-align: start; }
@@ -250,7 +251,7 @@ button { font: inherit; color: inherit; }
 
 /* A tall card in a horizontal rail — the "brought back" strip. */
 .rail-card {
-  width: 236px;
+  width: 248px;
   min-height: 212px;
   display: flex;
   flex-direction: column;
@@ -1009,6 +1010,7 @@ textarea.input { min-height: 84px; resize: vertical; }
 
 .arc { display: block; width: 100%; height: auto; }
 .arc__track { stroke: var(--paper-2); }
+.card--ink .arc__track { stroke: color-mix(in srgb, var(--paper) 16%, transparent); }
 .arc__value { stroke: var(--teal); }
 .arc__value--over { stroke: var(--coral); }
 

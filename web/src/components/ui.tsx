@@ -6,7 +6,7 @@ import { STAGGER_LIST, STAGGER_ROW, useMotionPrefs } from '../lib/motion'
 import type { PlaceStatus } from '../lib/types'
 import Drawer from './Drawer'
 import Segmented from './Segmented'
-import { STATUS_STAMP, Stamp, StatusStamp } from './Stamp'
+import { STATUS_STAMP, Stamp, StatusStamp, type StampTone } from './Stamp'
 import { AlertTriangle, Clock, type IconComponent } from './icons'
 
 /* -------------------------------------------------------------------------
@@ -56,6 +56,26 @@ export function categoryTint(category: string | null | undefined): Tint {
       return 'transport'
     default:
       return 'other'
+  }
+}
+
+/** Tint → stamp tone, so a category stamp and its glyph tile agree. */
+export function stampToneFor(tint: Tint): StampTone {
+  switch (tint) {
+    case 'food':
+    case 'coral':
+      return 'coral'
+    case 'stay':
+    case 'nature':
+    case 'teal':
+      return 'teal'
+    case 'view':
+    case 'gold':
+      return 'gold'
+    case 'transport':
+      return 'ink'
+    default:
+      return 'muted'
   }
 }
 

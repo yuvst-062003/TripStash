@@ -1,8 +1,12 @@
 import { Link } from 'react-router-dom'
+import { motion } from 'motion/react'
 import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
-import TopBar from '../components/TopBar'
+import { useMotionPrefs } from '../lib/motion'
+import { AskButton } from '../components/TopBar'
+import { BudgetArc, MoneyFigure } from '../components/Money'
+import { Stamp } from '../components/Stamp'
 import {
   CacheNote,
   Empty,
@@ -10,20 +14,27 @@ import {
   Glyph,
   KNOWLEDGE_LABEL,
   Meta,
+  MotionList,
+  MotionRow,
   Note,
   SectionLabel,
   SkeletonRows,
+  categoryTint,
+  knowledgeTint,
   pairText,
+  stampToneFor,
 } from '../components/ui'
 import {
   AlertTriangle,
+  CATEGORY_ICON,
   ChevronRight,
+  CloudSun,
   Crosshair,
   Inbox,
   KNOWLEDGE_ICON,
-  CATEGORY_ICON,
   MapPin,
   RefreshCw,
+  Ticket,
 } from '../components/icons'
 
 const PHASE_LABEL = {
@@ -32,9 +43,19 @@ const PHASE_LABEL = {
   after: 'After the trip',
 } as const
 
+/** Day number since the trip started, when it has started. */
+function dayOfTrip(start: string | null | undefined, today: string): number | null {
+  if (!start) return null
+  const from = new Date(`${start}T00:00:00Z`).getTime()
+  const now = new Date(`${today}T00:00:00Z`).getTime()
+  if (Number.isNaN(from) || Number.isNaN(now) || now < from) return null
+  return Math.floor((now - from) / 86_400_000) + 1
+}
+
 /** A contextual dashboard: only what matters now, linking out rather than duplicating. */
 export default function Home() {
   const { trip, position, location, requestLocation, openSave } = useApp()
+  const { reduced, spring } = useMotionPrefs()
   useScreenContext({ surface: 'home' })
 
   const home = useAsync(
@@ -45,7 +66,10 @@ export default function Home() {
   if (home.loading && !home.data) {
     return (
       <div className="screen">
-        <TopBar title={trip?.name ?? 'Trip'} />
+        <header className="hero">
+          <div className="skeleton" style={{ height: 14, width: '40%' }} />
+          <div className="skeleton" style={{ height: 48, width: '70%', marginTop: 20 }} />
+        </header>
         <SkeletonRows rows={5} />
       </div>
     )
@@ -53,7 +77,9 @@ export default function Home() {
   if (home.error && !home.data) {
     return (
       <div className="screen">
-        <TopBar title={trip?.name ?? 'Trip'} />
+        <header className="hero">
+          <h1 className="t-display hero__title">{trip?.name ?? 'Trip'}</h1>
+        </header>
         <ErrorNote message={home.error} onRetry={home.reload} />
       </div>
     )
@@ -62,199 +88,196 @@ export default function Home() {
 
   const data = home.data
   const { review_queue: queue, money } = data
-
-  const subtitle = [
-    PHASE_LABEL[data.phase],
-    data.current_destination?.name,
-    data.weather &&
-      `${data.weather.summary} ${Math.round(data.weather.temperature_c)}°`,
-    data.countdown_days !== null ? `${data.countdown_days} days to go` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  const day = data.phase === 'during' ? dayOfTrip(trip?.start_date, data.date) : null
+  const headline = data.current_destination?.name ?? trip?.name ?? 'Your trip'
+  const queueTotal = queue.pending_candidates + queue.failed_sources
 
   return (
     <div className="screen">
-      <TopBar title={trip?.name ?? 'Trip'} subtitle={subtitle} />
-      <CacheNote visible={home.fromCache} />
-
-      {location.status !== 'granted' && (
-        <div className="pad" style={{ paddingBlock: 'var(--s-2)' }}>
-          <button className="btn btn--sm btn--plain" onClick={requestLocation}>
-            <Crosshair size={15} strokeWidth={2.1} />
-            {location.status === 'locating' ? 'Locating…' : 'Use my location'}
-          </button>
-          {location.status === 'denied' && (
+      <header className="hero">
+        <div className="hero__top">
+          <span className="t-small dim clamp-1">{trip?.name}</span>
+          <AskButton />
+        </div>
+        <motion.h1
+          className="t-display--lg hero__title"
+          initial={reduced ? false : { opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={spring}
+        >
+          {headline}
+        </motion.h1>
+        <div className="hero__line">
+          {day !== null ? <span>Day {day}</span> : <span>{PHASE_LABEL[data.phase]}</span>}
+          {data.weather && (
+            <span className="hero__chip">
+              <CloudSun size={14} strokeWidth={2.4} />
+              {data.weather.summary} {Math.round(data.weather.temperature_c)}°
+            </span>
+          )}
+          {data.countdown_days !== null && <span>{data.countdown_days} days to go</span>}
+          {location.status !== 'granted' && (
+            <button className="chip" onClick={requestLocation} style={{ minHeight: 28 }}>
+              <Crosshair size={13} strokeWidth={2.4} />
+              {location.status === 'locating' ? 'Locating…' : 'Use my location'}
+            </button>
+          )}
+        </div>
+        {location.status === 'denied' && (
+          <div style={{ marginTop: 'var(--s-3)' }}>
             <Note tone="warn">
               Location unavailable, so distances are hidden. Everything else works from your current
               destination.
             </Note>
-          )}
+          </div>
+        )}
+      </header>
+
+      <CacheNote visible={home.fromCache} />
+
+      {queueTotal > 0 && (
+        <div className="pad">
+          <Link to="/saved" className="card card--coral" style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-4)' }}>
+            <span className="t-display num" style={{ fontSize: '2.5rem', lineHeight: 1 }}>
+              {queue.pending_candidates}
+            </span>
+            <span className="grow">
+              <span className="t-head" style={{ display: 'block' }}>
+                to review
+              </span>
+              <span className="t-small dim" style={{ display: 'block', marginTop: 2 }}>
+                Nothing reaches the map until you confirm it.
+                {queue.failed_sources > 0 &&
+                  ` ${queue.failed_sources} capture${queue.failed_sources === 1 ? '' : 's'} need a hand.`}
+              </span>
+            </span>
+            <Stamp tone="coral" size="sm" Icon={queue.failed_sources > 0 ? AlertTriangle : Inbox} rotate={-8}>
+              Inbox
+            </Stamp>
+          </Link>
         </div>
       )}
 
-      {(queue.pending_candidates > 0 || queue.failed_sources > 0) && (
-        <ul className="list" style={{ marginTop: 'var(--s-2)' }}>
-          {queue.pending_candidates > 0 && (
-            <li>
-              <Link to="/saved" className="item">
-                <Glyph Icon={Inbox} tint="teal" />
-                <div className="item__body">
-                  <p className="item__title">
-                    {queue.pending_candidates} item{queue.pending_candidates === 1 ? '' : 's'} to
-                    review
-                  </p>
-                  <Meta parts={['Nothing reaches your map until you confirm it']} />
-                </div>
-                <ChevronRight size={18} className="dimmer" style={{ flex: 'none', marginTop: 9 }} />
-              </Link>
-            </li>
-          )}
-          {queue.failed_sources > 0 && (
-            <li>
-              <Link to="/saved" className="item">
-                <Glyph Icon={AlertTriangle} />
-                <div className="item__body">
-                  <p className="item__title">
-                    {queue.failed_sources} capture{queue.failed_sources === 1 ? '' : 's'} need a hand
-                  </p>
-                  <Meta parts={['Kept in Inbox', 'retry or add the place yourself']} />
-                </div>
-                <RefreshCw size={16} className="dimmer" style={{ flex: 'none', marginTop: 10 }} />
-              </Link>
-            </li>
-          )}
-        </ul>
-      )}
-
-      <SectionLabel action={<Link className="btn btn--sm btn--plain" to="/trip">Plan</Link>}>
+      <SectionLabel action={<Link className="btn btn--sm btn--ghost" to="/trip">Plan</Link>}>
         Today
       </SectionLabel>
       {data.today_plan.length === 0 ? (
-        <p className="pad t-sm dim">
+        <p className="pad t-small dim">
           Nothing planned.{' '}
           {position ? 'Saved places near you are below.' : 'Share your location to see what is nearby.'}
         </p>
       ) : (
-        <ul className="list">
+        <ol className="timeline">
           {data.today_plan.map((item) => (
-            <li key={item.id}>
+            <li key={item.id} className="timeline__item">
+              <span className="timeline__time">{item.start_time ?? '—'}</span>
+              <span className="timeline__spine">
+                <span className={`timeline__dot${item.is_done ? ' timeline__dot--done' : ''}`} />
+              </span>
               {item.trip_place_id ? (
-                <Link to={`/places/${item.trip_place_id}`} className="item">
-                  <span className="t-sm dimmer num" style={{ width: 38, flex: 'none', paddingTop: 2 }}>
-                    {item.start_time ?? '—'}
-                  </span>
-                  <div className="item__body">
-                    <p className="item__title clamp-1">{item.title}</p>
-                  </div>
-                  <ChevronRight size={18} className="dimmer" style={{ flex: 'none' }} />
+                <Link to={`/places/${item.trip_place_id}`} className="timeline__body">
+                  <span className="t-head grow clamp-1">{item.title}</span>
+                  <ChevronRight size={17} className="dimmer" />
                 </Link>
               ) : (
-                <div className="item" style={{ cursor: 'default' }}>
-                  <span className="t-sm dimmer num" style={{ width: 38, flex: 'none', paddingTop: 2 }}>
-                    {item.start_time ?? '—'}
-                  </span>
-                  <div className="item__body">
-                    <p className="item__title clamp-1">{item.title}</p>
-                  </div>
-                </div>
+                <span className="timeline__body">
+                  <span className="t-head grow clamp-1">{item.title}</span>
+                </span>
               )}
             </li>
           ))}
-        </ul>
+        </ol>
       )}
 
       <SectionLabel>Brought back for you</SectionLabel>
       {data.resurfaced.length === 0 ? (
         <Empty
-          title="Nothing to resurface yet"
+          stamp="Nothing yet"
+          title="Your stash is empty"
           body="Save a link, a screenshot or a downloaded video and TripStash brings it back when it becomes relevant."
           action={
-            <button className="btn btn--accent" onClick={openSave}>
+            <button className="btn btn--coral" onClick={openSave}>
               Save something
             </button>
           }
         />
       ) : (
-        <ul className="list">
+        <MotionList className="rail" as="ul">
           {data.resurfaced.map((item, index) => {
             const isPlace = item.kind === 'place'
             const Icon = isPlace
               ? CATEGORY_ICON[item.category ?? 'other'] ?? MapPin
               : KNOWLEDGE_ICON[item.knowledge_type ?? 'general'] ?? KNOWLEDGE_ICON.general
-            const { headline, detail } = pairText(item.title, item.body)
-            const body = (
+            const tint = isPlace ? categoryTint(item.category) : knowledgeTint(item.knowledge_type)
+            const label = isPlace ? item.category ?? 'place' : KNOWLEDGE_LABEL[item.knowledge_type ?? 'general']
+            const { headline: title, detail } = pairText(item.title, item.body)
+            const inner = (
               <>
-                <Glyph Icon={Icon} />
-                <div className="item__body">
-                  <div className="row between" style={{ gap: 'var(--s-2)' }}>
-                    <p className="item__title grow clamp-2">{headline}</p>
-                    {item.distance_km !== null && (
-                      <span className="t-sm dimmer num" style={{ flex: 'none' }}>
-                        {item.distance_km} km
-                      </span>
-                    )}
-                  </div>
-                  {/* Why it is surfacing now is part of the product, not a debug note. */}
-                  <p className="t-sm dim" style={{ marginTop: 2 }}>
-                    {item.reason}
-                  </p>
-                  {detail && <p className="t-sm dimmer clamp-2" style={{ marginTop: 2 }}>{detail}</p>}
+                <div className="row between">
+                  <Glyph Icon={Icon} tint={tint} />
+                  <Stamp tone={stampToneFor(tint)} size="sm" rotate={index % 2 ? 5 : -6}>
+                    {label}
+                  </Stamp>
+                </div>
+                <p className="rail-card__title clamp-3">{title}</p>
+                {/* Why it is surfacing now is part of the product, not a debug note. */}
+                <p className="rail-card__reason clamp-2">{item.reason}</p>
+                {detail && <p className="t-small dimmer clamp-2">{detail}</p>}
+                <div className="rail-card__foot">
+                  <span className="num">{item.distance_km !== null ? `${item.distance_km} km` : ''}</span>
+                  {item.trip_place_id && <ChevronRight size={16} />}
                 </div>
               </>
             )
             return (
-              <li key={`${item.kind}-${item.knowledge_item_id ?? item.trip_place_id}-${index}`}>
+              <MotionRow key={`${item.kind}-${item.knowledge_item_id ?? item.trip_place_id}-${index}`}>
                 {item.trip_place_id ? (
-                  <Link to={`/places/${item.trip_place_id}`} className="item">
-                    {body}
-                    <ChevronRight size={18} className="dimmer" style={{ flex: 'none', marginTop: 9 }} />
+                  <Link to={`/places/${item.trip_place_id}`} className="rail-card">
+                    {inner}
                   </Link>
                 ) : (
-                  <div className="item" style={{ cursor: 'default' }}>
-                    {body}
-                  </div>
+                  <div className="rail-card">{inner}</div>
                 )}
-              </li>
+              </MotionRow>
             )
           })}
-        </ul>
+        </MotionList>
       )}
 
-      <SectionLabel action={<Link className="btn btn--sm btn--plain" to="/trip">Details</Link>}>
+      <SectionLabel action={<Link className="btn btn--sm btn--ghost" to="/trip">Details</Link>}>
         Money
       </SectionLabel>
       <div className="pad">
-        <div className="row between" style={{ alignItems: 'baseline' }}>
-          <p className="t-xl num">
-            {money.spent_total.toFixed(0)}
-            <span className="t-md dimmer"> {money.currency}</span>
-          </p>
-          <p className="t-sm dimmer num">{money.spent_today.toFixed(2)} today</p>
-        </div>
-        {money.budget !== null && money.daily && (
-          <>
-            <div className="meter" style={{ margin: 'var(--s-3) 0 var(--s-2)' }}>
-              <span style={{ width: `${Math.min(100, (money.spent_total / money.budget) * 100)}%` }} />
+        <div className="card card--ink" style={{ display: 'flex', gap: 'var(--s-4)', alignItems: 'center' }}>
+          <div className="grow">
+            <MoneyFigure amount={money.spent_total} currency={money.currency} />
+            <p className="t-small dim num" style={{ marginTop: 6 }}>
+              {money.spent_today.toFixed(0)} today
+            </p>
+            {money.budget !== null && money.daily && (
+              <p className="t-small dimmer num" style={{ marginTop: 10 }}>
+                {money.daily.remaining.toFixed(0)} left
+                {money.daily.per_day !== null &&
+                  ` · ${money.daily.per_day.toFixed(0)} a day for ${money.daily.days_left} days`}
+              </p>
+            )}
+          </div>
+          {money.budget !== null && (
+            <div style={{ width: 116, flex: 'none', color: 'var(--paper)' }}>
+              <BudgetArc spent={money.spent_total} budget={money.budget} />
             </div>
-            <Meta
-              parts={[
-                `${money.daily.remaining.toFixed(0)} left`,
-                money.daily.per_day !== null &&
-                  `${money.daily.per_day.toFixed(0)} a day for ${money.daily.days_left} days`,
-              ]}
-            />
-          </>
-        )}
+          )}
+        </div>
       </div>
 
       {data.bookings.length > 0 && (
         <>
-          <SectionLabel>Bookings</SectionLabel>
+          <SectionLabel count={data.bookings.length}>Bookings</SectionLabel>
           <ul className="list">
             {data.bookings.map((booking) => (
               <li key={booking.id}>
-                <div className="item" style={{ cursor: 'default' }}>
+                <div className="item item--static">
+                  <Glyph Icon={Ticket} tint="gold" />
                   <div className="item__body">
                     <p className="item__title clamp-1">{booking.title}</p>
                     <Meta parts={[booking.kind, booking.start_at?.slice(0, 10)]} />
@@ -266,11 +289,16 @@ export default function Home() {
         </>
       )}
 
-      <p className="pad t-sm dimmer" style={{ marginTop: 'var(--s-6)' }}>
+      <p className="pad t-small dimmer" style={{ marginTop: 'var(--s-8)' }}>
         {Object.entries(data.place_counts)
           .map(([status, count]) => `${count} ${status.replace('_', ' ')}`)
           .join(' · ')}
       </p>
+      {queue.failed_sources > 0 && (
+        <p className="pad t-small dimmer row" style={{ marginTop: 'var(--s-2)', gap: 6 }}>
+          <RefreshCw size={13} /> Failed captures stay in Inbox with a retry.
+        </p>
+      )}
     </div>
   )
 }
