@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { addTintPane } from '../lib/mapTint'
 import { CATEGORY_ICON } from './icons'
 
 /**
@@ -40,6 +41,7 @@ export default function MiniMap({
       keyboard: false,
     }).setView([lat, lon], zoom)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map)
+    addTintPane(map)
     const Icon = CATEGORY_ICON[category ?? 'other'] ?? CATEGORY_ICON.other
     L.marker([lat, lon], {
       icon: L.divIcon({

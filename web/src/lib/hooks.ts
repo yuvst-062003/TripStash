@@ -4,6 +4,8 @@ import { ApiError, type Fetched } from './api'
 export interface AsyncState<T> {
   data: T | null
   error: string | null
+  /** HTTP status behind `error`, when there was a response at all. */
+  status: number | null
   loading: boolean
   fromCache: boolean
   reload: () => void
@@ -27,6 +29,7 @@ export function useAsync<T>(
     cacheKey && remembered.has(cacheKey) ? (remembered.get(cacheKey) as T) : null,
   )
   const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<number | null>(null)
   const [loading, setLoading] = useState(enabled)
   const [fromCache, setFromCache] = useState(false)
   const [nonce, setNonce] = useState(0)
@@ -48,10 +51,12 @@ export function useAsync<T>(
         if (cacheKey) remembered.set(cacheKey, result.data)
         setFromCache(result.fromCache)
         setError(null)
+        setStatus(null)
       })
       .catch((err: unknown) => {
         if (cancelled) return
         setError(err instanceof ApiError ? err.message : 'Could not reach TripStash.')
+        setStatus(err instanceof ApiError ? err.status : null)
       })
       .finally(() => !cancelled && setLoading(false))
     return () => {
@@ -60,7 +65,7 @@ export function useAsync<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, nonce, enabled])
 
-  return { data, error, loading, fromCache, reload: () => setNonce((n) => n + 1) }
+  return { data, error, status, loading, fromCache, reload: () => setNonce((n) => n + 1) }
 }
 
 export interface Position {

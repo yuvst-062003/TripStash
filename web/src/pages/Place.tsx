@@ -1,15 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { motion, useScroll, useTransform } from 'motion/react'
-import { api } from '../lib/api'
+import { AnimatePresence, motion, useScroll, useTransform } from 'motion/react'
+import { ApiError, api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
-import type { PlaceStatus } from '../lib/types'
+import { EXIT, useMotionPrefs } from '../lib/motion'
+import { STAMP_PATTERN, tick } from '../lib/haptics'
+import type { FactGroup, PlacePage, PlaceStatus } from '../lib/types'
 import MiniMap from '../components/MiniMap'
 import { STATUS_STAMP, Stamp, StatusStamp } from '../components/Stamp'
 import {
   Banner,
+  CATEGORY_LABEL,
   CacheNote,
+  Empty,
   ErrorNote,
   Freshness,
   Glyph,
@@ -18,9 +22,12 @@ import {
   MotionList,
   MotionRow,
   Note,
+  PROVENANCE_LABEL,
   Pill,
+  SOURCE_LABEL,
   SectionLabel,
-  SkeletonRows,
+  checkedAgo,
+  fmtDay,
   knowledgeTint,
   pairText,
   stampToneFor,
@@ -30,6 +37,8 @@ import {
   ArrowLeft,
   ArrowUpRight,
   CalendarDays,
+  Check,
+  Copy,
   Flag,
   KNOWLEDGE_ICON,
   Navigation,
@@ -38,45 +47,143 @@ import {
 } from '../components/icons'
 
 const STATUSES: PlaceStatus[] = ['saved', 'must_visit', 'planned', 'visited', 'archived']
+const FACT_LABEL: Record<string, string> = {
+  hours: 'Hours',
+  price: 'Price level',
+  phone: 'Phone',
+  website: 'Website',
+  address: 'Address',
+  access: 'Getting in',
+  ticket: 'Tickets',
+  closure: 'Closure',
+}
+const PRICE_LABEL: Record<string, string> = {
+  $: 'cheap',
+  $$: 'mid-range',
+  $$$: 'pricey',
+  $$$$: 'a splurge',
+}
+/** Provider adapters by display name; anything unlisted (the test double) is not shown. */
+const PROVIDER_NAME: Record<string, string> = {
+  google: 'Google Maps',
+  osm: 'OpenStreetMap',
+  foursquare: 'Foursquare',
+}
+
+const localToday = () => new Date().toLocaleDateString('en-CA')
+const norm = (text: string | null | undefined) =>
+  (text ?? '')
+    .trim()
+    .replace(/^[“"']+|[”"'…]+$/g, '')
+    .toLowerCase()
+
+/** The value of a live fact, pressable when it is somewhere you can go. */
+function FactValue({ fact }: { fact: FactGroup }) {
+  const value = fact.primary.value
+  if (fact.kind === 'website') {
+    return (
+      <a href={value} target="_blank" rel="noreferrer" className="teal" style={{ wordBreak: 'break-all' }}>
+        {value.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+      </a>
+    )
+  }
+  if (fact.kind === 'phone') return <a href={`tel:${value.replace(/\s+/g, '')}`}>{value}</a>
+  if (fact.kind === 'price' && PRICE_LABEL[value]) {
+    return (
+      <>
+        <span className="num">{value}</span>
+        <span className="dim"> · {PRICE_LABEL[value]}</span>
+      </>
+    )
+  }
+  return <>{value}</>
+}
 
 /** The smart place page: saved evidence and live facts, deliberately separated. */
 export default function Place() {
   const { tripPlaceId } = useParams<{ tripPlaceId: string }>()
   const { position, openAsk } = useApp()
   const navigate = useNavigate()
-  const [busy, setBusy] = useState(false)
+  const { reduced, spring, stamp } = useMotionPrefs()
   const { scrollY } = useScroll()
-  // The compact bar fades in as the hero title scrolls under it.
+  // The compact bar's glass and title fade in as the big title scrolls under
+  // it; the big title fades out over the same window so one name shows at a time.
   const barOpacity = useTransform(scrollY, [180, 240], [0, 1])
-  const barY = useTransform(scrollY, [180, 240], [-8, 0])
+  const barY = useTransform(scrollY, [180, 240], reduced ? [0, 0] : [-8, 0])
+  const titleOpacity = useTransform(scrollY, [180, 240], [1, 0])
   // The map scrolls at half speed under the title: depth without a layout change.
-  const heroY = useTransform(scrollY, [0, 300], [0, 110])
+  const heroY = useTransform(scrollY, [0, 300], reduced ? [0, 0] : [0, 110])
 
   const page = useAsync(
     () => api.place(tripPlaceId!, { lat: position?.lat, lon: position?.lon }),
     [tripPlaceId, position?.lat, position?.lon],
   )
 
+  // Status and favourite answer the tap at once; the server's word arrives after.
+  const [statusOverride, setStatusOverride] = useState<PlaceStatus | null>(null)
+  const [favOverride, setFavOverride] = useState<boolean | null>(null)
+  const [pending, setPending] = useState<PlaceStatus | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [planBusy, setPlanBusy] = useState(false)
+  const [planNote, setPlanNote] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    setStatusOverride(null)
+    setFavOverride(null)
+  }, [page.data])
+
   useScreenContext(
     tripPlaceId ? { surface: 'place', tripPlaceId, label: page.data?.header.name } : null,
   )
 
+  // A deep link has nothing behind it: Back goes to the library instead of out of the app.
+  const canGoBack = (window.history.state?.idx ?? 0) > 0
+  const goBack = () => (canGoBack ? navigate(-1) : navigate('/saved?tab=places', { replace: true }))
+  const backButton = (
+    <button className="icon-btn icon-btn--glass" onClick={goBack} aria-label="Back">
+      <ArrowLeft size={19} />
+    </button>
+  )
+
   if (page.loading && !page.data) {
     return (
-      <div className="screen">
+      <div className="screen screen--loading" aria-busy>
         <div className="skeleton" style={{ height: 260, borderRadius: 0 }} />
-        <SkeletonRows rows={4} />
+        <div className="pad" style={{ marginTop: 'var(--s-4)' }}>
+          <div className="skeleton" style={{ height: 36, width: '70%' }} />
+          <div className="skeleton" style={{ height: 16, width: '50%', marginTop: 10 }} />
+          <div className="skeleton" style={{ height: 44, marginTop: 'var(--s-5)' }} />
+        </div>
       </div>
     )
   }
-  if (page.error) {
+  if (page.error || !page.data) {
+    const gone = page.status === 404
     return (
       <div className="screen">
-        <ErrorNote message={page.error} onRetry={page.reload} />
+        <header className="topbar">
+          {backButton}
+          <h2 className="topbar__title clamp-1 grow" style={{ fontSize: '1.125rem' }}>
+            Place
+          </h2>
+        </header>
+        {gone ? (
+          <Empty
+            stamp="Gone"
+            title="This place isn’t in your trip any more."
+            body="It may have been merged into another place or removed."
+            action={
+              <Link className="btn btn--ghost" to="/saved?tab=places">
+                Go to Saved
+              </Link>
+            }
+          />
+        ) : (
+          <ErrorNote message={page.error ?? 'Could not load this place.'} onRetry={page.reload} />
+        )}
       </div>
     )
   }
-  if (!page.data) return null
 
   const {
     header,
@@ -89,19 +196,86 @@ export default function Place() {
     actions,
     suggested_questions: questions,
   } = page.data
+  const status = statusOverride ?? header.status
+  const favourite = favOverride ?? header.is_favourite
+  const today = localToday()
+  const todayRows = plan.filter((item) => item.on_date === today)
+  const inToday = todayRows.length > 0
 
-  async function setStatus(status: PlaceStatus) {
-    setBusy(true)
-    await api.updatePlace(tripPlaceId!, { status })
-    setBusy(false)
-    page.reload()
+  async function changeStatus(next: PlaceStatus) {
+    if (pending || next === status) return
+    const previous = status
+    setStatusOverride(next)
+    setPending(next)
+    setActionError(null)
+    try {
+      await api.updatePlace(tripPlaceId!, { status: next })
+      // A visited stamp with no visit behind it would be a stamp on nothing.
+      if (next === 'visited' && record.visits.length === 0) {
+        await api.recordVisit(tripPlaceId!, { visited_on: today })
+      }
+      window.setTimeout(() => tick(STAMP_PATTERN), reduced ? 0 : 170)
+      page.reload()
+    } catch (err) {
+      setStatusOverride(previous)
+      setActionError(
+        err instanceof ApiError
+          ? 'Couldn’t change the status. Try again.'
+          : 'Couldn’t change the status. Check your connection and try again.',
+      )
+    } finally {
+      setPending(null)
+    }
   }
 
-  async function addToToday() {
-    setBusy(true)
-    await api.addToPlan({ trip_place_id: tripPlaceId, on_date: new Date().toISOString().slice(0, 10) })
-    setBusy(false)
-    page.reload()
+  async function toggleFavourite() {
+    const next = !favourite
+    setFavOverride(next)
+    setActionError(null)
+    try {
+      await api.updatePlace(tripPlaceId!, { is_favourite: next })
+      page.reload()
+    } catch {
+      setFavOverride(!next)
+      setActionError('Couldn’t save the favourite. Check your connection and try again.')
+    }
+  }
+
+  async function togglePlan() {
+    if (planBusy) return
+    setPlanBusy(true)
+    setActionError(null)
+    try {
+      if (inToday) {
+        for (const row of todayRows) await api.removeFromPlan(row.id)
+        // The plan promoted it; leaving the plan lets it go back.
+        if (status === 'planned' && plan.length === todayRows.length) {
+          await api.updatePlace(tripPlaceId!, { status: 'saved' })
+        }
+        setPlanNote(null)
+      } else {
+        await api.addToPlan({ trip_place_id: tripPlaceId, on_date: today })
+        tick()
+        setPlanNote('Added to today’s plan')
+      }
+      page.reload()
+    } catch {
+      setActionError(
+        inToday
+          ? 'Couldn’t take it off today’s plan. Check your connection and try again.'
+          : 'Couldn’t add it to today’s plan. Check your connection and try again.',
+      )
+    } finally {
+      setPlanBusy(false)
+    }
+  }
+
+  function copyCoordinates() {
+    const text = `${header.coordinates.lat.toFixed(5)}, ${header.coordinates.lon.toFixed(5)}`
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    })
   }
 
   const distance =
@@ -111,18 +285,31 @@ export default function Place() {
         ? `${Math.round(header.distance_km)} km away`
         : null
 
+  // The reason is usually the creator's own sentence. Said once, with its
+  // author, rather than twice in gold 200px apart.
+  const echo = overview.why_saved
+    ? sources.find((source) => source.quote && norm(source.quote) === norm(overview.why_saved))
+    : undefined
+  const sourceTitle = (source: PlacePage['saved_content'][number]) =>
+    source.title || source.url || SOURCE_LABEL[source.kind] || source.kind
+  const attribution = (source: PlacePage['saved_content'][number]) =>
+    [source.author, source.title].filter(Boolean).join(', ') || sourceTitle(source)
+  const age = (checkedAt: string) =>
+    page.fromCache ? 'checked before you went offline' : checkedAgo(checkedAt)
+
   return (
     <div className="screen">
-      <motion.header
-        className="topbar topbar--divided"
-        style={{ position: 'fixed', left: 0, right: 0, opacity: barOpacity, y: barY, pointerEvents: 'none' }}
-        aria-hidden
-      >
-        <span style={{ width: 44 }} />
-        <h2 className="topbar__title clamp-1 grow" style={{ fontSize: '1.125rem' }}>
+      <header className="topbar topbar--float">
+        <motion.div className="topbar__glass" style={{ opacity: barOpacity }} aria-hidden />
+        {backButton}
+        <motion.h2
+          className="topbar__title clamp-1 grow"
+          style={{ fontSize: '1.125rem', opacity: barOpacity, y: barY }}
+          aria-hidden
+        >
           {header.name}
-        </h2>
-      </motion.header>
+        </motion.h2>
+      </header>
 
       <motion.div className="hero-map" style={{ y: heroY }}>
         <MiniMap
@@ -133,40 +320,48 @@ export default function Place() {
           fill
         />
         <div className="hero-map__overlay" />
-        <button className="icon-btn icon-btn--glass hero-map__back" onClick={() => navigate(-1)} aria-label="Back">
-          <ArrowLeft size={19} />
-        </button>
+        {/* The status stamp lands in the corner each time it changes: this screen's one moment. */}
         <div className="hero-map__stamp">
-          <StatusStamp status={header.status} size="lg" rotate={8} />
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={status}
+              initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 1.9, rotate: -22 }}
+              animate={{ opacity: 1, scale: 1, rotate: 8 }}
+              exit={{ opacity: 0, transition: EXIT }}
+              transition={{ ...stamp, opacity: { duration: 0.06, ease: 'linear' } }}
+              style={{ display: 'inline-flex', transformOrigin: 'center' }}
+            >
+              <StatusStamp status={status} size="lg" rotate={0} />
+            </motion.div>
+          </AnimatePresence>
         </div>
       </motion.div>
 
       <div className="place-title">
         <div className="row between row--top">
-          <h1 className="t-display grow" style={{ fontSize: 'clamp(2rem, 9vw, 2.75rem)' }}>
-            {header.name}
-          </h1>
-          <motion.button
-            className="icon-btn icon-btn--raised"
-            whileTap={{ scale: 0.9 }}
-            aria-label={header.is_favourite ? 'Remove favourite' : 'Mark favourite'}
-            aria-pressed={header.is_favourite}
-            onClick={() =>
-              api.updatePlace(tripPlaceId!, { is_favourite: !header.is_favourite }).then(page.reload)
-            }
-            style={header.is_favourite ? { color: 'var(--tint-view)' } : undefined}
+          <motion.h1
+            className="t-display grow"
+            style={{ fontSize: 'clamp(2rem, 9vw, 2.75rem)', opacity: titleOpacity }}
           >
-            <Star size={19} fill={header.is_favourite ? 'currentColor' : 'none'} />
-          </motion.button>
+            {header.name}
+          </motion.h1>
+          <button
+            className="icon-btn icon-btn--glass"
+            aria-label={favourite ? 'Remove favourite' : 'Mark favourite'}
+            aria-pressed={favourite}
+            onClick={toggleFavourite}
+            style={favourite ? { color: 'var(--tint-view)' } : undefined}
+          >
+            <Star size={19} fill={favourite ? 'currentColor' : 'none'} />
+          </button>
         </div>
         <Meta
           wrap
           className="mt"
           parts={[
-            header.category,
-            [header.city, header.country].filter(Boolean).join(', '),
+            CATEGORY_LABEL[header.category] ?? header.category,
+            header.address ?? [header.city, header.country].filter(Boolean).join(', '),
             distance,
-            `${header.coordinates.lat.toFixed(4)}, ${header.coordinates.lon.toFixed(4)}`,
           ]}
         />
 
@@ -190,22 +385,66 @@ export default function Place() {
             <Sparkles size={16} strokeWidth={2.1} />
             Ask
           </button>
-          <button className="btn btn--ghost" onClick={addToToday} disabled={busy} aria-label="Add to today">
-            <CalendarDays size={17} strokeWidth={2.1} />
-          </button>
         </div>
+        <button
+          className="btn btn--ghost btn--block"
+          style={{ marginTop: 'var(--s-2)' }}
+          onClick={togglePlan}
+          aria-pressed={inToday}
+          aria-busy={planBusy}
+        >
+          {inToday ? <Check size={17} strokeWidth={2.4} /> : <CalendarDays size={17} strokeWidth={2.1} />}
+          {inToday ? 'In today’s plan' : 'Add to today'}
+        </button>
+        <div aria-live="polite">
+          {planNote && inToday && (
+            <p className="t-small dim" style={{ marginTop: 'var(--s-2)', textAlign: 'center' }}>
+              {planNote} ·{' '}
+              <Link to="/trip?section=plan" className="teal">
+                View plan
+              </Link>
+            </p>
+          )}
+        </div>
+        {actionError && (
+          <div style={{ marginTop: 'var(--s-3)' }} role="alert">
+            <Note tone="danger">{actionError}</Note>
+          </div>
+        )}
       </div>
 
       <CacheNote visible={page.fromCache} />
+
+      {plan.length > 0 && (
+        <>
+          <SectionLabel count={plan.length > 1 ? plan.length : undefined}>Planned</SectionLabel>
+          <ul className="list">
+            {plan.map((item) => (
+              <li key={item.id}>
+                <div className="item item--static">
+                  <Glyph Icon={CalendarDays} tint="teal" />
+                  <div className="item__body">
+                    <p className="t-head">
+                      {item.on_date === today ? 'Today' : fmtDay(item.on_date)}
+                      {item.start_time && <span className="num"> · {item.start_time}</span>}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       <SectionLabel>Why you saved it</SectionLabel>
       <div className="pad">
         {overview.why_saved ? (
           <blockquote className="quote" style={{ whiteSpace: 'pre-line' }}>
-            {overview.why_saved}
+            “{overview.why_saved.trim().replace(/^[“"]+|[”"]+$/g, '')}”
+            {echo && <span className="quote__from">— {attribution(echo)}</span>}
           </blockquote>
         ) : (
-          <p className="t-small dimmer">No reason was recorded for this one.</p>
+          <p className="t-small dimmer">You didn’t add a reason.</p>
         )}
         {overview.notes && (
           <p className="t-small dim" style={{ marginTop: 'var(--s-3)' }}>
@@ -214,7 +453,7 @@ export default function Place() {
         )}
       </div>
 
-      <SectionLabel count={sources.length}>Saved content</SectionLabel>
+      <SectionLabel count={sources.length > 1 ? sources.length : undefined}>Saved content</SectionLabel>
       {sources.length === 0 ? (
         <p className="pad t-small dimmer">No source is attached to this place yet.</p>
       ) : (
@@ -223,17 +462,18 @@ export default function Place() {
             <li key={source.source_id}>
               <div className="item item--static">
                 <div className="item__body">
-                  <p className="item__title clamp-1">{source.title || source.url || source.kind}</p>
+                  <p className="item__title clamp-2">{sourceTitle(source)}</p>
                   <Meta
+                    wrap
                     parts={[
-                      source.provenance,
+                      PROVENANCE_LABEL[source.provenance] ?? source.provenance,
                       source.author,
                       source.published_on
-                        ? `published ${source.published_on}`
-                        : `captured ${source.captured_at.slice(0, 10)}`,
+                        ? `Published ${fmtDay(source.published_on)}`
+                        : `Saved ${fmtDay(source.captured_at)}`,
                     ]}
                   />
-                  {source.quote && (
+                  {source.quote && source !== echo && (
                     <blockquote className="quote" style={{ marginTop: 'var(--s-3)' }}>
                       “{source.quote}”
                     </blockquote>
@@ -264,65 +504,84 @@ export default function Place() {
         </p>
       ) : (
         <ul className="list">
-          {live.facts.map((fact) => (
-            <li key={fact.kind}>
-              <div className="item item--static">
-                <div className="item__body">
-                  <div className="row between" style={{ gap: 'var(--s-2)' }}>
-                    <p className="t grow">
-                      <span className="dimmer" style={{ textTransform: 'capitalize' }}>
-                        {fact.kind}{' '}
-                      </span>
-                      {fact.primary.value}
+          {live.facts.map((fact) => {
+            const primary = fact.primary
+            return (
+              <li key={fact.kind}>
+                <div className="item item--static">
+                  <div className="item__body">
+                    <p className="t-small dimmer">
+                      {FACT_LABEL[fact.kind] ?? fact.kind.charAt(0).toUpperCase() + fact.kind.slice(1)}
                     </p>
-                    <Freshness status={fact.primary.freshness} label={fact.primary.age_label} />
+                    <p className="t" style={{ marginTop: 2 }}>
+                      <FactValue fact={fact} />
+                    </p>
+                    {/* Fresh is the expected case and stays in the grey line; only ageing gets a stamp. */}
+                    <Meta
+                      wrap
+                      parts={[
+                        PROVENANCE_LABEL[primary.provenance] ?? primary.provenance,
+                        primary.source_label && PROVIDER_NAME[primary.source_label],
+                        primary.freshness === 'fresh' && age(primary.checked_at),
+                      ]}
+                    />
+                    {primary.freshness !== 'fresh' && (
+                      <div className="mt">
+                        <Freshness status={primary.freshness} label={page.fromCache ? 'checked before you went offline' : primary.age_label} />
+                      </div>
+                    )}
+                    {fact.has_conflict && (
+                      <div style={{ marginTop: 'var(--s-2)' }}>
+                        <Banner tone="warn">
+                          {fact.conflict_note}
+                          <ul style={{ marginTop: 4 }}>
+                            {fact.alternatives.map((alt, index) => (
+                              <li key={index}>
+                                {alt.value} — {PROVENANCE_LABEL[alt.provenance] ?? alt.provenance},{' '}
+                                {alt.age_label}
+                              </li>
+                            ))}
+                          </ul>
+                        </Banner>
+                      </div>
+                    )}
                   </div>
-                  <Meta parts={[fact.primary.provenance, fact.primary.source_label]} />
-                  {fact.has_conflict && (
-                    <div style={{ marginTop: 'var(--s-2)' }}>
-                      <Banner tone="warn">
-                        {fact.conflict_note}
-                        <ul style={{ marginTop: 4 }}>
-                          {fact.alternatives.map((alt, index) => (
-                            <li key={index}>
-                              {alt.value} — {alt.provenance}, {alt.age_label}
-                            </li>
-                          ))}
-                        </ul>
-                      </Banner>
-                    </div>
-                  )}
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       )}
-      <p className="pad t-small dimmer" style={{ marginTop: 'var(--s-3)' }}>
-        Weather {live.weather.summary.toLowerCase()}, {Math.round(live.weather.temperature_c)}°C ·{' '}
-        {Math.round(live.weather.precipitation_probability * 100)}% rain · checked{' '}
-        {live.weather.checked_at.slice(11, 16)} UTC
+      {/* Today's weather is the one gold line of live information. */}
+      <p className="pad t-small" style={{ marginTop: 'var(--s-3)', color: 'var(--tint-view)', fontWeight: 600 }}>
+        Today: {live.weather.summary.toLowerCase()}, {Math.round(live.weather.temperature_c)}°C,{' '}
+        {Math.round(live.weather.precipitation_probability * 100)}% chance of rain
+        <span className="dimmer" style={{ fontWeight: 400 }}>
+          {' '}
+          · {age(live.weather.checked_at)}
+        </span>
       </p>
 
       {knowledge.length > 0 && (
         <>
-          <SectionLabel count={knowledge.length}>Related knowledge</SectionLabel>
-          <MotionList>
-            {knowledge.map((item) => {
+          <SectionLabel count={knowledge.length > 1 ? knowledge.length : undefined}>
+            Related knowledge
+          </SectionLabel>
+          <MotionList animateIn={false}>
+            {knowledge.map((item, index) => {
               const Icon = KNOWLEDGE_ICON[item.type] ?? KNOWLEDGE_ICON.general
               const tint = knowledgeTint(item.type)
               const { headline, detail } = pairText(item.title, item.body)
               return (
                 <MotionRow key={item.id}>
                   <div className="item item--static">
-                    <Glyph Icon={Icon} tint={tint} />
                     <div className="item__body">
-                      <div className="row between row--top" style={{ gap: 'var(--s-2)' }}>
-                        <p className="item__title grow">{headline}</p>
-                        <Stamp tone={stampToneFor(tint)} size="sm" rotate={-5}>
-                          {KNOWLEDGE_LABEL[item.type]}
-                        </Stamp>
-                      </div>
+                      <Stamp tone={stampToneFor(tint)} size="sm" Icon={Icon} rotate={index % 2 ? 4 : -6}>
+                        {KNOWLEDGE_LABEL[item.type]}
+                      </Stamp>
+                      <p className="item__title clamp-3" style={{ marginTop: 6 }}>
+                        {headline}
+                      </p>
                       {detail && <p className="t-small dim mt">{detail}</p>}
                       {item.requires_official_verification && (
                         <div style={{ marginTop: 6 }}>
@@ -354,59 +613,46 @@ export default function Place() {
       </div>
 
       <SectionLabel>Status</SectionLabel>
-      <div className="rail" style={{ paddingBlock: 'var(--s-2)', gap: 'var(--s-3)' }}>
-        {STATUSES.map((status, index) => {
-          const meta = STATUS_STAMP[status]
-          const on = header.status === status
+      <div className="rail rail--wrap" role="group" aria-label="Status" style={{ paddingBlock: 'var(--s-1)' }}>
+        {STATUSES.map((option, index) => {
+          const meta = STATUS_STAMP[option]
+          const on = status === option
           return (
-            <button
-              key={status}
+            <motion.button
+              key={option}
               type="button"
               className="stamp-btn"
-              onClick={() => setStatus(status)}
-              disabled={busy}
+              onClick={() => changeStatus(option)}
               aria-pressed={on}
+              aria-busy={pending === option}
+              whileTap={{ scale: 0.94 }}
+              transition={spring}
             >
               <Stamp tone={meta.tone} Icon={meta.Icon} filled={on} rotate={index % 2 ? 4 : -5}>
                 {meta.label}
               </Stamp>
-            </button>
+            </motion.button>
           )
         })}
       </div>
-
-      {plan.length > 0 && (
-        <>
-          <SectionLabel count={plan.length}>Planned</SectionLabel>
-          <ul className="list">
-            {plan.map((item) => (
-              <li key={item.id}>
-                <div className="item item--static">
-                  <Glyph Icon={CalendarDays} tint="teal" />
-                  <div className="item__body">
-                    <p className="t-head num">
-                      {item.on_date}
-                      {item.start_time && ` · ${item.start_time}`}
-                    </p>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      <p className="sr-only" aria-live="polite">
+        Status: {STATUS_STAMP[status].label}
+      </p>
 
       {record.visits.length > 0 && (
         <>
-          <SectionLabel count={record.visits.length}>Your visits</SectionLabel>
+          <SectionLabel count={record.visits.length > 1 ? record.visits.length : undefined}>
+            Your visits
+          </SectionLabel>
           <ul className="list">
             {record.visits.map((visit) => (
               <li key={visit.id}>
                 <div className="item item--static">
+                  <Glyph Icon={Check} tint="teal" />
                   <div className="item__body">
-                    <p className="t-head num">
-                      {visit.visited_on}
-                      {visit.rating && ` · ${visit.rating}/5`}
+                    <p className="t-head">
+                      {visit.visited_on === today ? 'Today' : fmtDay(visit.visited_on)}
+                      {visit.rating && <span className="num"> · {visit.rating}/5</span>}
                     </p>
                     {visit.notes && <p className="t-small dim">{visit.notes}</p>}
                   </div>
@@ -424,12 +670,27 @@ export default function Place() {
             <a className="item" href={action.url} target="_blank" rel="noreferrer">
               <div className="item__body">
                 <p className="item__title">{action.label}</p>
-                {action.note && <Meta parts={[action.note]} />}
+                {action.note && <Meta wrap parts={[action.note]} />}
               </div>
               <ArrowUpRight size={17} className="item__chev" />
             </a>
           </li>
         ))}
+        <li>
+          <button type="button" className="item" style={{ width: '100%', textAlign: 'start' }} onClick={copyCoordinates}>
+            <div className="item__body">
+              <p className="item__title">{copied ? 'Copied' : 'Copy coordinates'}</p>
+              <Meta
+                parts={[`${header.coordinates.lat.toFixed(5)}, ${header.coordinates.lon.toFixed(5)}`]}
+              />
+            </div>
+            {copied ? (
+              <Check size={17} className="item__chev" style={{ color: 'var(--teal-ink)' }} />
+            ) : (
+              <Copy size={17} className="item__chev" />
+            )}
+          </button>
+        </li>
       </ul>
       <p className="pad t-small dimmer" style={{ marginTop: 'var(--s-3)' }}>
         Opening any of these hands you to that service. TripStash never completes a booking or a
@@ -438,7 +699,7 @@ export default function Place() {
 
       <div className="pad" style={{ marginTop: 'var(--s-6)' }}>
         <Link className="btn btn--block btn--ghost" to="/map">
-          Back to map
+          Open on map
         </Link>
       </div>
     </div>

@@ -9,6 +9,9 @@ import { applyPrefs } from './lib/prefs'
 
 // Before the first paint, so a saved dark theme never flashes light.
 applyPrefs()
+// Pages slide out before the next one arrives; App restores scroll itself
+// once the exit is done, so the leaving page holds still.
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {

@@ -5,11 +5,13 @@ import { Link } from 'react-router-dom'
 import { AnimatePresence, animate, motion, useMotionValue, type PanInfo } from 'motion/react'
 import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
+import { addTintPane } from '../lib/mapTint'
 import { useAsync } from '../lib/hooks'
 import { useMotionPrefs } from '../lib/motion'
 import type { MapFeature, PlaceStatus } from '../lib/types'
 import { STATUS_STAMP, Stamp, StatusStamp } from '../components/Stamp'
 import {
+  CATEGORY_LABEL,
   CacheNote,
   Empty,
   ErrorNote,
@@ -36,19 +38,6 @@ import {
 
 const STATUS_FILTERS: PlaceStatus[] = ['saved', 'must_visit', 'planned', 'visited']
 const CATEGORY_FILTERS = ['attraction', 'restaurant', 'cafe', 'accommodation', 'nature', 'viewpoint']
-const CATEGORY_LABEL: Record<string, string> = {
-  attraction: 'Attraction',
-  restaurant: 'Restaurant',
-  cafe: 'Café',
-  bar: 'Bar',
-  accommodation: 'Stay',
-  nature: 'Nature',
-  viewpoint: 'Viewpoint',
-  activity: 'Activity',
-  transport: 'Transport',
-  shop: 'Shop',
-  other: 'Place',
-}
 
 /** Sheet snap points as a share of the viewport — the map-app pattern. */
 const SNAP = { peek: 0.28, half: 0.55, full: 0.9 } as const
@@ -215,18 +204,7 @@ export default function MapScreen() {
     // control and above the sheet, so nothing overlaps it.
     map.attributionControl.setPosition('bottomright').setPrefix('')
     L.tileLayer(TILES, { maxZoom: 19, attribution: ATTRIBUTION }).addTo(map)
-    // A tint pane pulls the tiles into the palette (multiply in light,
-    // lighten in dark), below the markers.
-    const tint = map.createPane('tint')
-    tint.style.zIndex = '250'
-    tint.style.pointerEvents = 'none'
-    L.rectangle(
-      [
-        [-85, -180],
-        [85, 180],
-      ],
-      { pane: 'tint', stroke: false, fillOpacity: 1, interactive: false, className: 'map-tint' },
-    ).addTo(map)
+    addTintPane(map)
     clustersRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
     map.on('zoomend', () => layoutPins())

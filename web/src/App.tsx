@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { NavLink, Navigate, Route, Routes, useLocation as useRouterLocation } from 'react-router-dom'
+import {
+  NavLink,
+  Navigate,
+  Route,
+  Routes,
+  useLocation as useRouterLocation,
+  useNavigationType,
+} from 'react-router-dom'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import { api, token } from './lib/api'
 import { AppContext, type AskSeed, type ScreenContext } from './lib/context'
@@ -85,13 +92,15 @@ const PAGE: Variants = {
   exit: (dir: number) => ({ opacity: 0, x: -14 * dir, transition: { duration: 0.12, ease: EASE_IN } }),
 }
 
-function Page({ children }: { children: ReactNode }) {
+function Page({ children, dir }: { children: ReactNode; dir: number }) {
   const { reduced } = useMotionPrefs()
   const cold = useColdLoad()
   return (
     <motion.div
       className="page"
       variants={PAGE}
+      // `custom` on AnimatePresence reaches only the exit; the entrance needs its own.
+      custom={dir}
       initial={reduced || cold ? false : 'enter'}
       animate="center"
       exit={reduced ? undefined : 'exit'}
@@ -112,9 +121,16 @@ export default function App() {
   // Direction of travel, decided once per route change and shared with the exiting page.
   const prevPath = useRef(route.pathname)
   const dir = useRef<1 | -1>(1)
+  // Scroll offsets by history entry: the browser's own restoration would move
+  // the page while it is still on its way out, so it is done here instead.
+  const navType = useNavigationType()
+  const scrolls = useRef(new Map<string, number>())
+  const prevKey = useRef(route.key)
   if (prevPath.current !== route.pathname) {
     dir.current = direction(prevPath.current, route.pathname)
+    scrolls.current.set(prevKey.current, window.scrollY)
     prevPath.current = route.pathname
+    prevKey.current = route.key
   }
   const { state: location, request: requestLocation, setManual: setManualLocation } = useLocation()
   const plusRef = useRef<PlusIconHandle>(null)
@@ -194,14 +210,23 @@ export default function App() {
           </div>
         )}
 
-        <AnimatePresence mode="wait" custom={dir.current}>
+        <AnimatePresence
+          mode="wait"
+          custom={dir.current}
+          onExitComplete={() => {
+            const y = navType === 'POP' ? (scrolls.current.get(route.key) ?? 0) : 0
+            window.scrollTo({ top: y, behavior: 'instant' })
+            // Once more when the arriving page has laid out, so a restored offset is not clamped.
+            requestAnimationFrame(() => window.scrollTo({ top: y, behavior: 'instant' }))
+          }}
+        >
           <Routes location={route} key={route.pathname}>
-            <Route path="/" element={<Page><Home /></Page>} />
-            <Route path="/map" element={<Page><MapScreen /></Page>} />
-            <Route path="/saved" element={<Page><Saved /></Page>} />
-            <Route path="/trip" element={<Page><TripScreen /></Page>} />
-            <Route path="/trip/journey" element={<Page><Journey /></Page>} />
-            <Route path="/places/:tripPlaceId" element={<Page><Place /></Page>} />
+            <Route path="/" element={<Page dir={dir.current}><Home /></Page>} />
+            <Route path="/map" element={<Page dir={dir.current}><MapScreen /></Page>} />
+            <Route path="/saved" element={<Page dir={dir.current}><Saved /></Page>} />
+            <Route path="/trip" element={<Page dir={dir.current}><TripScreen /></Page>} />
+            <Route path="/trip/journey" element={<Page dir={dir.current}><Journey /></Page>} />
+            <Route path="/places/:tripPlaceId" element={<Page dir={dir.current}><Place /></Page>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AnimatePresence>

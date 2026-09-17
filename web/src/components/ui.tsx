@@ -36,6 +36,40 @@ export const KNOWLEDGE_LABEL: Record<string, string> = {
   general: 'Tip',
 }
 
+/** Place categories as words, not keys. */
+export const CATEGORY_LABEL: Record<string, string> = {
+  attraction: 'Attraction',
+  restaurant: 'Restaurant',
+  cafe: 'Café',
+  bar: 'Bar',
+  accommodation: 'Stay',
+  nature: 'Nature',
+  viewpoint: 'Viewpoint',
+  activity: 'Activity',
+  transport: 'Transport',
+  shop: 'Shop',
+  other: 'Place',
+}
+
+/** The API's timestamps are UTC; some arrive without saying so. */
+export function parseIso(value: string): Date {
+  const hasZone = /(?:Z|[+-]\d\d:?\d\d)$/.test(value)
+  return new Date(hasZone || value.length <= 10 ? value : `${value}Z`)
+}
+
+/** "checked just now", "checked 3 h ago", "checked 5 d ago". */
+export function checkedAgo(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const then = parseIso(iso).getTime()
+  if (Number.isNaN(then)) return null
+  const minutes = Math.max(0, Math.round((Date.now() - then) / 60_000))
+  if (minutes < 2) return 'checked just now'
+  if (minutes < 60) return `checked ${minutes} min ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `checked ${hours} h ago`
+  return `checked ${Math.round(hours / 24)} d ago`
+}
+
 /** What a capture was, in the traveller's words rather than the pipeline's. */
 export const SOURCE_LABEL: Record<string, string> = {
   link: 'Link',
@@ -72,7 +106,7 @@ export const CHANNEL_LABEL: Record<string, string> = {
 /** "18 Mar", or "18 Mar 2025" when it is not this year. */
 export function fmtDay(value: string | null | undefined): string | null {
   if (!value) return null
-  const date = new Date(value.length === 10 ? `${value}T00:00:00` : value)
+  const date = value.length === 10 ? new Date(`${value}T00:00:00`) : parseIso(value)
   if (Number.isNaN(date.getTime())) return null
   const sameYear = date.getFullYear() === new Date().getFullYear()
   return date.toLocaleDateString(undefined, {

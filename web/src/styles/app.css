@@ -150,6 +150,18 @@ code { font: inherit; font-weight: 600; }
   transition: border-color var(--dur) var(--ease);
 }
 .topbar--divided { border-bottom-color: var(--line); }
+/* A bar over a hero: only the glass fades in; the back button is always live. */
+.topbar--float { position: fixed; left: 0; right: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; border: 0; pointer-events: none; }
+.topbar--float > * { position: relative; }
+.topbar--float .icon-btn { pointer-events: auto; }
+.topbar__glass {
+  position: absolute !important;
+  inset: 0;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
 .topbar__title { font: var(--title); font-variation-settings: 'opsz' 48, 'wdth' var(--wdth-title); letter-spacing: -0.02em; }
 
 /* Section title: a real heading, not a caps label. */
@@ -181,6 +193,8 @@ code { font: inherit; font-weight: 600; }
 }
 .rail::-webkit-scrollbar { display: none; }
 .rail > * { flex: 0 0 auto; display: flex; scroll-snap-align: start; }
+/* A short set that should all be visible: two rows rather than a hidden tail. */
+.rail--wrap { flex-wrap: wrap; overflow: visible; row-gap: var(--s-2); }
 
 /* ---------------------------------------------------------------------------
    Lists
@@ -870,6 +884,7 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   height: 260px;
   background: var(--paper-2);
   overflow: hidden;
+  isolation: isolate; /* its panes and overlay never compete with the bar or title */
 }
 .hero-map__overlay {
   position: absolute;
@@ -902,16 +917,10 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
   right: var(--s-4);
   z-index: 401;
 }
-.hero-map__back {
-  position: absolute;
-  top: calc(var(--s-3) + env(safe-area-inset-top));
-  left: var(--s-3);
-  z-index: 401;
-}
 .place-title {
   margin-top: -56px;
   position: relative;
-  z-index: 402;
+  z-index: 1;
   padding-inline: var(--s-4);
 }
 
@@ -1150,11 +1159,11 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
 .stamp--warn { --stamp-colour: var(--warn); }
 .stamp--paper { --stamp-colour: var(--paper); }
 
-.stamp--filled { background: var(--stamp-colour); color: var(--paper); }
-.stamp-btn { background: none; border: 0; padding: 6px 4px; cursor: pointer; border-radius: 10px; }
-.stamp-btn:disabled { opacity: 0.5; cursor: wait; }
-.stamp-btn:active .stamp { transform: rotate(var(--stamp-rotate, -6deg)) scale(0.94); }
-.stamp--filled::after { border-color: var(--paper); }
+.stamp--filled { background: var(--stamp-colour); color: var(--on-stamp); }
+/* A stamp you can press: 44px tall, the press handled by motion (no CSS transform to fight). */
+.stamp-btn { display: inline-flex; align-items: center; min-height: 44px; background: none; border: 0; padding: 8px 4px; cursor: pointer; border-radius: 10px; }
+.stamp-btn[aria-busy='true'] .stamp { opacity: 0.6; }
+.stamp--filled::after { border-color: var(--on-stamp); }
 .stamp--flat { transform: none; }
 
 /* ---------------------------------------------------------------------------
