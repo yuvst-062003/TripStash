@@ -389,7 +389,7 @@ button { font: inherit; color: inherit; }
   transition: color var(--dur) var(--ease);
 }
 .seg__item[aria-selected='true'] { color: var(--paper); }
-.seg__item span { position: relative; z-index: 1; }
+.seg__label { position: relative; z-index: 1; }
 .seg__pill {
   position: absolute;
   inset: 0;

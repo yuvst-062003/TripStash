@@ -35,7 +35,7 @@ export default function Segmented<T extends string>({
             {selected && (
               <motion.span className="seg__pill" layoutId={`seg-${id}`} transition={spring} aria-hidden />
             )}
-            <span>
+            <span className="seg__label">
               {option.label}
               {option.badge ? <span className="seg__badge">{option.badge}</span> : null}
             </span>
