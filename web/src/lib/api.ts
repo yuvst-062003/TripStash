@@ -13,6 +13,7 @@ import type {
   PlacePage,
   PlaceSummary,
   ProposedAction,
+  Recommendation,
   Resolution,
   Resurfaced,
   SourceSummary,
@@ -104,6 +105,8 @@ export const api = {
   createTrip: (body: Record<string, unknown>) => post<Trip>('/api/v1/trips', body),
   addDestination: (body: Record<string, unknown>) =>
     post<unknown>('/api/v1/trips/current/destinations', body),
+  createKnowledge: (body: Record<string, unknown>) => post<{ id: string }>('/api/v1/knowledge', body),
+  recommend: (q: string) => get<Recommendation>('/api/v1/recommend', { q }),
   updateDestination: (id: string, body: Record<string, unknown>) =>
     request<unknown>(`/api/v1/trips/current/destinations/${id}`, {
       method: 'PATCH',

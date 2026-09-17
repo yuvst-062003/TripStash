@@ -32,6 +32,7 @@ export const KNOWLEDGE_LABEL: Record<string, string> = {
   route: 'Route',
   price: 'Price',
   packing: 'Packing',
+  event: 'Event',
   general: 'Tip',
 }
 
@@ -85,6 +86,7 @@ export function knowledgeTint(type: string | null | undefined): Tint {
     case 'border':
       return 'coral'
     case 'price':
+    case 'event':
       return 'gold'
     case 'accommodation':
       return 'stay'
@@ -94,6 +96,21 @@ export function knowledgeTint(type: string | null | undefined): Tint {
     default:
       return 'teal'
   }
+}
+
+/** "Today", "Tomorrow", "In 12 days", "14 Feb – 17 Feb" for an event. */
+export function eventWhen(happensOn: string | null | undefined, endsOn?: string | null): string | null {
+  if (!happensOn) return null
+  const start = new Date(`${happensOn}T00:00:00`)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const days = Math.round((start.getTime() - today.getTime()) / 86_400_000)
+  const fmt = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  const range = endsOn && endsOn !== happensOn ? `${fmt(happensOn)} – ${fmt(endsOn)}` : fmt(happensOn)
+  if (days < 0) return endsOn && new Date(`${endsOn}T00:00:00`) >= today ? `On now · ${range}` : `Past · ${range}`
+  if (days === 0) return `Today · ${range}`
+  if (days === 1) return `Tomorrow · ${range}`
+  return `In ${days} days · ${range}`
 }
 
 /* -------------------------------------------------------------------------

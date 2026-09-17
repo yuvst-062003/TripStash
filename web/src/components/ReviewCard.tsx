@@ -4,7 +4,7 @@ import { ApiError, api } from '../lib/api'
 import { useMotionPrefs } from '../lib/motion'
 import { STAMP_PATTERN, tick } from '../lib/haptics'
 import type { Candidate } from '../lib/types'
-import { Banner, Confidence, KNOWLEDGE_LABEL, Meta, Note, knowledgeTint, pairText, stampToneFor } from './ui'
+import { Banner, Confidence, KNOWLEDGE_LABEL, Meta, Note, eventWhen, knowledgeTint, pairText, stampToneFor } from './ui'
 import { Stamp, StampDrop } from './Stamp'
 import { Layers, Pencil, StickyNote, X } from './icons'
 import { CheckIcon, type CheckIconHandle } from './motion'
@@ -130,6 +130,9 @@ export default function ReviewCard({
       <Meta
         className="mt"
         parts={[
+          candidate.type === 'event' && candidate.happens_on
+            ? eventWhen(candidate.happens_on, candidate.ends_on)
+            : null,
           candidate.destination_scope,
           resolved && [resolved.category, resolved.city].filter(Boolean).join(', '),
         ]}

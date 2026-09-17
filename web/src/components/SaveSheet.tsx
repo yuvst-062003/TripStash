@@ -10,7 +10,7 @@ import { Note, Sheet } from './ui'
 import { Check } from './icons'
 import { UploadIcon, type UploadIconHandle } from './motion'
 
-type Mode = 'link' | 'upload' | 'note' | 'place'
+type Mode = 'link' | 'upload' | 'note' | 'event' | 'place'
 
 /**
  * Global Save.
@@ -27,13 +27,29 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SourceSummary[] | null>(null)
+  const [event, setEvent] = useState({ title: '', where: '', on: '', until: '' })
+  const [eventSaved, setEventSaved] = useState<string | null>(null)
   const uploadRef = useRef<UploadIconHandle>(null)
 
-  async function save(event: React.FormEvent) {
-    event.preventDefault()
+  async function save(submit: React.FormEvent) {
+    submit.preventDefault()
     setBusy(true)
     setError(null)
     try {
+      if (mode === 'event') {
+        // The traveller is the source: an event they write down needs no review.
+        await api.createKnowledge({
+          type: 'event',
+          title: event.title.trim(),
+          body: text.trim() || null,
+          destination_scope: event.where.trim() || null,
+          happens_on: event.on || null,
+          ends_on: event.until || null,
+        })
+        tick(STAMP_PATTERN)
+        setEventSaved(event.title.trim())
+        return
+      }
       if (mode === 'upload') {
         const { data } = await api.upload(files, text.trim() || undefined)
         setResult(data)
@@ -59,7 +75,36 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
     !busy &&
     ((mode === 'link' && (url.trim() || text.trim())) ||
       (mode === 'upload' && files.length > 0) ||
+      (mode === 'event' && event.title.trim() && event.on) ||
       ((mode === 'note' || mode === 'place') && text.trim()))
+
+  if (eventSaved) {
+    return (
+      <Sheet title="Saved" onClose={onClose}>
+        <div className="pad stack" style={{ paddingTop: 'var(--s-2)' }}>
+          <SavedStamp pending={0} label="On the calendar" />
+          <Note Icon={Check}>
+            {eventSaved} is on your trip. It comes back to Home as the date gets close.
+          </Note>
+          <div className="row" style={{ gap: 'var(--s-2)' }}>
+            <button className="btn btn--ink grow" onClick={onClose}>
+              Done
+            </button>
+            <button
+              className="btn"
+              onClick={() => {
+                setEventSaved(null)
+                setEvent({ title: '', where: '', on: '', until: '' })
+                setText('')
+              }}
+            >
+              Add another
+            </button>
+          </div>
+        </div>
+      </Sheet>
+    )
+  }
 
   if (result) {
     return (
@@ -109,6 +154,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
           { value: 'link', label: 'Link' },
           { value: 'upload', label: 'Media' },
           { value: 'note', label: 'Note' },
+          { value: 'event', label: 'Event' },
           { value: 'place', label: 'Here' },
         ]}
       />
@@ -210,6 +256,66 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
           </label>
         )}
 
+        {mode === 'event' && (
+          <>
+            <label className="field">
+              <span>What is happening</span>
+              <input
+                className="input"
+                placeholder="Carnaval, full-moon party, market day"
+                value={event.title}
+                onChange={(change) => setEvent({ ...event, title: change.target.value })}
+                required
+              />
+            </label>
+            <div className="row" style={{ gap: 'var(--s-2)' }}>
+              <label className="field grow">
+                <span>On</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={event.on}
+                  onChange={(change) => setEvent({ ...event, on: change.target.value })}
+                  required
+                />
+              </label>
+              <label className="field grow">
+                <span>Until</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={event.until}
+                  min={event.on || undefined}
+                  onChange={(change) => setEvent({ ...event, until: change.target.value })}
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>Where</span>
+              <input
+                className="input"
+                placeholder="Salvador"
+                value={event.where}
+                onChange={(change) => setEvent({ ...event, where: change.target.value })}
+              />
+            </label>
+            <label className="field">
+              <span>Notes</span>
+              <textarea
+                className="input"
+                rows={2}
+                placeholder="Optional — where to be, what time, who told you"
+                value={text}
+                onChange={(change) => setText(change.target.value)}
+              />
+            </label>
+            <p className="t-small dimmer">
+              Events skip the review queue: you are the source. TripStash brings it back on Home
+              as the date gets close.
+            </p>
+          </>
+        )}
+
         {mode === 'place' && (
           <>
             {position ? (
@@ -236,7 +342,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
         {error && <Note tone="danger">{error}</Note>}
 
         <motion.button className="btn btn--coral btn--block" type="submit" disabled={!canSubmit} whileTap={{ scale: 0.98 }}>
-          {busy ? 'Saving…' : 'Save and extract'}
+          {busy ? 'Saving…' : mode === 'event' ? 'Put it on the trip' : 'Save and extract'}
         </motion.button>
       </form>
     </Sheet>
@@ -244,7 +350,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
 }
 
 /** The stamp lands as the sheet opens on the result, with a haptic tick. */
-function SavedStamp({ pending }: { pending: number }) {
+function SavedStamp({ pending, label = 'Stashed' }: { pending: number; label?: string }) {
   const [show, setShow] = useState(false)
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -255,8 +361,8 @@ function SavedStamp({ pending }: { pending: number }) {
   }, [])
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-4)', minHeight: 72 }}>
-      <StampDrop show={show} tone={pending > 0 ? 'teal' : 'muted'} Icon={Check}>
-        Stashed
+      <StampDrop show={show} tone={pending > 0 || label !== 'Stashed' ? 'teal' : 'muted'} Icon={Check}>
+        {label}
       </StampDrop>
       {pending > 0 && (
         <Stamp tone="coral" size="sm" rotate={5}>

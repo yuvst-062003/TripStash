@@ -3,8 +3,10 @@ import {
   AdditiveBlending,
   AmbientLight,
   BackSide,
+  BoxGeometry,
   CatmullRomCurve3,
   Color,
+  ConeGeometry,
   DirectionalLight,
   Group,
   Mesh,
@@ -65,10 +67,34 @@ const ATMOSPHERE = new ShaderMaterial({
  * them. It turns slowly on its own, follows a finger, and holds still under
  * reduced motion. Loaded lazily; the vector globe stands in until then.
  */
+/** A leg to fly: the plane travels from → to once, keyed so the same leg can be flown again. */
+export interface Flight {
+  from: [number, number]
+  to: [number, number]
+  key: number
+}
+
+const FLIGHT_MS = 2200
+
+/** Points along a lifted great circle between two stops, the same curve the ribbon uses. */
+function legCurve(from: [number, number], to: [number, number]): CatmullRomCurve3 {
+  const a = toVector(from[0], from[1])
+  const b = toVector(to[0], to[1])
+  const angle = a.angleTo(b)
+  const peak = 0.03 + (angle / Math.PI) * 0.45
+  const samples: Vector3[] = []
+  for (let t = 0; t <= 1; t += 1 / 24) {
+    const lift = 1.012 + Math.sin(t * Math.PI) * peak
+    samples.push(new Vector3().lerpVectors(a, b, t).normalize().multiplyScalar(lift))
+  }
+  return new CatmullRomCurve3(samples)
+}
+
 export default function EarthGlobe({
   points = [],
   route = [],
   focus,
+  flight,
   size = 320,
   spin = 0.0025,
   interactive = true,
@@ -78,6 +104,8 @@ export default function EarthGlobe({
   points?: GlobePoint[]
   route?: [number, number][]
   focus?: [number, number]
+  /** When set (or its key changes), a small plane flies that leg once. */
+  flight?: Flight | null
   size?: number
   spin?: number
   interactive?: boolean
@@ -159,6 +187,30 @@ export default function EarthGlobe({
     }
     route.forEach(([lat, lon], index) => addBead(lat, lon, index === 0 ? 0.018 : 0.013, teal, 1.014))
 
+    // The plane: a white fuselage with a wing, hidden until there is a leg to fly.
+    const plane = new Group()
+    const white = new MeshBasicMaterial({ color: 0xffffff })
+    const fuselage = new Mesh(new ConeGeometry(0.012, 0.05, 8), white)
+    fuselage.rotation.x = Math.PI / 2
+    const wing = new Mesh(new BoxGeometry(0.06, 0.004, 0.014), white)
+    const tail = new Mesh(new BoxGeometry(0.02, 0.004, 0.008), white)
+    tail.position.set(0, 0.008, -0.02)
+    plane.add(fuselage, wing, tail)
+    plane.scale.setScalar(0.62)
+    plane.visible = false
+    world.add(plane)
+
+    let flightCurve: CatmullRomCurve3 | null = null
+    let flightStart = 0
+    let flightTarget: number | null = null
+    if (flight && !reduced) {
+      flightCurve = legCurve(flight.from, flight.to)
+      flightStart = performance.now()
+      // Turn so the middle of the leg faces the viewer while the plane is in the air.
+      flightTarget = facing((flight.from[1] + flight.to[1]) / 2)
+      plane.visible = true
+    }
+
     new TextureLoader().load(TEXTURE, (texture) => {
       if (disposed) return
       texture.colorSpace = SRGBColorSpace
@@ -174,7 +226,31 @@ export default function EarthGlobe({
       renderer.render(scene, camera)
     }
     const tick = () => {
-      if (!reduced && !drag.current) rotation.current.y -= spin
+      if (flightCurve) {
+        const t = Math.min(1, (performance.now() - flightStart) / FLIGHT_MS)
+        // Ease in and out so the plane leaves and arrives gently.
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+        const at = flightCurve.getPointAt(eased)
+        const ahead = flightCurve.getPointAt(Math.min(1, eased + 0.01))
+        plane.position.copy(at)
+        plane.up.copy(at.clone().normalize())
+        plane.lookAt(ahead)
+        if (flightTarget !== null && !drag.current) {
+          // Shortest way round to the leg's midpoint, then settle.
+          let delta = flightTarget - rotation.current.y
+          delta = Math.atan2(Math.sin(delta), Math.cos(delta))
+          rotation.current.y += delta * 0.06
+        }
+        if (t >= 1) {
+          flightCurve = null
+          flightTarget = null
+          window.setTimeout(() => {
+            plane.visible = false
+          }, 600)
+        }
+      } else if (!reduced && !drag.current) {
+        rotation.current.y -= spin
+      }
       render()
       frame = requestAnimationFrame(tick)
     }
@@ -205,12 +281,16 @@ export default function EarthGlobe({
       gold.dispose()
       teal.dispose()
       collar.dispose()
+      white.dispose()
+      fuselage.geometry.dispose()
+      wing.geometry.dispose()
+      tail.geometry.dispose()
       renderer.dispose()
       renderer.domElement.remove()
     }
     // Points and route change identity every render; compare by content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(points), JSON.stringify(route), size, spin, reduced])
+  }, [JSON.stringify(points), JSON.stringify(route), size, spin, reduced, flight?.key])
 
   return (
     <div

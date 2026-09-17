@@ -7,6 +7,7 @@ export type KnowledgeType =
   | 'route'
   | 'price'
   | 'packing'
+  | 'event'
   | 'general'
 
 export type PlaceStatus = 'inbox' | 'saved' | 'must_visit' | 'planned' | 'visited' | 'archived'
@@ -90,6 +91,8 @@ export interface Candidate {
   resolutions: Resolution[]
   duplicate_of_place_id: string | null
   duplicate_reason: string | null
+  happens_on?: string | null
+  ends_on?: string | null
 }
 
 export interface PlaceSummary {
@@ -244,6 +247,10 @@ export interface AskCard {
   remaining?: number | null
   facts?: FactGroup[]
   actions: HandoffAction[]
+  status?: PlaceStatus
+  is_favourite?: boolean
+  happens_on?: string | null
+  when?: string | null
 }
 
 export interface ProposedAction {
@@ -343,4 +350,13 @@ export interface KnowledgeItem {
   user_edited: boolean
   is_archived: boolean
   evidence: Evidence[]
+  happens_on?: string | null
+  ends_on?: string | null
+}
+
+export interface Recommendation {
+  query: string
+  summary: string
+  grounded: boolean
+  cards: AskCard[]
 }

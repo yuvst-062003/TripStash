@@ -7,10 +7,12 @@ import { useAsync } from '../lib/hooks'
 import { useMotionPrefs } from '../lib/motion'
 import { tick } from '../lib/haptics'
 import Globe, { type GlobePoint } from '../components/Globe'
+import type { Flight } from '../components/EarthGlobe'
 import Starfield from '../components/Starfield'
 import { Stamp } from '../components/Stamp'
-import { Note } from '../components/ui'
-import { Check, Plus, Search, X } from '../components/icons'
+import { Glyph, KNOWLEDGE_LABEL, Note, categoryTint, knowledgeTint } from '../components/ui'
+import type { AskCard, Recommendation } from '../lib/types'
+import { CATEGORY_ICON, Check, KNOWLEDGE_ICON, MapPin, Plus, Search, Sparkles, X } from '../components/icons'
 
 const EarthGlobe = lazy(() => import('../components/EarthGlobe'))
 
@@ -67,6 +69,10 @@ export default function Journey() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [added, setAdded] = useState<string | null>(null)
+  const [flight, setFlight] = useState<Flight | null>(null)
+  const [picked, setPicked] = useState<string | null>(null)
+  const [stash, setStash] = useState<Recommendation | null>(null)
+  const [stashBusy, setStashBusy] = useState(false)
 
   const destinations = trip?.destinations ?? []
   const stops = useMemo(
@@ -113,6 +119,20 @@ export default function Journey() {
     }
   }, [query])
 
+  // What you stashed for a stop: grounded in your own saves, never a web result.
+  async function showStash(name: string) {
+    setPicked(name)
+    setStashBusy(true)
+    try {
+      const { data } = await api.recommend(name)
+      setStash(data)
+    } catch {
+      setStash(null)
+    } finally {
+      setStashBusy(false)
+    }
+  }
+
   async function addStop(stop: { name: string; country?: string | null; lat?: number; lon?: number }) {
     setBusy(true)
     setError(null)
@@ -127,8 +147,14 @@ export default function Journey() {
       setAdded(stop.name)
       setQuery('')
       setSuggestions([])
+      // Fly the new leg: from the last stop with coordinates to this one.
+      const last = stops[stops.length - 1]
+      if (last && stop.lat != null && stop.lon != null) {
+        setFlight({ from: last, to: [stop.lat, stop.lon], key: Date.now() })
+      }
       reloadTrip()
       window.setTimeout(() => setAdded(null), 1600)
+      void showStash(stop.name)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not add that stop.')
     } finally {
@@ -144,7 +170,7 @@ export default function Journey() {
 
       <div className="journey-screen__globe" style={{ width: globeSize, height: globeSize, marginLeft: -globeSize / 2 }}>
         <Suspense fallback={<Globe points={points} route={stops} focus={focus} size={globeSize} spin={0.0016} vivid />}>
-          <EarthGlobe points={points} route={stops} focus={focus} size={globeSize} spin={0.0016} />
+          <EarthGlobe points={points} route={stops} focus={focus} flight={flight} size={globeSize} spin={0.0016} />
         </Suspense>
       </div>
 
@@ -170,14 +196,9 @@ export default function Journey() {
                 type="button"
                 className={`stop-chip${stop.is_current ? ' stop-chip--current' : ''}`}
                 whileTap={{ scale: 0.96 }}
-                onClick={async () => {
-                  if (stop.is_current) return
-                  await api.updateDestination(stop.id, { is_current: true })
-                  tick()
-                  reloadTrip()
-                }}
-                aria-pressed={stop.is_current}
-                title={stop.is_current ? 'You are here' : 'Mark as where you are now'}
+                onClick={() => (picked === stop.name ? setPicked(null) : void showStash(stop.name))}
+                aria-pressed={picked === stop.name}
+                title={`What you stashed for ${stop.name}`}
               >
                 <span className="stop-chip__num">{index + 1}</span>
                 <span className="grow" style={{ minWidth: 0 }}>
@@ -190,6 +211,64 @@ export default function Journey() {
             ))}
           </div>
         )}
+
+        <AnimatePresence initial={false}>
+          {picked && (
+            <motion.section
+              key={picked}
+              className="stash"
+              initial={reduced ? false : { opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduced ? undefined : { opacity: 0, y: 6 }}
+              transition={spring}
+              aria-label={`What you stashed for ${picked}`}
+            >
+              <div className="row between" style={{ marginBottom: 'var(--s-2)' }}>
+                <span className="row" style={{ gap: 6 }}>
+                  <Sparkles size={15} strokeWidth={2.2} style={{ color: 'var(--teal)' }} />
+                  <span className="t-head">{picked}</span>
+                </span>
+                {(() => {
+                  const stop = destinations.find((d) => d.name === picked)
+                  if (!stop) return null
+                  return stop.is_current ? (
+                    <Stamp tone="coral" size="sm" rotate={4}>
+                      Here now
+                    </Stamp>
+                  ) : (
+                    <button
+                      className="btn btn--sm btn--ghost"
+                      onClick={async () => {
+                        await api.updateDestination(stop.id, { is_current: true })
+                        tick()
+                        reloadTrip()
+                      }}
+                    >
+                      I'm here now
+                    </button>
+                  )
+                })()}
+              </div>
+              <p className="t-small" style={{ color: 'var(--ink-2)' }}>
+                {stashBusy ? 'Looking through your stash…' : stash?.summary}
+              </p>
+              {stash && stash.cards.length > 0 && (
+                <ul className="stash__list">
+                  {stash.cards.slice(0, 4).map((card, index) => (
+                    <li key={index}>
+                      <StashRow card={card} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {stash && !stash.grounded && (
+                <p className="t-small" style={{ color: 'var(--ink-3)', marginTop: 6 }}>
+                  Summary written by the assistant from these items only.
+                </p>
+              )}
+            </motion.section>
+          )}
+        </AnimatePresence>
 
         <div className="searchbar searchbar--space" style={{ marginInline: 0 }}>
           <Search size={17} className="dimmer" />
@@ -275,6 +354,34 @@ export default function Journey() {
           Search by city, not country. Tap a stop to mark it as where you are now.
         </p>
       </div>
+    </div>
+  )
+}
+
+
+function StashRow({ card }: { card: AskCard }) {
+  const isPlace = card.type === 'place'
+  const category = card.subtitle?.split(',')[0]?.trim() ?? 'other'
+  const Icon = isPlace
+    ? CATEGORY_ICON[category] ?? MapPin
+    : KNOWLEDGE_ICON[card.knowledge_type ?? 'general'] ?? KNOWLEDGE_ICON.general
+  const tint = isPlace ? categoryTint(category) : knowledgeTint(card.knowledge_type)
+  const label = isPlace ? category : KNOWLEDGE_LABEL[card.knowledge_type ?? 'general']
+  const when = card.when
+  return (
+    <div className="stash__row">
+      <Glyph Icon={Icon} tint={tint} />
+      <span className="grow" style={{ minWidth: 0 }}>
+        <span className="t-head clamp-1">{card.title}</span>
+        <span className="t-small clamp-2" style={{ color: 'var(--ink-2)' }}>
+          {[when, label, card.why_saved ?? card.body].filter(Boolean).join(' · ')}
+        </span>
+      </span>
+      {isPlace && card.status === 'must_visit' && (
+        <Stamp tone="coral" size="sm" rotate={-5}>
+          Must
+        </Stamp>
+      )}
     </div>
   )
 }

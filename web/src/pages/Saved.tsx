@@ -23,6 +23,7 @@ import {
   SectionLabel,
   SkeletonRows,
   categoryTint,
+  eventWhen,
   knowledgeTint,
   pairText,
   stampToneFor,
@@ -230,7 +231,7 @@ function PlacesView() {
   )
 }
 
-const KNOWLEDGE_FILTERS = ['safety', 'transport', 'border', 'price', 'packing', 'route', 'general']
+const KNOWLEDGE_FILTERS = ['event', 'safety', 'transport', 'border', 'price', 'packing', 'route', 'general']
 
 function KnowledgeView() {
   const [type, setType] = useState<string | null>(null)
@@ -279,6 +280,11 @@ function KnowledgeView() {
                     {detail && (
                       <p className="t-small dim" style={{ marginTop: 4 }}>
                         {detail}
+                      </p>
+                    )}
+                    {item.type === 'event' && item.happens_on && (
+                      <p className="t-small mt" style={{ color: 'var(--tint-view)', fontWeight: 600 }}>
+                        {eventWhen(item.happens_on, item.ends_on)}
                       </p>
                     )}
                     {/* Official facts, creator advice and model inference stay distinct. */}

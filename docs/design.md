@@ -70,8 +70,9 @@ the route is drawn, the pin drops in with the stamp spring.
 | Saved | Segmented control over Inbox, Places, Knowledge, Sources. Inbox cards carry the type stamp, the evidence quote in gold, a confidence bar, and the stamp-approve action |
 | Place | Real map header tinted into the paper with the place name overlapping its edge and the status stamp at the corner; a compact bar fades in as the title scrolls away |
 | Trip | The trip name as the headline, then the journey card — the route on the Earth with where you are now or the days to go — a numbered stepper for the route, a timeline for the day plan, money mirrored from Home |
+| Journey | The Earth full screen. Adding a city sends a small plane along the new leg while the globe turns to follow it; tapping a stop opens what you stashed for it — must-visits, the next event, warnings first — and "I'm here now" |
 | Ask | Drawer: input first, context chips, the answer revealed word by word, typed result rows |
-| Save | Drawer, segmented by what you are capturing; success shows the *Stashed* stamp landing |
+| Save | Drawer, segmented by what you are capturing — link, media, note, event, here; success shows the *Stashed* stamp landing. An event carries its dates and comes back to Home as they near |
 
 Ask lives in each screen's header rather than on a floating button, so the
 assistant sits next to the context it inherits. Save is the one floating

@@ -105,6 +105,7 @@ export const KNOWLEDGE_ICON: Record<string, IconComponent> = {
   route: Route,
   price: Banknote,
   packing: Backpack,
+  event: CalendarDays,
   general: Lightbulb,
 }
 

@@ -34,9 +34,13 @@ mark in [`docs/brand/`](docs/brand/). The design system is described in
 | --- | --- | --- | --- |
 | ![Place](docs/screenshots/place-light.png) | ![Trip](docs/screenshots/trip-light.png) | ![Journey](docs/screenshots/journey-light.png) | ![Ask](docs/screenshots/ask-light.png) |
 
-| Save | You | Home, dark | Map, dark |
+| Save | Save an event | Your stash for a stop | You |
 | --- | --- | --- | --- |
-| ![Save](docs/screenshots/save-light.png) | ![Profile](docs/screenshots/profile-light.png) | ![Home dark](docs/screenshots/home-dark.png) | ![Map dark](docs/screenshots/map-dark.png) |
+| ![Save](docs/screenshots/save-light.png) | ![Save event](docs/screenshots/save-event-light.png) | ![Stash](docs/screenshots/journey-stash-dark.png) | ![Profile](docs/screenshots/profile-light.png) |
+
+| Home, dark | Map, dark |
+| --- | --- |
+| ![Home dark](docs/screenshots/home-dark.png) | ![Map dark](docs/screenshots/map-dark.png) |
 
 ## Quick start (no accounts, no API keys)
 
@@ -92,10 +96,10 @@ cd web  && npm run lint && npm run build
 | **Map** | Your own saves only, filterable, with a compact recall card on every marker |
 | **Saved** | Inbox (review queue), confirmed places, typed knowledge, and every original source |
 | **Trip** | Flexible route on the Earth, day plan, imported bookings, manual expenses, export |
-| **Journey** | The route full screen on a photoreal globe; add a city, mark where you are now |
+| **Journey** | The route full screen on a photoreal globe; add a city and a plane flies the leg; tap a stop for what you stashed there |
 | **You** | Light / dark / auto, language, export, sign out |
 | **Ask** | One assistant, available everywhere, that inherits the current screen's context |
-| **Save** | One capture action: link, upload, note, or current location |
+| **Save** | One capture action: link, upload, note, a dated event, or current location |
 
 Ask and Save are global actions rather than tabs, so the assistant and capture
 never duplicate Map and Saved.
@@ -148,7 +152,7 @@ swapping a fake for a real driver is configuration, not surgery.
 
 | Adapter | Default | Replace with |
 | --- | --- | --- |
-| AI extraction | `fake` — deterministic rule-based extractor | Claude API against `ExtractionResult` as the tool schema |
+| AI extraction | `fake` — deterministic rule-based extractor | `anthropic` — Claude structured outputs against the same contract (`pip install -e ".[ai]"`, set `TRIPSTASH_AI_PROVIDER=anthropic` and `TRIPSTASH_ANTHROPIC_API_KEY`) |
 | Places | `fake` — in-repo gazetteer | Any provider returning `ResolvedPlace` |
 | Weather | `fake` — deterministic by (lat, lon, date) | Any forecast API |
 | FX | `fake` — static mid-market table | Any rates API |
