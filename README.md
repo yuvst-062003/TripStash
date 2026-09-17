@@ -107,8 +107,9 @@ api/                     FastAPI modular monolith
   app/routers/           HTTP surface, mounted at /api/v1
   app/schemas/           Typed extraction contract + request/response bodies
   app/services/          Pipeline, dedupe, assistant, resurfacing, freshness
+  app/media/             Video and image understanding: ffmpeg, OCR, speech
   app/worker/            Background processing and freshness refresh
-  tests/                 48 tests, including the spec's acceptance criteria
+  tests/                 63 tests, including the spec's acceptance criteria
 web/                     React + TypeScript PWA (Vite, Leaflet, service worker)
   src/styles/            Design tokens and the single stylesheet
   src/components/        UI primitives, sheets, review card, icon vocabulary
@@ -124,6 +125,7 @@ swapping a fake for a real driver is configuration, not surgery.
 | Adapter | Default | Replace with |
 | --- | --- | --- |
 | AI extraction | `fake` — deterministic rule-based extractor | `local` — free open weights via any OpenAI-compatible server ([guide](docs/local-model.md)) |
+| Video and images | ffmpeg + PP-OCRv4, both offline; optional faster-whisper | — see [the media pipeline](docs/media-pipeline.md) |
 | Places | `fake` — in-repo gazetteer | Any provider returning `ResolvedPlace` |
 | Weather | `fake` — deterministic by (lat, lon, date) | Any forecast API |
 | FX | `fake` — static mid-market table | Any rates API |
@@ -160,6 +162,7 @@ implemented, what is stubbed, and what was left out on purpose.
 - [Architecture](docs/architecture.md)
 - [Design](docs/design.md)
 - [Running a free, local model](docs/local-model.md)
+- [The media pipeline](docs/media-pipeline.md)
 - [Data model](docs/data-model.md)
 - [Specification coverage](docs/spec-coverage.md)
 - [ADR 0001 — Modular monolith](docs/adr/0001-modular-monolith.md)

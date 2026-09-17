@@ -32,6 +32,7 @@ from app.schemas.api import (
     CandidateEdit,
     CandidateResponse,
     LinkCapture,
+    MediaStageResponse,
     SourceResponse,
 )
 from app.services.extraction import (
@@ -72,6 +73,10 @@ def _serialise_source(session: Session, source: Source) -> SourceResponse:
         candidate_count=int(counts[0] or 0),
         pending_count=int(counts[1] or 0),
         file_url=file_url,
+        duration_seconds=source.duration_seconds,
+        stages=[MediaStageResponse.model_validate(stage) for stage in source.stages],
+        transcript_chars=len(source.transcript or ""),
+        ocr_chars=len(source.ocr_text or ""),
     )
 
 

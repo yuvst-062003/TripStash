@@ -36,6 +36,14 @@ export interface Destination {
   notes: string | null
 }
 
+export interface MediaStage {
+  name: string
+  engine: string
+  status: 'ok' | 'skipped' | 'failed'
+  duration_ms: number
+  detail: string | null
+}
+
 export interface SourceSummary {
   id: string
   kind: string
@@ -54,6 +62,10 @@ export interface SourceSummary {
   candidate_count: number
   pending_count: number
   file_url: string | null
+  duration_seconds: number | null
+  stages: MediaStage[]
+  transcript_chars: number
+  ocr_chars: number
 }
 
 export interface Evidence {

@@ -11,6 +11,13 @@ import { Check, Layers, Pencil, X } from './icons'
  * the place it resolved to. Nothing happens until approve, edit, merge or
  * ignore is chosen.
  */
+/** Seconds into the media, as a person reads a timecode. */
+function formatTimestamp(seconds: number): string {
+  const minutes = Math.floor(seconds / 60)
+  const rest = Math.floor(seconds % 60)
+  return `${minutes}:${String(rest).padStart(2, '0')}`
+}
+
 export default function ReviewCard({
   candidate,
   onDecided,
@@ -91,10 +98,14 @@ export default function ReviewCard({
 
       <div className="row between" style={{ marginTop: 6 }}>
         <Confidence value={candidate.confidence} />
-        {/* The quote is the proof. When it is word for word what is already on
-            screen, only its provenance is worth repeating. */}
+        {/* The quote is the proof, and for media it can cite the moment it was
+            said or shown. */}
         {candidate.evidence[0] && (
-          <span className="t-sm dimmer">from the {candidate.evidence[0].channel}</span>
+          <span className="t-sm dimmer">
+            from the {candidate.evidence[0].channel}
+            {candidate.evidence[0].media_timestamp_seconds != null &&
+              ` at ${formatTimestamp(candidate.evidence[0].media_timestamp_seconds)}`}
+          </span>
         )}
       </div>
 

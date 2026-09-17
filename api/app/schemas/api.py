@@ -108,6 +108,14 @@ class LinkCapture(ApiModel):
     kind: SourceKind = SourceKind.LINK
 
 
+class MediaStageResponse(ApiModel):
+    name: str
+    engine: str
+    status: str
+    duration_ms: int
+    detail: str | None = None
+
+
 class SourceResponse(ApiModel):
     id: str
     kind: str
@@ -126,6 +134,11 @@ class SourceResponse(ApiModel):
     candidate_count: int = 0
     pending_count: int = 0
     file_url: str | None = None
+    duration_seconds: float | None = None
+    # What the media pipeline managed to read, stage by stage.
+    stages: list[MediaStageResponse] = Field(default_factory=list)
+    transcript_chars: int = 0
+    ocr_chars: int = 0
 
 
 class EvidenceResponse(ApiModel):

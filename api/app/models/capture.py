@@ -76,6 +76,34 @@ class Source(IdMixin, TimestampMixin, Base):
     evidence: Mapped[list[SourcePlaceEvidence]] = relationship(
         back_populates="source", cascade="all, delete-orphan"
     )
+    stages: Mapped[list[MediaStage]] = relationship(
+        back_populates="source",
+        cascade="all, delete-orphan",
+        order_by="MediaStage.position",
+    )
+
+
+class MediaStage(IdMixin, TimestampMixin, Base):
+    """One step of the media pipeline, recorded so the traveller can see it.
+
+    Specification 7.5 requires per-item status on a batch import. A single
+    `status` on the source answers "is it done"; these rows answer "what did it
+    actually manage to read, with which engine, and how long did it take".
+    """
+
+    __tablename__ = "media_stage"
+
+    source_id: Mapped[str] = mapped_column(
+        ForeignKey("source.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    name: Mapped[str] = mapped_column(String(40), nullable=False)
+    engine: Mapped[str] = mapped_column(String(60), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="ok", nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    detail: Mapped[str | None] = mapped_column(Text)
+
+    source: Mapped[Source] = relationship(back_populates="stages")
 
 
 class ExtractionCandidate(IdMixin, TimestampMixin, Base):

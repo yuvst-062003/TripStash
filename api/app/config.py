@@ -50,6 +50,15 @@ class Settings(BaseSettings):
     places_api_key: str | None = None
     weather_api_key: str | None = None
 
+    # Media understanding. OCR runs offline from weights bundled in the wheel;
+    # speech to text needs the `asr` extra and fetches its model once.
+    media_enabled: bool = True
+    media_asr: bool = True
+    media_ocr: bool = True
+    media_max_frames: int = 12
+    media_max_duration_seconds: float = 900.0
+    media_asr_model: str = "small"
+
     # When true the extraction pipeline runs in FastAPI background tasks.
     # A separate queue worker replaces this without changing call sites.
     worker_inline: bool = True

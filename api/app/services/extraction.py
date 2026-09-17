@@ -15,8 +15,12 @@ Order is load-bearing:
 from __future__ import annotations
 
 import json
+import logging
+import tempfile
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,9 +28,12 @@ from sqlalchemy.orm import Session
 from app.adapters import get_ai, get_places, get_storage
 from app.adapters.base import MediaPayload, ResolvedPlace
 from app.adapters.storage import fingerprint, scan_for_malware, text_fingerprint
+from app.config import get_settings
+from app.media import MediaPipeline, attach_timestamps
 from app.models.capture import (
     ExtractionCandidate,
     KnowledgeItem,
+    MediaStage,
     Source,
     SourcePlaceEvidence,
 )
@@ -45,6 +52,8 @@ from app.models.places import Place, PlaceFact, TripPlace
 from app.schemas.extraction import KnowledgeCandidate
 from app.services.dedupe import find_duplicate, find_duplicate_for_resolved, merge_places
 from app.services.text import normalize_name
+
+logger = logging.getLogger(__name__)
 
 HOURS_TTL = timedelta(days=7)
 
@@ -163,12 +172,9 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
         duration_seconds=source.duration_seconds,
     )
 
+    segments: list = []
     if source.storage_key and not (source.transcript or source.ocr_text):
-        transcript, ocr_text = ai.transcribe(payload)
-        source.transcript = transcript
-        source.ocr_text = ocr_text
-        payload.transcript = transcript
-        payload.ocr_text = ocr_text
+        segments = _understand_media(session, source, payload)
 
     # The traveller's own route and past corrections travel with the request,
     # which is how the model adapts to them without any training.
@@ -188,6 +194,15 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
     source.author = source.author or result.author
     source.published_on = source.published_on or result.published_on
 
+    # A quote can now cite the moment it was said or shown.
+    if segments:
+        for candidate in result.candidates:
+            for evidence in candidate.evidence:
+                if evidence.media_timestamp_seconds is None:
+                    evidence.media_timestamp_seconds = attach_timestamps(
+                        evidence.quote, segments
+                    )
+
     candidates = [
         _persist_candidate(session, source, candidate) for candidate in result.candidates
     ]
@@ -200,6 +215,84 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
     source.processed_at = datetime.now(UTC)
     session.flush()
     return candidates
+
+
+def _understand_media(session: Session, source: Source, payload: MediaPayload) -> list:
+    """Run the media pipeline and record what each stage managed to read.
+
+    Several small free models, one at a time: ffmpeg demuxes, a speech model
+    reads the audio, and an OCR model reads the text burned into the frames.
+    On travel content the second is often the richer channel, because the audio
+    is frequently just music.
+    """
+    settings = get_settings()
+    if not settings.media_enabled:
+        return []
+
+    materialised = _materialise(source)
+    if materialised is None:
+        return []
+
+    path, cleanup = materialised
+    try:
+        pipeline = MediaPipeline(
+            enable_asr=settings.media_asr,
+            enable_ocr=settings.media_ocr,
+            max_frames=settings.media_max_frames,
+            max_duration_seconds=settings.media_max_duration_seconds,
+            asr_model_size=settings.media_asr_model,
+        )
+        outcome = pipeline.run(path, media_type=source.media_type)
+    except Exception:  # pragma: no cover - defensive; the source stays in Inbox
+        logger.exception("media pipeline failed for source %s", source.id)
+        return []
+    finally:
+        cleanup()
+
+    for existing in list(source.stages):
+        session.delete(existing)
+    for position, stage in enumerate(outcome.stages):
+        session.add(
+            MediaStage(
+                source_id=source.id,
+                position=position,
+                name=stage.name,
+                engine=stage.engine,
+                status=stage.status,
+                duration_ms=stage.duration_ms,
+                detail=stage.detail,
+            )
+        )
+
+    source.transcript = outcome.transcript
+    source.ocr_text = outcome.ocr_text
+    source.duration_seconds = outcome.duration_seconds or source.duration_seconds
+    source.width = outcome.width or source.width
+    source.height = outcome.height or source.height
+    payload.transcript = outcome.transcript
+    payload.ocr_text = outcome.ocr_text
+    session.flush()
+    return outcome.segments
+
+
+def _materialise(source: Source) -> tuple[Path, Callable[[], None]] | None:
+    """Put the stored bytes on disk so ffmpeg can open them.
+
+    Going through the storage adapter rather than reaching for a local path
+    keeps this working when storage moves to object storage.
+    """
+    try:
+        data = get_storage().get(source.storage_key)
+    except Exception:  # pragma: no cover - missing or unreadable object
+        logger.warning("could not read stored media for source %s", source.id)
+        return None
+
+    suffix = Path(source.filename or "upload.bin").suffix or ".bin"
+    handle = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    handle.write(data)
+    handle.close()
+    path = Path(handle.name)
+    return path, lambda: path.unlink(missing_ok=True)
 
 
 def _persist_candidate(

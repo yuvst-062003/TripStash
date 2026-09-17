@@ -465,3 +465,48 @@ def test_a_named_stay_still_becomes_a_place(client, auth, trip):
         json={"provider_place_id": candidate["resolutions"][0]["provider_place_id"]},
     )
     assert result.json()["kind"] == "place"
+
+
+def test_a_video_with_no_speech_still_yields_reviewable_candidates(client, auth, trip, tmp_path):
+    """The whole point of the media pipeline, end to end through the API.
+
+    A travel Reel whose audio is music: everything worth keeping is text burned
+    into the frames, so a pipeline that only listens recovers nothing.
+    """
+    from tests.media_fixtures import build_reel, can_build
+
+    if not can_build():
+        import pytest
+
+        pytest.skip("ffmpeg or a usable font is unavailable")
+
+    reel = build_reel(tmp_path / "antigua.mp4")
+    assert reel is not None
+
+    response = client.post(
+        "/api/v1/sources/upload",
+        headers=auth,
+        files={"files": ("antigua.mp4", reel.read_bytes(), "video/mp4")},
+    )
+    assert response.status_code == 201, response.text
+    source = response.json()[0]
+
+    # Every stage reports what it did, which is the per-item status spec 7.5 wants.
+    stage_names = [stage["name"] for stage in source["stages"]]
+    assert "probe" in stage_names and "on-screen text" in stage_names
+    assert source["ocr_chars"] > 0
+    assert source["duration_seconds"] and source["duration_seconds"] > 1
+    assert source["status"] == "needs_review"
+
+    inbox = client.get("/api/v1/inbox", headers=auth, params={"source_id": source["id"]}).json()
+    titles = " ".join(candidate["title"] for candidate in inbox).lower()
+    assert "cerro de la cruz" in titles
+
+    # A quote read off the screen can cite the second it appeared.
+    stamped = [
+        evidence
+        for candidate in inbox
+        for evidence in candidate["evidence"]
+        if evidence["media_timestamp_seconds"] is not None
+    ]
+    assert stamped, "on-screen quotes should carry the moment they appeared"
