@@ -18,6 +18,7 @@ ffmpeg ─┬─ audio  ─→ faster-whisper ─→ transcript + timestamps ─
 
 | Stage | Engine | Licence | Where the weights come from |
 | --- | --- | --- | --- |
+| link | oEmbed / Open Graph | — | Nothing to install |
 | probe, audio, frames | ffmpeg (via `imageio-ffmpeg`) | LGPL/GPL build | Bundled in the wheel |
 | speech → text | faster-whisper `small` | MIT | Fetched once, on first use |
 | on-screen text | RapidOCR / PP-OCRv4 | Apache 2.0 | **Bundled in the wheel**, ~15 MB |
@@ -29,6 +30,30 @@ pip install -e ".[asr]"          # optional: speech to text
 ```
 
 Nothing above costs money and nothing needs an account.
+
+## Links: only what a site publishes
+
+A pasted URL is read before anything else, because that is usually where the
+caption lives. Two routes, both free and keyless:
+
+- **oEmbed**, where a platform publishes one. TikTok, YouTube and Vimeo all do,
+  and the caption arrives as the response's `title`.
+- **Open Graph and the page description** for everything else.
+
+That word *publishes* is the boundary. This reads what a site offers for
+sharing and nothing more: no logging in, no downloading videos, no scraping
+restricted content - all non-goals in specification 3.3, and against the
+platforms' terms besides.
+
+When a platform declines, the URL is kept and the traveller is asked for the
+caption, a screenshot or the downloaded video. That is specification 12's first
+row, and it is a designed path rather than a failure. Instagram and Facebook
+are not even requested: they publish nothing to an anonymous reader, and
+pretending otherwise would just waste a round trip.
+
+The link stage reports the cause; the advice is separate and says only what to
+do next. Saying the same thing twice in two tones is how an interface starts
+sounding like a machine.
 
 ## On-screen text is the primary channel, not the fallback
 

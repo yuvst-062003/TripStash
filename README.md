@@ -109,7 +109,7 @@ api/                     FastAPI modular monolith
   app/services/          Pipeline, dedupe, assistant, resurfacing, freshness
   app/media/             Video and image understanding: ffmpeg, OCR, speech
   app/worker/            Background processing and freshness refresh
-  tests/                 63 tests, including the spec's acceptance criteria
+  tests/                 77 tests, including the spec's acceptance criteria
 web/                     React + TypeScript PWA (Vite, Leaflet, service worker)
   src/styles/            Design tokens and the single stylesheet
   src/components/        UI primitives, sheets, review card, icon vocabulary

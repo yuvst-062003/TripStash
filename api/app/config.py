@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     places_api_key: str | None = None
     weather_api_key: str | None = None
 
+    # Reading what a pasted link publishes about itself. Disabled in tests so
+    # the suite never touches the network.
+    link_fetch_enabled: bool = True
+    link_timeout_seconds: float = 15.0
+
     # Media understanding. OCR runs offline from weights bundled in the wheel;
     # speech to text needs the `asr` extra and fetches its model once.
     media_enabled: bool = True

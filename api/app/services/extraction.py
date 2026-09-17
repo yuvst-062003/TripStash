@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
+import time
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
@@ -30,6 +31,7 @@ from app.adapters.base import MediaPayload, ResolvedPlace
 from app.adapters.storage import fingerprint, scan_for_malware, text_fingerprint
 from app.config import get_settings
 from app.media import MediaPipeline, attach_timestamps
+from app.media.links import LinkContent, LinkReader, recovery_message
 from app.models.capture import (
     ExtractionCandidate,
     KnowledgeItem,
@@ -172,6 +174,12 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
         duration_seconds=source.duration_seconds,
     )
 
+    # A pasted link is read before anything else: a platform's own oEmbed
+    # response or a page's Open Graph tags is usually where the caption lives.
+    link: LinkContent | None = None
+    if source.url and not (source.raw_text or "").strip() and get_settings().link_fetch_enabled:
+        link = _read_link(session, source, payload)
+
     segments: list = []
     if source.storage_key and not (source.transcript or source.ocr_text):
         segments = _understand_media(session, source, payload)
@@ -185,7 +193,13 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
     if result.failure_reason:
         # Recoverable, not lost: Inbox keeps it with a retry and manual path.
         source.status = SourceStatus.FAILED
-        source.failure_reason = result.failure_reason
+        # When a link is the reason nothing could be read, say what the platform
+        # did and what to do about it, rather than a generic message.
+        source.failure_reason = (
+            recovery_message(source.url)
+            if link is not None and not link.usable and source.url
+            else result.failure_reason
+        )
         source.processed_at = datetime.now(UTC)
         session.flush()
         return []
@@ -215,6 +229,40 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
     source.processed_at = datetime.now(UTC)
     session.flush()
     return candidates
+
+
+def _read_link(session: Session, source: Source, payload: MediaPayload) -> LinkContent | None:
+    """Read what the link publishes, and record it as a stage like any other."""
+    started = time.perf_counter()
+    try:
+        content = LinkReader(get_settings().link_timeout_seconds).read(source.url)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("link reader failed for %s: %s", source.url, exc)
+        content = LinkContent(status="failed", detail=f"reader error: {exc}"[:200])
+
+    session.add(
+        MediaStage(
+            source_id=source.id,
+            position=0,
+            name="link",
+            engine=LinkReader.name,
+            status=(
+                "ok"
+                if content.usable
+                else ("skipped" if content.status == "blocked" else "failed")
+            ),
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            detail=content.detail or content.status,
+        )
+    )
+
+    if content.usable:
+        source.title = source.title or content.title
+        source.author = source.author or content.author
+        source.raw_text = content.text
+        payload.text = content.text
+    session.flush()
+    return content
 
 
 def _understand_media(session: Session, source: Source, payload: MediaPayload) -> list:
@@ -251,11 +299,12 @@ def _understand_media(session: Session, source: Source, payload: MediaPayload) -
 
     for existing in list(source.stages):
         session.delete(existing)
+    offset = 1 if source.url else 0
     for position, stage in enumerate(outcome.stages):
         session.add(
             MediaStage(
                 source_id=source.id,
-                position=position,
+                position=position + offset,
                 name=stage.name,
                 engine=stage.engine,
                 status=stage.status,

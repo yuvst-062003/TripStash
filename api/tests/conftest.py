@@ -17,6 +17,8 @@ os.environ["TRIPSTASH_DATABASE_URL"] = f"sqlite+pysqlite:///{_TMP / 'test.db'}"
 os.environ["TRIPSTASH_STORAGE_DIR"] = str(_TMP / "storage")
 os.environ["TRIPSTASH_SECRET_KEY"] = "test-secret-key-not-for-production"
 os.environ["TRIPSTASH_WORKER_INLINE"] = "true"
+# The suite never reaches the network; link reading has its own stubbed tests.
+os.environ["TRIPSTASH_LINK_FETCH_ENABLED"] = "false"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
