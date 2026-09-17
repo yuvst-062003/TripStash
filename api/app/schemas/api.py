@@ -175,6 +175,7 @@ class CandidateResponse(ApiModel):
     evidence: list[EvidenceResponse]
     resolutions: list[ResolutionOption]
     duplicate_of_place_id: str | None
+    duplicate_of_name: str | None = None
     duplicate_reason: str | None
     happens_on: date | None = None
     ends_on: date | None = None

@@ -90,6 +90,7 @@ export interface Candidate {
   evidence: Evidence[]
   resolutions: Resolution[]
   duplicate_of_place_id: string | null
+  duplicate_of_name?: string | null
   duplicate_reason: string | null
   happens_on?: string | null
   ends_on?: string | null

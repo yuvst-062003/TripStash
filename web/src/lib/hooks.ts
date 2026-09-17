@@ -9,13 +9,23 @@ export interface AsyncState<T> {
   reload: () => void
 }
 
-/** Runs a request, keeps the last good data, and surfaces cache provenance. */
+/** Last good payloads by key, so a screen revisited in one session opens on what it showed. */
+const remembered = new Map<string, unknown>()
+
+/**
+ * Runs a request, keeps the last good data, and surfaces cache provenance.
+ * With a `cacheKey` the previous result is shown at once while the request
+ * refreshes it — no skeleton on a return visit.
+ */
 export function useAsync<T>(
   loader: () => Promise<Fetched<T>>,
   deps: unknown[],
   enabled = true,
+  cacheKey?: string,
 ): AsyncState<T> {
-  const [data, setData] = useState<T | null>(null)
+  const [data, setData] = useState<T | null>(() =>
+    cacheKey && remembered.has(cacheKey) ? (remembered.get(cacheKey) as T) : null,
+  )
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(enabled)
   const [fromCache, setFromCache] = useState(false)
@@ -35,6 +45,7 @@ export function useAsync<T>(
       .then((result) => {
         if (cancelled) return
         setData(result.data)
+        if (cacheKey) remembered.set(cacheKey, result.data)
         setFromCache(result.fromCache)
         setError(null)
       })

@@ -634,3 +634,64 @@ def test_home_never_invents_a_distance_from_you_without_a_location(client, auth,
     # The same event is never two cards.
     events = [r for r in with_location if r.get("knowledge_type") == "event"]
     assert len(events) == 1
+
+
+# ------------------------------------------------- review card decisions
+
+
+def test_source_settles_once_its_last_candidate_is_decided(client, auth, trip):
+    source = capture_reel(client, auth)
+    inbox = client.get("/api/v1/inbox", headers=auth, params={"source_id": source["id"]}).json()
+    assert inbox
+    for candidate in inbox:
+        result = client.post(f"/api/v1/candidates/{candidate['id']}/ignore", headers=auth)
+        assert result.status_code == 204, result.text
+    sources = client.get("/api/v1/sources", headers=auth).json()
+    settled = next(s for s in sources if s["id"] == source["id"])
+    assert settled["pending_count"] == 0
+    assert settled["status"] == "completed"
+
+
+def test_an_edited_tip_is_saved_with_its_edit_and_marked_as_yours(client, auth, trip):
+    capture_reel(client, auth)
+    inbox = client.get("/api/v1/inbox", headers=auth).json()
+    tip = next(c for c in inbox if c["type"] == "safety")
+    edited = client.patch(
+        f"/api/v1/candidates/{tip['id']}",
+        headers=auth,
+        json={
+            "title": "Taxi scam at the terminal",
+            "body": "Taxis at the bus terminal overcharge.",
+        },
+    )
+    assert edited.status_code == 200, edited.text
+    approved = client.post(
+        f"/api/v1/candidates/{tip['id']}/approve",
+        headers=auth,
+        json={"reason_saved": "Dani said agree the price first."},
+    )
+    assert approved.status_code == 200, approved.text
+    item = next(
+        k for k in client.get("/api/v1/knowledge", headers=auth).json()
+        if k["id"] == approved.json()["knowledge_item_id"]
+    )
+    assert item["title"] == "Taxi scam at the terminal"
+    assert item["body"].startswith("Taxis at the bus terminal overcharge.")
+    assert "Dani said agree the price first." in item["body"]
+    assert item["user_edited"] is True
+
+
+def test_a_duplicate_candidate_names_the_place_it_matches(client, auth, trip):
+    capture_reel(client, auth)
+    approve_all_places(client, auth)
+    # The same reel captured again resolves to places that are already saved.
+    client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={"url": "https://www.example-social.test/reel/abc124", "text": REEL_TRANSCRIPT},
+    )
+    inbox = client.get("/api/v1/inbox", headers=auth).json()
+    duplicates = [c for c in inbox if c["duplicate_of_place_id"]]
+    assert duplicates
+    for candidate in duplicates:
+        assert candidate["duplicate_of_name"]

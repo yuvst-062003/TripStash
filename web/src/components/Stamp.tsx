@@ -79,7 +79,7 @@ export function StampDrop({
           initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 1.9, rotate: -22 }}
           animate={{ opacity: 1, scale: 1, rotate: -8 }}
           exit={{ opacity: 0 }}
-          transition={stamp}
+          transition={{ ...stamp, opacity: { duration: 0.06, ease: 'linear' } }}
           style={{ display: 'inline-flex', transformOrigin: 'center' }}
         >
           <Stamp tone={tone} size="xl" Icon={Icon} flat>

@@ -73,6 +73,7 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("extraction_candidate", "ends_on", "DATE"),
     ("knowledge_item", "happens_on", "DATE"),
     ("knowledge_item", "ends_on", "DATE"),
+    ("extraction_candidate", "user_edited", "BOOLEAN NOT NULL DEFAULT 0"),
 )
 
 

@@ -305,7 +305,9 @@ def approve_candidate(
         _settle_source(session, candidate.source_id)
         return {"kind": "place", "trip_place_id": trip_place.id, "place_id": trip_place.place_id}
 
-    item = _approve_knowledge(session, candidate, destination_id=destination_id)
+    item = _approve_knowledge(
+        session, candidate, destination_id=destination_id, note=reason_saved
+    )
     candidate.status = CandidateStatus.APPROVED
     candidate.decided_at = datetime.now(UTC)
     _settle_source(session, candidate.source_id)
@@ -320,6 +322,9 @@ def ignore_candidate(session: Session, candidate: ExtractionCandidate) -> None:
 
 def _settle_source(session: Session, source_id: str) -> None:
     """A source leaves Inbox once every candidate has a decision."""
+    # The session does not autoflush: without this the candidate just decided
+    # still reads as pending and the source never settles.
+    session.flush()
     pending = session.execute(
         select(ExtractionCandidate).where(
             ExtractionCandidate.source_id == source_id,
@@ -535,16 +540,24 @@ def _write_provider_facts(session: Session, place: Place, chosen: dict) -> None:
 
 
 def _approve_knowledge(
-    session: Session, candidate: ExtractionCandidate, *, destination_id: str | None
+    session: Session,
+    candidate: ExtractionCandidate,
+    *,
+    destination_id: str | None,
+    note: str | None = None,
 ) -> KnowledgeItem:
     source = session.get(Source, candidate.source_id)
+    # The traveller's own words go under the claim; nothing typed is dropped.
+    note = (note or "").strip()
+    body = f"{candidate.body}\n\n{note}".strip() if note else candidate.body
     item = KnowledgeItem(
         trip_id=candidate.trip_id,
         source_id=candidate.source_id,
         destination_id=destination_id,
         type=candidate.type,
         title=candidate.title,
-        body=candidate.body,
+        body=body,
+        user_edited=candidate.user_edited or bool(note),
         category=candidate.category,
         destination_scope=candidate.destination_scope,
         confidence=candidate.confidence,

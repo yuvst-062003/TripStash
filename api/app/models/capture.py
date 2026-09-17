@@ -113,6 +113,7 @@ class ExtractionCandidate(IdMixin, TimestampMixin, Base):
     duplicate_of_place_id: Mapped[str | None] = mapped_column(String(32))
     duplicate_reason: Mapped[str | None] = mapped_column(String(200))
     resolved_place_id: Mapped[str | None] = mapped_column(String(32))
+    user_edited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Events carry their date through review, so approving keeps it.
     happens_on: Mapped[date | None] = mapped_column(Date)
     ends_on: Mapped[date | None] = mapped_column(Date)

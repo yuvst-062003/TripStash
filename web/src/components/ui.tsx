@@ -36,6 +36,52 @@ export const KNOWLEDGE_LABEL: Record<string, string> = {
   general: 'Tip',
 }
 
+/** What a capture was, in the traveller's words rather than the pipeline's. */
+export const SOURCE_LABEL: Record<string, string> = {
+  link: 'Link',
+  video: 'Video',
+  image: 'Photo',
+  screenshot: 'Screenshot',
+  article: 'Article',
+  message: 'Message',
+  note: 'Note',
+  manual: 'Added by hand',
+}
+
+/** Where a piece of knowledge came from. Official facts and creator advice stay distinct. */
+export const PROVENANCE_LABEL: Record<string, string> = {
+  official: 'Official source',
+  provider: 'From the provider',
+  reviews: 'From reviews',
+  creator: 'Creator advice',
+  user: 'Yours',
+  inference: 'Inferred',
+  model: 'Inferred',
+}
+
+/** Where a quote was read from. */
+export const CHANNEL_LABEL: Record<string, string> = {
+  caption: 'from the caption',
+  transcript: 'from the audio',
+  ocr: 'from the screenshot',
+  text: 'from your note',
+  article: 'from the article',
+  message: 'from the message',
+}
+
+/** "18 Mar", or "18 Mar 2025" when it is not this year. */
+export function fmtDay(value: string | null | undefined): string | null {
+  if (!value) return null
+  const date = new Date(value.length === 10 ? `${value}T00:00:00` : value)
+  if (Number.isNaN(date.getTime())) return null
+  const sameYear = date.getFullYear() === new Date().getFullYear()
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: sameYear ? undefined : 'numeric',
+  })
+}
+
 export type Tint = 'food' | 'stay' | 'nature' | 'view' | 'transport' | 'other' | 'teal' | 'coral' | 'gold'
 
 /** Category → tint. Food is coral, stays are teal, nature is green, views are gold. */
@@ -228,7 +274,14 @@ export function SectionLabel({
     <div className="section">
       <h2 className="section__title">
         {children}
-        {count !== undefined && <span className="section__count num">{count}</span>}
+        {count !== undefined && (
+          <>
+            <span className="section__count num" aria-hidden>
+              {count}
+            </span>
+            <span className="sr-only">, {count}</span>
+          </>
+        )}
       </h2>
       {action}
     </div>
@@ -364,11 +417,13 @@ export function Freshness({ status, label }: { status: string; label: string }) 
 export function Confidence({ value }: { value: number }) {
   const pct = Math.round(value * 100)
   return (
-    <span className="confidence" title={`Extraction confidence ${pct}%`}>
+    <span className="confidence">
       <span className="confidence__bar" aria-hidden>
         <span style={{ width: `${pct}%` }} />
       </span>
-      <span className="num">{pct}% sure</span>
+      <span className="num">
+        {pct}% sure<span className="sr-only"> — how confident the extraction is</span>
+      </span>
     </span>
   )
 }

@@ -1,11 +1,10 @@
 /**
  * A short tick for the moments that deserve one — a tab change, a stamp
- * landing. Silent where the platform has no vibration API (iOS Safari) or
- * where the person has asked for less motion.
+ * landing. Silent where the platform has no vibration API (iOS Safari).
+ * Haptics are not motion: with animation reduced they are the landing cue.
  */
 export function tick(pattern: number | number[] = 8) {
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   try {
     navigator.vibrate(pattern)
   } catch {

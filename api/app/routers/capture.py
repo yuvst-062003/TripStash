@@ -17,7 +17,7 @@ from fastapi import (
     status,
 )
 from sqlalchemy import case, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.adapters import get_storage
 from app.adapters.storage import ALLOWED_MEDIA_TYPES, SignatureError, UnsupportedMediaError
@@ -27,6 +27,7 @@ from app.deps import audit, current_trip, current_user, owned_or_404
 from app.models.capture import ExtractionCandidate, Source
 from app.models.core import Trip, User
 from app.models.enums import CandidateStatus, SourceKind
+from app.models.places import Place
 from app.schemas.api import (
     ApproveCandidate,
     CandidateEdit,
@@ -76,6 +77,11 @@ def _serialise_source(session: Session, source: Source) -> SourceResponse:
 
 
 def _serialise_candidate(candidate: ExtractionCandidate) -> CandidateResponse:
+    duplicate = (
+        object_session(candidate).get(Place, candidate.duplicate_of_place_id)
+        if candidate.duplicate_of_place_id and object_session(candidate)
+        else None
+    )
     return CandidateResponse(
         id=candidate.id,
         source_id=candidate.source_id,
@@ -90,6 +96,7 @@ def _serialise_candidate(candidate: ExtractionCandidate) -> CandidateResponse:
         evidence=json.loads(candidate.evidence_json or "[]"),
         resolutions=json.loads(candidate.resolution_json or "[]"),
         duplicate_of_place_id=candidate.duplicate_of_place_id,
+        duplicate_of_name=duplicate.name if duplicate else None,
         duplicate_reason=candidate.duplicate_reason,
         happens_on=candidate.happens_on,
         ends_on=candidate.ends_on,
@@ -270,6 +277,8 @@ def edit_candidate(
     if candidate.status != CandidateStatus.PENDING:
         raise HTTPException(status.HTTP_409_CONFLICT, "This candidate was already decided.")
     for field, value in body.model_dump(exclude_none=True).items():
+        if getattr(candidate, field) != value:
+            candidate.user_edited = True
         setattr(candidate, field, value)
     session.flush()
     return _serialise_candidate(candidate)
