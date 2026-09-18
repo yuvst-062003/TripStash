@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Local state
+.env
+.env.local
+var/
+*.db
+*.sqlite3
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

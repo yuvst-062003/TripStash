@@ -1,0 +1,42 @@
+# Local stack. `docker compose up` gives Postgres + PostGIS, the API and the PWA.
+# The API also runs without any of this (SQLite + fake providers) - see README.
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: tripstash
+      POSTGRES_PASSWORD: tripstash
+      POSTGRES_DB: tripstash
+    ports: ['5432:5432']
+    volumes:
+      - tripstash-db:/var/lib/postgresql/data
+      - ./infra/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tripstash -d tripstash']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./api
+    environment:
+      TRIPSTASH_DATABASE_URL: postgresql+psycopg://tripstash:tripstash@db:5432/tripstash
+      TRIPSTASH_SECRET_KEY: ${TRIPSTASH_SECRET_KEY:-dev-only-insecure-change-me}
+      TRIPSTASH_STORAGE_DIR: /data/storage
+    volumes:
+      - tripstash-files:/data/storage
+    ports: ['8000:8000']
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./web
+    environment:
+      TRIPSTASH_API_ORIGIN: http://api:8000
+    ports: ['5173:80']
+    depends_on: [api]
+
+volumes:
+  tripstash-db:
+  tripstash-files:

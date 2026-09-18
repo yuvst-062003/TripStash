@@ -1,0 +1,121 @@
+/* ---------------------------------------------------------------------------
+   TripStash design tokens.
+
+   Deliberately plain. This is a utility the traveller opens with one hand on a
+   bus, so it follows the map-app conventions people already read fluently: one
+   grotesque, a near-neutral surface, and a single accent that appears only on
+   things you can press. Decoration is what makes a tool feel untrustworthy.
+--------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: 'Jakarta';
+  src: url('/fonts/PlusJakartaSans-var.woff2') format('woff2-variations');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+
+  --font: 'Jakarta', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Type: five sizes, nothing decorative. */
+  --text-xl: 700 1.5rem/1.2 var(--font);
+  --text-lg: 700 1.1875rem/1.28 var(--font);
+  --text-md: 600 0.9375rem/1.35 var(--font);
+  --text: 400 0.9375rem/1.45 var(--font);
+  --text-sm: 400 0.8125rem/1.4 var(--font);
+  --text-xs: 600 0.6875rem/1.3 var(--font);
+
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.25rem;
+  --s-6: 1.5rem;
+  --s-8: 2rem;
+  --s-10: 2.5rem;
+
+  --r-sm: 0.5rem;
+  --r-md: 0.75rem;
+  --r-lg: 1rem;
+  --r-xl: 1.25rem;
+  --r-pill: 999px;
+
+  --tap: 44px;
+  --nav-h: calc(56px + env(safe-area-inset-bottom));
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur: 180ms;
+  --dur-slow: 300ms;
+
+  /* Light: near-white, one step of grey, hairlines. */
+  --bg: #ffffff;
+  --bg-sunk: #f5f5f4;
+  --surface: #ffffff;
+  --ink: #18181b;
+  --ink-2: #52525b;
+  --ink-3: #8b8b93;
+  --line: #e6e6e4;
+
+  --accent: #1a6b52;
+  --accent-hover: #155744;
+  --on-accent: #ffffff;
+  --accent-soft: #eaf2ef;
+
+  --warn: #92610a;
+  --warn-soft: #fdf5e4;
+  --danger: #a8231b;
+  --danger-soft: #fceceb;
+
+  --scrim: rgba(24, 24, 27, 0.4);
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --elev-2: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --elev-3: 0 -2px 24px rgba(0, 0, 0, 0.14);
+
+  /* Status hues stay muted; the icon and word carry the meaning. */
+  --status-saved: #52525b;
+  --status-must: #a8231b;
+  --status-planned: #1a6b52;
+  --status-visited: #8b8b93;
+  --status-inbox: #8b8b93;
+  --status-archived: #8b8b93;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0b0c;
+    --bg-sunk: #161618;
+    --surface: #131315;
+    --ink: #f4f4f5;
+    --ink-2: #a1a1aa;
+    --ink-3: #71717a;
+    --line: #26262a;
+
+    --accent: #4bb894;
+    --accent-hover: #63c9a7;
+    --on-accent: #06201a;
+    --accent-soft: #10241f;
+
+    --warn: #dda33f;
+    --warn-soft: #251d0e;
+    --danger: #ef8079;
+    --danger-soft: #2a1514;
+
+    --scrim: rgba(0, 0, 0, 0.62);
+    --elev-1: 0 1px 2px rgba(0, 0, 0, 0.6);
+    --elev-2: 0 2px 8px rgba(0, 0, 0, 0.5);
+    --elev-3: 0 -2px 24px rgba(0, 0, 0, 0.6);
+
+    --status-saved: #a1a1aa;
+    --status-must: #ef8079;
+    --status-planned: #4bb894;
+    --status-visited: #71717a;
+    --status-inbox: #71717a;
+    --status-archived: #71717a;
+  }
+}
+
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
