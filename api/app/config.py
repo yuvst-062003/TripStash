@@ -7,12 +7,21 @@ docs/architecture.md.
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+logger = logging.getLogger(__name__)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# This exact string is in the repository, so it is public. It signs session
+# tokens and the signed file URLs, which means shipping it would let anyone who
+# can read the source forge a login for any account and mint a URL for any
+# stored file.
+INSECURE_SECRET = "dev-only-insecure-change-me"
 
 
 class Settings(BaseSettings):
@@ -27,7 +36,10 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite+pysqlite:///{REPO_ROOT / 'var' / 'tripstash.db'}"
     sql_echo: bool = False
 
-    secret_key: str = "dev-only-insecure-change-me"
+    # development | production. Production refuses the shipped defaults.
+    environment: str = "development"
+
+    secret_key: str = INSECURE_SECRET
     access_token_ttl_minutes: int = 60 * 24 * 30
 
     storage_dir: Path = REPO_ROOT / "var" / "storage"
@@ -71,9 +83,40 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 
+class InsecureDeploymentError(RuntimeError):
+    """Raised instead of booting with a default that only suits a laptop."""
+
+
+def assert_deployable(settings: Settings) -> None:
+    """Refuse to start a production instance with the shipped secret.
+
+    A silent insecure default is worse than a crash: the crash is noticed on
+    the first deploy, the default is noticed after someone reads the trip.
+    """
+    if settings.environment == "development":
+        return
+
+    if settings.secret_key == INSECURE_SECRET or len(settings.secret_key) < 32:
+        raise InsecureDeploymentError(
+            "TRIPSTASH_SECRET_KEY is still the development default, or is too "
+            "short, and TRIPSTASH_ENVIRONMENT is not 'development'. It signs "
+            "session tokens and file URLs, so this would let anyone who can read "
+            "the source sign in as you.\n\n"
+            "Generate one and set it:\n"
+            "  python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+        )
+
+    if all("localhost" in origin or "127.0.0.1" in origin for origin in settings.cors_origins):
+        logger.warning(
+            "TRIPSTASH_CORS_ORIGINS still points only at localhost; the web app "
+            "will be refused by the browser once it is served from a real domain."
+        )
+
+
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
+    assert_deployable(settings)
     settings.storage_dir.mkdir(parents=True, exist_ok=True)
     if settings.database_url.startswith("sqlite"):
         (REPO_ROOT / "var").mkdir(parents=True, exist_ok=True)
