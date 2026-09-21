@@ -106,7 +106,11 @@ def assert_deployable(settings: Settings) -> None:
             "  python -c \"import secrets; print(secrets.token_urlsafe(48))\""
         )
 
-    if all("localhost" in origin or "127.0.0.1" in origin for origin in settings.cors_origins):
+    # An empty list means the web app is served from the same origin, which is
+    # how the bundled compose file runs. Only a localhost-only list is wrong.
+    if settings.cors_origins and all(
+        "localhost" in origin or "127.0.0.1" in origin for origin in settings.cors_origins
+    ):
         logger.warning(
             "TRIPSTASH_CORS_ORIGINS still points only at localhost; the web app "
             "will be refused by the browser once it is served from a real domain."

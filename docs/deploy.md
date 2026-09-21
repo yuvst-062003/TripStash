@@ -31,17 +31,26 @@ and geolocation.
 
 ## Self-hosted, all in one
 
-The repository ships a compose file with Postgres + PostGIS, the API and the
-web app behind nginx:
-
 ```bash
-export TRIPSTASH_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
-export TRIPSTASH_ENVIRONMENT=production
-docker compose up --build -d
+./setup.sh                    # writes a signing key to .env, once
+docker compose up --build -d  # Postgres + PostGIS, the API, the web app
 ```
 
-Put a reverse proxy with a certificate in front of it (Caddy does this in two
-lines) and point a domain at the host.
+That is the whole thing. nginx serves the web app and proxies `/api` to the
+API, so the browser sees a single origin and CORS never comes into it. The API
+port is not published to the host; the only way in is through the web
+container.
+
+If you skip `setup.sh`, compose refuses to start and says so, rather than
+falling back to the signing key published in this repository.
+
+For your phone you need HTTPS. Caddy does it in two lines:
+
+```
+tripstash.example.com {
+  reverse_proxy localhost:5173
+}
+```
 
 ## Split hosting
 
@@ -51,9 +60,9 @@ lines) and point a domain at the host.
 cd web && npm ci && npm run build      # → web/dist
 ```
 
-Set `TRIPSTASH_CORS_ORIGINS` on the API to the domain serving that build, or
-the browser will refuse every request. The API logs a warning at boot if it
-still points only at localhost.
+Set `TRIPSTASH_CORS_ORIGINS` to the domain serving that build, or the browser
+will refuse every request. This only applies to split hosting - the compose
+file above serves both from one origin and needs none of it.
 
 **API.** Any host that runs a Python process:
 

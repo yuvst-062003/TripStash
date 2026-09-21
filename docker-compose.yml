@@ -21,11 +21,20 @@ services:
     build: ./api
     environment:
       TRIPSTASH_DATABASE_URL: postgresql+psycopg://tripstash:tripstash@db:5432/tripstash
-      TRIPSTASH_SECRET_KEY: ${TRIPSTASH_SECRET_KEY:-dev-only-insecure-change-me}
+      # No fallback on purpose. The development default is a literal in this
+      # repository, so falling back to it would publish a signing key. Compose
+      # refuses to start rather than quietly using it.
+      TRIPSTASH_SECRET_KEY: ${TRIPSTASH_SECRET_KEY:?run ./setup.sh first, or set it yourself}
+      TRIPSTASH_ENVIRONMENT: production
       TRIPSTASH_STORAGE_DIR: /data/storage
+      # nginx serves the web app and proxies /api to this service, so the
+      # browser only ever sees one origin and CORS never comes into it.
+      TRIPSTASH_CORS_ORIGINS: '[]'
     volumes:
       - tripstash-files:/data/storage
-    ports: ['8000:8000']
+    # Deliberately not published to the host: the only way in is through the
+    # web container, which is the thing with a certificate in front of it.
+    expose: ['8000']
     depends_on:
       db:
         condition: service_healthy
