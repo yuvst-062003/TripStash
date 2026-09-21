@@ -120,6 +120,22 @@ class MediaStageResponse(ApiModel):
     detail: str | None = None
 
 
+class KnownFingerprints(ApiModel):
+    """Content hashes the device already holds, offered before uploading.
+
+    Re-selecting a whole album is the natural way to "sync" on a phone, and
+    most of what comes back is already saved. Asking first turns a gigabyte of
+    re-uploaded video into a few kilobytes of hashes.
+    """
+
+    fingerprints: list[str] = Field(min_length=1, max_length=2000)
+
+
+class KnownFingerprintsResponse(ApiModel):
+    known: list[str]
+    new_count: int
+
+
 class SourceResponse(ApiModel):
     id: str
     kind: str

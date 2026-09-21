@@ -127,6 +127,19 @@ export default function Home() {
         </ul>
       )}
 
+      <ul className="list" style={{ marginTop: 'var(--s-2)' }}>
+        <li>
+          <button className="item" onClick={() => openSave('album')}>
+            <Glyph Icon={RefreshCw} />
+            <div className="item__body">
+              <p className="item__title">Sync album</p>
+              <Meta parts={['Bring in what you saved since last time']} />
+            </div>
+            <ChevronRight size={18} className="dimmer" style={{ flex: 'none', marginTop: 9 }} />
+          </button>
+        </li>
+      </ul>
+
       <SectionLabel action={<Link className="btn btn--sm btn--plain" to="/trip">Plan</Link>}>
         Today
       </SectionLabel>
@@ -170,7 +183,7 @@ export default function Home() {
           title="Nothing to resurface yet"
           body="Save a link, a screenshot or a downloaded video and TripStash brings it back when it becomes relevant."
           action={
-            <button className="btn btn--accent" onClick={openSave}>
+            <button className="btn btn--accent" onClick={() => openSave()}>
               Save something
             </button>
           }

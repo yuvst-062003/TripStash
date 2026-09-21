@@ -121,6 +121,9 @@ export const api = {
     return request<SourceSummary[]>('/api/v1/sources/upload', { method: 'POST', body: form })
   },
   sources: (status?: string) => get<SourceSummary[]>('/api/v1/sources', { status }),
+  // Hashes only. Asking costs kilobytes where uploading would cost gigabytes.
+  knownFingerprints: (fingerprints: string[]) =>
+    post<{ known: string[]; new_count: number }>('/api/v1/sources/known', { fingerprints }),
   retrySource: (id: string) => post<SourceSummary>(`/api/v1/sources/${id}/retry`),
   deleteSource: (id: string) => del<void>(`/api/v1/sources/${id}`),
   inbox: (sourceId?: string) => get<Candidate[]>('/api/v1/inbox', { source_id: sourceId }),

@@ -31,6 +31,8 @@ from app.schemas.api import (
     ApproveCandidate,
     CandidateEdit,
     CandidateResponse,
+    KnownFingerprints,
+    KnownFingerprintsResponse,
     LinkCapture,
     MediaStageResponse,
     SourceResponse,
@@ -216,6 +218,32 @@ async def capture_upload(
         out.append(_serialise_source(session, source))
 
     return out
+
+
+@router.post("/sources/known", response_model=KnownFingerprintsResponse)
+def known_fingerprints(
+    body: KnownFingerprints,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> KnownFingerprintsResponse:
+    """Which of these have been imported already?
+
+    The device hashes each file locally and asks before sending anything, so
+    selecting the whole album again costs a handful of kilobytes instead of
+    re-uploading everything. Hashes are opaque; nothing about a file that is
+    not already saved is revealed by asking.
+    """
+    offered = {value.strip().lower() for value in body.fingerprints if value.strip()}
+    if not offered:
+        return KnownFingerprintsResponse(known=[], new_count=0)
+
+    rows = session.execute(
+        select(Source.fingerprint).where(
+            Source.trip_id == trip.id, Source.fingerprint.in_(offered)
+        )
+    ).scalars()
+    known = sorted(set(rows))
+    return KnownFingerprintsResponse(known=known, new_count=len(offered) - len(known))
 
 
 @router.get("/sources", response_model=list[SourceResponse])

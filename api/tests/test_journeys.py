@@ -556,3 +556,68 @@ def test_the_server_does_not_claim_to_have_read_a_link_the_client_read(client, a
         json={"url": "https://example-blog.test/a", "text": "Go to Semuc Champey.", "kind": "link"},
     )
     assert [stage for stage in response.json()["stages"] if stage["name"] == "link"] == []
+
+
+def test_the_device_can_ask_which_files_are_already_saved(client, auth, trip, tmp_path):
+    """Re-selecting a whole album should cost kilobytes, not gigabytes.
+
+    The device hashes locally and asks first, so only genuinely new media is
+    uploaded. The hash is the same SHA-256 of the raw bytes the server stores.
+    """
+    import hashlib
+
+    from tests.media_fixtures import build_reel, can_build
+
+    if not can_build():
+        import pytest
+
+        pytest.skip("ffmpeg or a usable font is unavailable")
+
+    reel = build_reel(tmp_path / "clip.mp4")
+    data = reel.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    unseen = hashlib.sha256(b"a clip that was never imported").hexdigest()
+
+    # Nothing is known before the first import.
+    first = client.post(
+        "/api/v1/sources/known", headers=auth, json={"fingerprints": [digest, unseen]}
+    ).json()
+    assert first["known"] == []
+    assert first["new_count"] == 2
+
+    client.post(
+        "/api/v1/sources/upload",
+        headers=auth,
+        files={"files": ("clip.mp4", data, "video/mp4")},
+    )
+
+    # After it, the device is told to skip that one and send only the other.
+    second = client.post(
+        "/api/v1/sources/known", headers=auth, json={"fingerprints": [digest, unseen]}
+    ).json()
+    assert second["known"] == [digest]
+    assert second["new_count"] == 1
+
+
+def test_one_traveller_is_never_told_about_another_travellers_media(client, auth, trip):
+    """A hash is opaque, but whether it is *known* must not leak across trips."""
+    import hashlib
+
+    digest = hashlib.sha256(b"private clip").hexdigest()
+    client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={"text": "a note", "kind": "note"},
+    )
+
+    other = client.post(
+        "/api/v1/auth/register",
+        json={"email": "other@example.com", "password": "another-long-password"},
+    ).json()
+    other_auth = {"Authorization": f"Bearer {other['access_token']}"}
+    client.post("/api/v1/trips", headers=other_auth, json={"name": "Different trip"})
+
+    response = client.post(
+        "/api/v1/sources/known", headers=other_auth, json={"fingerprints": [digest]}
+    )
+    assert response.json()["known"] == []

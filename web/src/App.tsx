@@ -34,7 +34,7 @@ const TABS: { to: string; label: string; Icon: IconComponent }[] = [
 export default function App() {
   const [authed, setAuthed] = useState(() => Boolean(token.get()))
   const [askSeed, setAskSeed] = useState<AskSeed | null>(null)
-  const [saveOpen, setSaveOpen] = useState(false)
+  const [saveOpen, setSaveOpen] = useState<false | 'link' | 'album'>(false)
   const [screenContext, setScreenContext] = useState<ScreenContext | null>(null)
   const online = useOnlineStatus()
   const { state: location, request: requestLocation, setManual: setManualLocation } = useLocation()
@@ -70,7 +70,7 @@ export default function App() {
             contextLabel: screenContext?.label,
           },
         ),
-      openSave: () => setSaveOpen(true),
+      openSave: (mode?: 'link' | 'album') => setSaveOpen(mode ?? 'link'),
       signOut,
     }),
     [
@@ -123,7 +123,7 @@ export default function App() {
 
         {/* Save is the one action worth floating; Ask lives in each screen's
             top bar, where the context it inherits is visible. */}
-        <button className="fab" onClick={() => setSaveOpen(true)}>
+        <button className="fab" onClick={() => setSaveOpen('link')}>
           <Plus size={18} strokeWidth={2.4} />
           Save
         </button>
@@ -142,7 +142,9 @@ export default function App() {
         </nav>
 
         {askSeed && <AskSheet seed={askSeed} onClose={() => setAskSeed(null)} />}
-        {saveOpen && <SaveSheet onClose={() => setSaveOpen(false)} />}
+        {saveOpen && (
+          <SaveSheet initialMode={saveOpen} onClose={() => setSaveOpen(false)} />
+        )}
       </div>
     </AppContext.Provider>
   )

@@ -3,10 +3,11 @@ import { ApiError, api } from '../lib/api'
 import { useApp } from '../lib/context'
 import type { SourceSummary } from '../lib/types'
 import { hasBrowserReader, readLinkInBrowser } from '../lib/linkReader'
+import AlbumSync from './AlbumSync'
 import { Note, Sheet, Tabs } from './ui'
 import { Check, Loader2, Upload } from './icons'
 
-type Mode = 'link' | 'upload' | 'note' | 'place'
+type Mode = 'album' | 'link' | 'upload' | 'note' | 'place'
 
 /**
  * Global Save.
@@ -14,9 +15,15 @@ type Mode = 'link' | 'upload' | 'note' | 'place'
  * Capture takes seconds and organising happens later: every path here writes a
  * Source immediately, then hands it to the review queue.
  */
-export default function SaveSheet({ onClose }: { onClose: () => void }) {
+export default function SaveSheet({
+  onClose,
+  initialMode = 'link',
+}: {
+  onClose: () => void
+  initialMode?: Mode
+}) {
   const { position } = useApp()
-  const [mode, setMode] = useState<Mode>('link')
+  const [mode, setMode] = useState<Mode>(initialMode)
   const [url, setUrl] = useState('')
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -123,6 +130,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
         value={mode}
         onChange={setMode}
         options={[
+          { value: 'album', label: 'Album' },
           { value: 'link', label: 'Link' },
           { value: 'upload', label: 'Media' },
           { value: 'note', label: 'Note' },
@@ -130,6 +138,9 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
         ]}
       />
 
+      {mode === 'album' && <AlbumSync onDone={onClose} />}
+
+      {mode !== 'album' && (
       <form className="pad stack" onSubmit={save} style={{ paddingTop: 'var(--s-4)' }}>
         {mode === 'link' && (
           <>
@@ -261,6 +272,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
           {busy ? 'Saving…' : 'Save and extract'}
         </button>
       </form>
+      )}
     </Sheet>
   )
 }

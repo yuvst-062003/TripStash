@@ -83,6 +83,31 @@ The link stage reports the cause; the advice is separate and says only what to
 do next. Saying the same thing twice in two tones is how an interface starts
 sounding like a machine.
 
+## Syncing an album
+
+A web app cannot read a photo library. No browser grants standing access to
+one, and that is the platform's rule rather than a gap here. Specification 7.5
+says the same thing: explicit multi-file selection is supported, continuous
+monitoring is not promised.
+
+So "Sync album" is built the only honest way. You select the whole album - the
+operating system's picker has a select-all - and the page works out what is
+genuinely new before sending anything:
+
+1. Each selected file is hashed **on the device**, with the same SHA-256 of raw
+   bytes the server stores as a fingerprint.
+2. Those hashes, and nothing else, are offered to `POST /sources/known`.
+3. Only files the server has never seen are uploaded.
+
+Re-selecting two hundred videos therefore costs a few kilobytes of hashes
+rather than a gigabyte of re-uploaded video, and the result reads *"0 new · 4
+selected · 4 already saved"*. Asking first also tells the server less than
+uploading would: a hash reveals nothing about a file it does not already hold.
+
+On desktop Chrome and Edge, the File System Access API can remember a folder
+between visits, so a later sync needs no picking at all. That is a progressive
+enhancement; phones cannot do it, which is why the picker is the main path.
+
 ## On-screen text is the primary channel, not the fallback
 
 The audio on a travel Reel is usually music. The place name, the price and the

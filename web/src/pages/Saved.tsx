@@ -81,7 +81,7 @@ function InboxView({ onSave }: { onSave: () => void }) {
         title="Nothing waiting"
         body="Everything captured has been reviewed. New items land here first — nothing reaches the map unconfirmed."
         action={
-          <button className="btn btn--accent" onClick={onSave}>
+          <button className="btn btn--accent" onClick={() => onSave()}>
             Save something
           </button>
         }
