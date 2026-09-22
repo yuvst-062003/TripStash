@@ -333,3 +333,59 @@ class KnowledgeUpdate(ApiModel):
     category: str | None = None
     destination_scope: str | None = None
     is_archived: bool | None = None
+
+
+# ------------------------------------------------------------------ reels
+
+
+class ReelSpot(ApiModel):
+    """One saved place that has video behind it, for the feed's index."""
+
+    trip_place_id: str
+    place_id: str
+    name: str
+    category: str
+    city: str | None
+    country: str | None
+    status: str
+    destination_id: str | None
+    # The heading this spot appears under: its destination when it has one,
+    # otherwise its city or country. Never invented.
+    scope_label: str
+    clip_count: int
+    playable_count: int
+    latest_saved_at: datetime | None
+
+
+class ReelClip(ApiModel):
+    """A saved video, opened at the section this spot was saved from."""
+
+    id: str
+    source_id: str
+    trip_place_id: str
+    place_id: str
+    place_name: str
+    place_category: str
+    city: str | None
+    country: str | None
+    scope_label: str
+    title: str | None
+    author: str | None
+    url: str | None
+    # Signed, short-lived, and absent when the app does not hold the bytes.
+    file_url: str | None
+    media_type: str | None
+    duration_seconds: float | None
+    width: int | None
+    height: int | None
+    # The second the claim was actually made, kept separate from the window
+    # around it so the interface can cite the moment rather than the padding.
+    moment_seconds: float | None
+    start_seconds: float
+    end_seconds: float | None
+    is_whole_video: bool
+    # Why this spot was saved from this video, with the words that said it.
+    takeaway: str | None
+    quote: str | None
+    confidence: float
+    saved_at: datetime | None

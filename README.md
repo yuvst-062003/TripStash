@@ -163,6 +163,7 @@ implemented, what is stubbed, and what was left out on purpose.
 - [Design](docs/design.md)
 - [Running a free, local model](docs/local-model.md)
 - [The media pipeline](docs/media-pipeline.md)
+- [Clips — the saved video, per spot](docs/clips.md)
 - [Data model](docs/data-model.md)
 - [Specification coverage](docs/spec-coverage.md)
 - [ADR 0001 — Modular monolith](docs/adr/0001-modular-monolith.md)

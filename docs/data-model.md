@@ -34,6 +34,7 @@ User ─┬─ Trip ─┬─ Destination ──┐
 | `extraction_candidate` | `evidence_json` | The quote behind the claim, shown on the review screen |
 | `extraction_candidate` | `is_place_candidate` | A stay *tip* has no location — it is knowledge, not a pin |
 | `extraction_candidate` | `duplicate_of_place_id` | Surfaced for the user; never auto-merged |
+| `source_place_evidence` | `media_timestamp_seconds` | The second a claim came from; the clip feed opens there |
 | `trip_place` | `reason_saved` | The product's core differentiator; user-owned |
 | `trip_place` | `needs_review` | A quality flag, not a lifecycle status |
 | `place_fact` | `provenance`, `checked_at`, `expires_at` | Freshness and the source hierarchy |

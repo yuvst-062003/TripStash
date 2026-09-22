@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.config import get_settings
 from app.db import init_db
-from app.routers import account, assistant, auth, capture, places, planner, trips
+from app.routers import account, assistant, auth, capture, places, planner, reels, trips
 from app.services.extraction import CaptureError
 
 logging.basicConfig(level=logging.INFO)
@@ -41,7 +41,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for router in (auth, trips, capture, places, assistant, planner, account):
+for router in (auth, trips, capture, places, reels, assistant, planner, account):
     app.include_router(router.router, prefix=API_PREFIX)
 
 

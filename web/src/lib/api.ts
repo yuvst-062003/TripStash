@@ -13,6 +13,8 @@ import type {
   PlacePage,
   PlaceSummary,
   ProposedAction,
+  ReelClip,
+  ReelSpot,
   Resolution,
   Resurfaced,
   SourceSummary,
@@ -147,6 +149,11 @@ export const api = {
     get<Resolution[]>('/api/v1/places/search/provider', { q, lat, lon }),
   collections: () => get<{ id: string; name: string; colour: string | null }[]>('/api/v1/collections'),
   createCollection: (name: string) => post<unknown>('/api/v1/collections', { name }),
+
+  // clips - the traveller's own saved video, scoped to a spot
+  reelSpots: (query?: Record<string, unknown>) => get<ReelSpot[]>('/api/v1/reels/spots', query),
+  reelSpot: (tripPlaceId: string) => get<ReelSpot>(`/api/v1/reels/spots/${tripPlaceId}`),
+  reels: (query?: Record<string, unknown>) => get<ReelClip[]>('/api/v1/reels', query),
 
   // assistant
   ask: (body: Record<string, unknown>) => post<AskResponse>('/api/v1/ask', body),

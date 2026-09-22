@@ -68,6 +68,19 @@ class LocalStorageAdapter:
     def get(self, key: str) -> bytes:
         return self._path(key).read_bytes()
 
+    def size(self, key: str) -> int:
+        return self._path(key).stat().st_size
+
+    def read_range(self, key: str, start: int, end: int) -> bytes:
+        """Bytes `start`..`end` inclusive, so a video can be seeked into.
+
+        A feed that opens every clip at its saved timestamp would otherwise
+        have to download each video from the beginning.
+        """
+        with self._path(key).open("rb") as handle:
+            handle.seek(start)
+            return handle.read(max(0, end - start + 1))
+
     def delete(self, key: str) -> None:
         path = self._path(key)
         if path.exists():

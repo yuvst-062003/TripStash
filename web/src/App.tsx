@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes, useLocation as useRoute } from 'react-router-dom'
 import { api, token } from './lib/api'
 import { AppContext, type AskSeed, type ScreenContext } from './lib/context'
 import { useAsync, useLocation, useOnlineStatus } from './lib/hooks'
@@ -10,12 +10,15 @@ import NewTrip from './pages/NewTrip'
 import Home from './pages/Home'
 import MapScreen from './pages/MapScreen'
 import Saved from './pages/Saved'
+import Clips from './pages/Clips'
+import ClipFeed from './pages/ClipFeed'
 import TripScreen from './pages/TripScreen'
 import Place from './pages/Place'
 import ShareTarget from './pages/ShareTarget'
 import { Note, SkeletonRows } from './components/ui'
 import {
   Bookmark,
+  Film,
   Globe,
   Home as HomeIcon,
   type IconComponent,
@@ -28,6 +31,7 @@ const TABS: { to: string; label: string; Icon: IconComponent }[] = [
   { to: '/', label: 'Home', Icon: HomeIcon },
   { to: '/map', label: 'Map', Icon: MapIcon },
   { to: '/saved', label: 'Saved', Icon: Bookmark },
+  { to: '/clips', label: 'Clips', Icon: Film },
   { to: '/trip', label: 'Trip', Icon: Luggage },
 ]
 
@@ -37,6 +41,9 @@ export default function App() {
   const [saveOpen, setSaveOpen] = useState<false | 'link' | 'album'>(false)
   const [screenContext, setScreenContext] = useState<ScreenContext | null>(null)
   const online = useOnlineStatus()
+  // The clip feed owns the whole screen; the tab bar and Save would only sit
+  // on top of the picture.
+  const immersive = useRoute().pathname === '/clips/feed'
   const { state: location, request: requestLocation, setManual: setManualLocation } = useLocation()
 
   const tripState = useAsync(() => api.currentTrip(), [authed], authed)
@@ -114,6 +121,9 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/map" element={<MapScreen />} />
           <Route path="/saved" element={<Saved />} />
+          <Route path="/clips" element={<Clips />} />
+          {/* The feed takes the whole screen, tab bar and all. */}
+          <Route path="/clips/feed" element={<ClipFeed />} />
           <Route path="/trip" element={<TripScreen />} />
           <Route path="/places/:tripPlaceId" element={<Place />} />
           {/* Declared in the manifest as the share target; the OS lands here. */}
@@ -123,12 +133,14 @@ export default function App() {
 
         {/* Save is the one action worth floating; Ask lives in each screen's
             top bar, where the context it inherits is visible. */}
-        <button className="fab" onClick={() => setSaveOpen('link')}>
-          <Plus size={18} strokeWidth={2.4} />
-          Save
-        </button>
+        {!immersive && (
+          <button className="fab" onClick={() => setSaveOpen('link')}>
+            <Plus size={18} strokeWidth={2.4} />
+            Save
+          </button>
+        )}
 
-        <nav className="tabbar" aria-label="Main">
+        <nav className="tabbar" aria-label="Main" hidden={immersive}>
           {TABS.map(({ to, label, Icon }) => (
             <NavLink key={to} to={to} end={to === '/'} className="tabbar__item">
               {({ isActive }) => (

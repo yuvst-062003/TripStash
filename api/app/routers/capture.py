@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 
 from fastapi import (
     APIRouter,
@@ -12,6 +13,7 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     Response,
     UploadFile,
     status,
@@ -371,19 +373,68 @@ def ignore(
 # ----------------------------------------------------------------- files
 
 
+# Keys are generated internally from the uploaded filename, so the extension
+# is the only type hint the signed URL carries. Anything unrecognised is served
+# as an opaque download rather than guessed at.
+def _served_media_type(key: str) -> str:
+    guessed, _ = mimetypes.guess_type(key)
+    return guessed if guessed in ALLOWED_MEDIA_TYPES else "application/octet-stream"
+
+
+def _parse_range(header: str, size: int) -> tuple[int, int] | None:
+    """A single `bytes=` range, clamped to the file. Anything else plays whole."""
+    if not header.startswith("bytes=") or "," in header:
+        return None
+    first, _, last = header[len("bytes=") :].strip().partition("-")
+    try:
+        if not first:
+            # A suffix range: the final N bytes.
+            length = int(last)
+            if length <= 0:
+                return None
+            return max(0, size - length), size - 1
+        start = int(first)
+        end = int(last) if last else size - 1
+    except ValueError:
+        return None
+    end = min(end, size - 1)
+    if start > end or start >= size:
+        return None
+    return start, end
+
+
 @router.get("/files/{key:path}")
 def get_file(
     key: str,
+    request: Request,
     expires: int = Query(...),
     signature: str = Query(...),
 ) -> Response:
-    """Short-lived signed access; the storage root is never publicly served."""
+    """Short-lived signed access; the storage root is never publicly served.
+
+    Range requests are answered because the video feed opens each clip at the
+    second it was saved from, and a browser can only seek into a response that
+    advertises `Accept-Ranges`.
+    """
     storage = get_storage()
     try:
         storage.verify(key, expires, signature)
-        data = storage.get(key)
+        size = storage.size(key)
+        requested = _parse_range(request.headers.get("range", ""), size)
+        data = storage.read_range(key, *requested) if requested else storage.get(key)
     except SignatureError as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, OSError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found.") from exc
-    return Response(content=data, media_type="application/octet-stream")
+
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=600"}
+    if requested is None:
+        return Response(content=data, media_type=_served_media_type(key), headers=headers)
+    start, end = requested
+    headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    return Response(
+        content=data,
+        status_code=status.HTTP_206_PARTIAL_CONTENT,
+        media_type=_served_media_type(key),
+        headers=headers,
+    )

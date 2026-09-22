@@ -356,3 +356,46 @@ export interface KnowledgeItem {
   is_archived: boolean
   evidence: Evidence[]
 }
+
+export interface ReelSpot {
+  trip_place_id: string
+  place_id: string
+  name: string
+  category: string
+  city: string | null
+  country: string | null
+  status: PlaceStatus
+  destination_id: string | null
+  scope_label: string
+  clip_count: number
+  playable_count: number
+  latest_saved_at: string | null
+}
+
+export interface ReelClip {
+  id: string
+  source_id: string
+  trip_place_id: string
+  place_id: string
+  place_name: string
+  place_category: string
+  city: string | null
+  country: string | null
+  scope_label: string
+  title: string | null
+  author: string | null
+  url: string | null
+  file_url: string | null
+  media_type: string | null
+  duration_seconds: number | null
+  width: number | null
+  height: number | null
+  moment_seconds: number | null
+  start_seconds: number
+  end_seconds: number | null
+  is_whole_video: boolean
+  takeaway: string | null
+  quote: string | null
+  confidence: number
+  saved_at: string | null
+}
