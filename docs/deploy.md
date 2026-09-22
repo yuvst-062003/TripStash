@@ -52,6 +52,73 @@ tripstash.example.com {
 }
 ```
 
+## Railway (one service)
+
+Railway runs one container per service, with no nginx to proxy `/api`, so the
+root `Dockerfile` builds the PWA and hands it to the API to serve. Same origin,
+one process, one bill.
+
+```
+Dockerfile     node builds web/  →  python serves api/ + the build
+railway.json   Dockerfile builder, health check on /health
+```
+
+**1. Create the project and the database.**
+
+```bash
+npm i -g @railway/cli
+railway login                 # opens a browser; only you can do this
+railway init                  # creates the project
+railway add --database postgres
+```
+
+Railway's Postgres has **no PostGIS**. That is fine: `services/spatial.py`
+falls back to a bounding box plus a haversine distance, which is exact enough
+for one person's saved places and needs no extension. Install PostGIS only if
+you later want spatial indexes.
+
+**2. Set the variables.** In the service's Variables tab, or with the CLI:
+
+| Variable | Value |
+| --- | --- |
+| `TRIPSTASH_SECRET_KEY` | `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+| `TRIPSTASH_DATABASE_URL` | `${{Postgres.DATABASE_URL}}` — Railway substitutes it |
+| `TRIPSTASH_ENVIRONMENT` | `production` (the image already sets this) |
+| `TRIPSTASH_CORS_ORIGINS` | `[]` (the image already sets this) |
+
+The `postgresql://` URL Railway publishes is rewritten to name the driver, so
+it can be pasted in untouched.
+
+**3. Add a volume**, mounted at `/data`. Without it every uploaded video is
+deleted on the next deploy — the database would keep rows pointing at files
+that no longer exist.
+
+**4. Deploy and open it.**
+
+```bash
+railway up
+railway domain                # generates the https://*.up.railway.app URL
+```
+
+The generated domain is HTTPS, which the PWA needs for installability, the
+share target and geolocation.
+
+**What it costs.** One small service plus a Postgres instance on the Hobby
+plan; the usage-based charge for something one person opens a few times a day
+is small, but it is not zero, and Railway has no permanently free tier. The
+extraction model is not part of this: `TRIPSTASH_AI_PROVIDER=fake` runs the
+rule-based extractor with nothing to install, and pointing
+`TRIPSTASH_LLM_BASE_URL` at Ollama on your own machine keeps the model free.
+
+The same image runs anywhere that takes a Dockerfile and a `PORT`:
+
+```bash
+docker build -t tripstash .
+docker run -p 8000:8000 -v tripstash-files:/data \
+  -e TRIPSTASH_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" \
+  tripstash
+```
+
 ## Split hosting
 
 **Web.** Build and upload the static output:

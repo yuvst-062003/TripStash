@@ -17,6 +17,7 @@ from app.config import get_settings
 from app.db import init_db
 from app.routers import account, assistant, auth, capture, places, planner, reels, trips
 from app.services.extraction import CaptureError
+from app.web import mount_web
 
 logging.basicConfig(level=logging.INFO)
 
@@ -64,6 +65,11 @@ def health() -> dict:
             "storage": settings.storage_provider,
         },
     }
+
+
+# Last, so every API route is already declared and keeps matching first.
+if settings.static_dir is not None:
+    mount_web(app, settings.static_dir)
 
 
 @app.exception_handler(CaptureError)

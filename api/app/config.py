@@ -11,6 +11,7 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,10 @@ class Settings(BaseSettings):
 
     secret_key: str = INSECURE_SECRET
     access_token_ttl_minutes: int = 60 * 24 * 30
+
+    # Set when one container serves both the API and the built PWA, which is
+    # how a single-service host such as Railway or Fly runs it.
+    static_dir: Path | None = None
 
     storage_dir: Path = REPO_ROOT / "var" / "storage"
     signed_url_ttl_seconds: int = 600
@@ -81,6 +86,20 @@ class Settings(BaseSettings):
     worker_inline: bool = True
 
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+    @field_validator("database_url")
+    @classmethod
+    def _name_the_driver(cls, value: str) -> str:
+        """Accept the URL a managed Postgres hands out.
+
+        Railway, Render, Heroku and Neon all publish `postgres://` or
+        `postgresql://`, while SQLAlchemy 2 needs the driver named. Rewriting it
+        here means the platform's variable can be pasted in untouched.
+        """
+        for prefix in ("postgresql://", "postgres://"):
+            if value.startswith(prefix):
+                return "postgresql+psycopg://" + value[len(prefix) :]
+        return value
 
 
 class InsecureDeploymentError(RuntimeError):
