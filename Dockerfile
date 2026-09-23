@@ -43,12 +43,19 @@ RUN pip install --no-cache-dir ".[postgres,media]"
 
 COPY --from=web /srv/dist /srv/web
 
-# Runs unprivileged; the storage volume is the only writable path it needs.
+# The storage volume is the only writable path the app needs.
 RUN useradd --system --create-home tripstash && mkdir -p /data/storage \
  && chown -R tripstash:tripstash /data
-USER tripstash
 
 EXPOSE 8000
+# Starts as root for one command only. A host's volume is mounted over /data at
+# run time and arrives owned by root, which shadows the ownership set above, so
+# a container that had already dropped privileges could not write its own
+# database. Ownership is therefore fixed after the mount, and setpriv drops to
+# the unprivileged user for everything that follows.
+#
 # Shell form on purpose: the host names the port, and PORT is what they all use.
 # Seeds the demo trip when the database is new, which is a no-op afterwards.
-CMD python -m app.seed; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD chown -R tripstash:tripstash /data \
+ && exec setpriv --reuid=tripstash --regid=tripstash --init-groups \
+      sh -c 'python -m app.seed; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'
