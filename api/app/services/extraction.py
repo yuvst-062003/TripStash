@@ -15,8 +15,13 @@ Order is load-bearing:
 from __future__ import annotations
 
 import json
+import logging
+import tempfile
+import time
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,9 +29,13 @@ from sqlalchemy.orm import Session
 from app.adapters import get_ai, get_places, get_storage
 from app.adapters.base import MediaPayload, ResolvedPlace
 from app.adapters.storage import fingerprint, scan_for_malware, text_fingerprint
+from app.config import get_settings
+from app.media import MediaPipeline, attach_timestamps
+from app.media.links import LinkContent, LinkReader, recovery_message
 from app.models.capture import (
     ExtractionCandidate,
     KnowledgeItem,
+    MediaStage,
     Source,
     SourcePlaceEvidence,
 )
@@ -45,6 +54,8 @@ from app.models.places import Place, PlaceFact, TripPlace
 from app.schemas.extraction import Evidence, KnowledgeCandidate, PlaceCandidate
 from app.services.dedupe import find_duplicate, find_duplicate_for_resolved, merge_places
 from app.services.text import normalize_name
+
+logger = logging.getLogger(__name__)
 
 HOURS_TTL = timedelta(days=7)
 
@@ -184,19 +195,32 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
         duration_seconds=source.duration_seconds,
     )
 
-    if source.storage_key and not (source.transcript or source.ocr_text):
-        transcript, ocr_text = ai.transcribe(payload)
-        source.transcript = transcript
-        source.ocr_text = ocr_text
-        payload.transcript = transcript
-        payload.ocr_text = ocr_text
+    # A pasted link is read before anything else: a platform's own oEmbed
+    # response or a page's Open Graph tags is usually where the caption lives.
+    link: LinkContent | None = None
+    if source.url and not (source.raw_text or "").strip() and get_settings().link_fetch_enabled:
+        link = _read_link(session, source, payload)
 
-    result = ai.extract(payload)
+    segments: list = []
+    if source.storage_key and not (source.transcript or source.ocr_text):
+        segments = _understand_media(session, source, payload)
+
+    # The traveller's own route and past corrections travel with the request,
+    # which is how the model adapts to them without any training.
+    from app.services.adaptation import build_hints
+
+    result = ai.extract(payload, build_hints(session, source.trip_id))
 
     if result.failure_reason:
         # Recoverable, not lost: Inbox keeps it with a retry and manual path.
         source.status = SourceStatus.FAILED
-        source.failure_reason = result.failure_reason
+        # When a link is the reason nothing could be read, say what the platform
+        # did and what to do about it, rather than a generic message.
+        source.failure_reason = (
+            recovery_message(source.url)
+            if link is not None and not link.usable and source.url
+            else result.failure_reason
+        )
         source.processed_at = datetime.now(UTC)
         session.flush()
         return []
@@ -204,6 +228,15 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
     source.title = source.title or result.title
     source.author = source.author or result.author
     source.published_on = source.published_on or result.published_on
+
+    # A quote can now cite the moment it was said or shown.
+    if segments:
+        for candidate in result.candidates:
+            for evidence in candidate.evidence:
+                if evidence.media_timestamp_seconds is None:
+                    evidence.media_timestamp_seconds = attach_timestamps(
+                        evidence.quote, segments
+                    )
 
     candidates = [
         _persist_candidate(session, source, candidate) for candidate in result.candidates
@@ -217,6 +250,119 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
     source.processed_at = datetime.now(UTC)
     session.flush()
     return candidates
+
+
+def _read_link(session: Session, source: Source, payload: MediaPayload) -> LinkContent | None:
+    """Read what the link publishes, and record it as a stage like any other."""
+    started = time.perf_counter()
+    try:
+        content = LinkReader(get_settings().link_timeout_seconds).read(source.url)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("link reader failed for %s: %s", source.url, exc)
+        content = LinkContent(status="failed", detail=f"reader error: {exc}"[:200])
+
+    session.add(
+        MediaStage(
+            source_id=source.id,
+            position=0,
+            name="link",
+            engine=LinkReader.name,
+            status=(
+                "ok"
+                if content.usable
+                else ("skipped" if content.status == "blocked" else "failed")
+            ),
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            detail=content.detail or content.status,
+        )
+    )
+
+    if content.usable:
+        source.title = source.title or content.title
+        source.author = source.author or content.author
+        source.raw_text = content.text
+        payload.text = content.text
+    session.flush()
+    return content
+
+
+def _understand_media(session: Session, source: Source, payload: MediaPayload) -> list:
+    """Run the media pipeline and record what each stage managed to read.
+
+    Several small free models, one at a time: ffmpeg demuxes, a speech model
+    reads the audio, and an OCR model reads the text burned into the frames.
+    On travel content the second is often the richer channel, because the audio
+    is frequently just music.
+    """
+    settings = get_settings()
+    if not settings.media_enabled:
+        return []
+
+    materialised = _materialise(source)
+    if materialised is None:
+        return []
+
+    path, cleanup = materialised
+    try:
+        pipeline = MediaPipeline(
+            enable_asr=settings.media_asr,
+            enable_ocr=settings.media_ocr,
+            max_frames=settings.media_max_frames,
+            max_duration_seconds=settings.media_max_duration_seconds,
+            asr_model_size=settings.media_asr_model,
+        )
+        outcome = pipeline.run(path, media_type=source.media_type)
+    except Exception:  # pragma: no cover - defensive; the source stays in Inbox
+        logger.exception("media pipeline failed for source %s", source.id)
+        return []
+    finally:
+        cleanup()
+
+    for existing in list(source.stages):
+        session.delete(existing)
+    offset = 1 if source.url else 0
+    for position, stage in enumerate(outcome.stages):
+        session.add(
+            MediaStage(
+                source_id=source.id,
+                position=position + offset,
+                name=stage.name,
+                engine=stage.engine,
+                status=stage.status,
+                duration_ms=stage.duration_ms,
+                detail=stage.detail,
+            )
+        )
+
+    source.transcript = outcome.transcript
+    source.ocr_text = outcome.ocr_text
+    source.duration_seconds = outcome.duration_seconds or source.duration_seconds
+    source.width = outcome.width or source.width
+    source.height = outcome.height or source.height
+    payload.transcript = outcome.transcript
+    payload.ocr_text = outcome.ocr_text
+    session.flush()
+    return outcome.segments
+
+
+def _materialise(source: Source) -> tuple[Path, Callable[[], None]] | None:
+    """Put the stored bytes on disk so ffmpeg can open them.
+
+    Going through the storage adapter rather than reaching for a local path
+    keeps this working when storage moves to object storage.
+    """
+    try:
+        data = get_storage().get(source.storage_key)
+    except Exception:  # pragma: no cover - missing or unreadable object
+        logger.warning("could not read stored media for source %s", source.id)
+        return None
+
+    suffix = Path(source.filename or "upload.bin").suffix or ".bin"
+    handle = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    handle.write(data)
+    handle.close()
+    path = Path(handle.name)
+    return path, lambda: path.unlink(missing_ok=True)
 
 
 def _persist_candidate(

@@ -37,8 +37,9 @@ colour schemes are supported, and `prefers-reduced-motion` is honoured.
 
 | Area | Status |
 | --- | --- |
-| LLM extraction | Deterministic rule-based `FakeAIAdapter`. `AnthropicAIAdapter` is scaffolded and raises rather than pretending. The typed contract (`ExtractionResult`) is what a real model must fill in |
-| Speech-to-text / OCR | Not implemented. Text-bearing uploads are decoded; binary media returns no transcript and the source fails *recoverably* rather than being invented |
+| LLM extraction | Two adapters ship: `fake` (deterministic rules, the default) and `local` (free open weights via any OpenAI-compatible server), with constrained decoding, one repair attempt, an evidence-grounding guard and fallback to the rules. No paid API is used |
+| Speech-to-text / OCR | Implemented as a staged pipeline (`app/media/`): ffmpeg probes, demuxes and samples frames; PP-OCRv4 reads on-screen text offline; faster-whisper transcribes speech when the optional extra is installed, behind a hallucination guard. Every stage reports its own status |
+| Fine-tuning | Deliberately not wired up. Few-shot adaptation from the traveller's own corrections is live; decisions export as a supervised set via `python -m app.export_training` once there are enough (see docs/local-model.md) |
 | Places provider | In-repo gazetteer with the same `ResolvedPlace` shape a real provider returns |
 | Weather, FX | Deterministic fakes |
 | Object storage | Local filesystem with HMAC-signed URLs; malware scanning is a call site with an EICAR check, not a real scanner |
@@ -61,12 +62,15 @@ Straight from §3.3 and §14's deferred list:
 ## Known gaps to close next
 
 1. **Alembic migrations** before the schema is deployed anywhere shared.
-2. **Real extraction**: implement `AnthropicAIAdapter.extract` against the
-   existing schema, plus a transcription provider, then re-run §17's validation
-   with 30–50 real sources.
+2. **Transcription**: wire `whisper.cpp` behind `transcribe()` so a downloaded
+   video without a caption stops being a recoverable failure, then re-run §17's
+   validation with 30–50 real sources against the local model.
 3. **A queue** (RQ, Celery or similar) for video processing, so a long
    transcription does not occupy a request worker.
-4. **Marker clustering** at low zoom (§5.2) — currently every pin is drawn.
-5. **Write-side offline queue** in the client; the read path and the
+4. **Visual understanding** — a small vision-language model on keyframes, to
+   describe what is *shown* rather than what is written. Left out as the
+   heaviest stage on CPU.
+5. **Marker clustering** at low zoom (§5.2) — currently every pin is drawn.
+6. **Write-side offline queue** in the client; the read path and the
    server-side idempotency key are in place, the client-side replay is not.
-6. **Rate limiting and refresh tokens** on the auth surface.
+7. **Rate limiting and refresh tokens** on the auth surface.

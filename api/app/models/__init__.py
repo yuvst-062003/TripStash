@@ -4,6 +4,7 @@ from app.models.base import Base, new_id, utcnow
 from app.models.capture import (
     ExtractionCandidate,
     KnowledgeItem,
+    MediaStage,
     Source,
     SourcePlaceEvidence,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "ExtractionCandidate",
     "ItineraryItem",
     "KnowledgeItem",
+    "MediaStage",
     "Place",
     "PlaceFact",
     "Source",

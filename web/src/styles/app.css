@@ -595,7 +595,9 @@ a.timeline__body:active { transform: scale(0.98); transition-duration: 0ms; }
 .tabbar__inner {
   pointer-events: auto;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* One column per tab, so adding one does not mean editing a number here. */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   width: 100%;
   max-width: 420px;
   padding: 4px;
@@ -1689,3 +1691,180 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
 .stash__row--link { border-radius: 10px; transition: transform var(--dur) var(--ease); }
 .stash__row--link:active { transform: scale(0.98); transition-duration: 0ms; }
 .stash__row .glyph { width: 34px; height: 34px; border-radius: 10px; }
+/* ---------------------------------------------------------------- clip feed
+   The one screen that goes dark and edge to edge. Video carries its own
+   contrast, so chrome here is a scrim and a handful of chips - anything with a
+   surface of its own would fight the picture.
+-------------------------------------------------------------------------- */
+
+.feed {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  color: #fff;
+  /* Above the tab bar and the Save button: the feed is the whole screen. */
+  z-index: 50;
+}
+
+.feed__track {
+  height: 100%;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.feed__track::-webkit-scrollbar { display: none; }
+
+.feed__bar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: calc(env(safe-area-inset-top) + var(--s-3)) var(--s-4) var(--s-3);
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent);
+  pointer-events: none;
+}
+.feed__bar > * { pointer-events: auto; }
+
+.feed__heading { flex: 1; min-width: 0; text-align: center; }
+.feed__count { font: var(--text-sm); color: rgba(255, 255, 255, 0.62); }
+
+.feed__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-width: 38px;
+  height: 38px;
+  padding-inline: var(--s-2);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font: var(--text-sm);
+  text-decoration: none;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.feed__chip:hover { background: rgba(255, 255, 255, 0.26); }
+.feed__chip--wide { padding-inline: var(--s-3); }
+.feed__chip[aria-pressed='true'] { background: #fff; color: #111; }
+
+.slide {
+  position: relative;
+  height: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.slide__video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.slide__missing {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-2);
+  padding: var(--s-8) var(--s-6);
+  text-align: center;
+  color: rgba(255, 255, 255, 0.72);
+  max-width: 22rem;
+}
+
+.slide__resume {
+  position: absolute;
+  inset: auto auto 50% 50%;
+  transform: translate(-50%, 50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-5);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font: var(--text-md);
+  cursor: pointer;
+}
+
+/* A readable floor for the caption without dimming the picture above it. */
+.slide__shade {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 48%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.82), transparent);
+  pointer-events: none;
+}
+
+.slide__body {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: var(--s-4) var(--s-4) calc(var(--s-8) + env(safe-area-inset-bottom));
+  display: grid;
+  gap: var(--s-2);
+}
+
+.slide__place {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: #fff;
+  text-decoration: none;
+  letter-spacing: -0.017em;
+}
+.slide__place:hover { text-decoration: underline; }
+
+.slide__meta { font: var(--text-sm); color: rgba(255, 255, 255, 0.66); }
+.slide__quote { font: var(--text); color: rgba(255, 255, 255, 0.9); }
+
+.slide__actions { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-1); }
+
+/* Where the saved section sits inside the full running time. */
+.slide__scrub {
+  position: absolute;
+  inset: auto var(--s-4) calc(var(--s-4) + env(safe-area-inset-bottom)) var(--s-4);
+  height: 2px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: var(--r-pill);
+}
+.slide__section {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: var(--r-pill);
+}
+.slide__head {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 6px;
+  background: #fff;
+  border-radius: var(--r-pill);
+}
+
+.slide__stamp {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 62px);
+  right: var(--s-4);
+  font: var(--text-xs);
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 3px var(--s-2);
+  border-radius: var(--r-pill);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed__track { scroll-behavior: auto; }
+}

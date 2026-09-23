@@ -989,3 +989,157 @@ def test_ask_without_a_stop_does_not_search_the_trip_name(client, auth, trip):
     assert answer["cards"] == []
     assert "Central America" not in answer["answer"]
     assert "stop" in answer["answer"].lower()
+def test_a_video_with_no_speech_still_yields_reviewable_candidates(client, auth, trip, tmp_path):
+    """The whole point of the media pipeline, end to end through the API.
+
+    A travel Reel whose audio is music: everything worth keeping is text burned
+    into the frames, so a pipeline that only listens recovers nothing.
+    """
+    from tests.media_fixtures import build_reel, can_build
+
+    if not can_build():
+        import pytest
+
+        pytest.skip("ffmpeg or a usable font is unavailable")
+
+    reel = build_reel(tmp_path / "antigua.mp4")
+    assert reel is not None
+
+    response = client.post(
+        "/api/v1/sources/upload",
+        headers=auth,
+        files={"files": ("antigua.mp4", reel.read_bytes(), "video/mp4")},
+    )
+    assert response.status_code == 201, response.text
+    source = response.json()[0]
+
+    # Every stage reports what it did, which is the per-item status spec 7.5 wants.
+    stage_names = [stage["name"] for stage in source["stages"]]
+    assert "probe" in stage_names and "on-screen text" in stage_names
+    assert source["ocr_chars"] > 0
+    assert source["duration_seconds"] and source["duration_seconds"] > 1
+    assert source["status"] == "needs_review"
+
+    inbox = client.get("/api/v1/inbox", headers=auth, params={"source_id": source["id"]}).json()
+    titles = " ".join(candidate["title"] for candidate in inbox).lower()
+    assert "cerro de la cruz" in titles
+
+    # A quote read off the screen can cite the second it appeared.
+    stamped = [
+        evidence
+        for candidate in inbox
+        for evidence in candidate["evidence"]
+        if evidence["media_timestamp_seconds"] is not None
+    ]
+    assert stamped, "on-screen quotes should carry the moment they appeared"
+
+
+TIKTOK_CAPTION = (
+    "Cerro de la Cruz at sunset is the best free view in Antigua. "
+    "Careful with the taxi scam at the terminal, they quote four times the price."
+)
+
+
+def test_a_caption_the_client_recovered_is_saved_and_credited(client, auth, trip):
+    """The share sheet and the browser can read what the server cannot.
+
+    A datacenter IP is the first thing bot protection blocks, so the caption
+    arrives from the traveller's own device instead. The API records which path
+    supplied it rather than pretending it fetched anything.
+    """
+    response = client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={
+            "url": "https://vt.tiktok.com/ZSqsY4ykw/",
+            "text": TIKTOK_CAPTION,
+            "kind": "link",
+            "reader": "share-target",
+        },
+    )
+    assert response.status_code == 201, response.text
+    source = response.json()
+
+    assert source["status"] == "needs_review"
+    stage = next(stage for stage in source["stages"] if stage["name"] == "link")
+    assert stage["engine"] == "share sheet"
+    assert stage["status"] == "ok"
+
+    inbox = client.get("/api/v1/inbox", headers=auth, params={"source_id": source["id"]}).json()
+    types = {candidate["type"] for candidate in inbox}
+    assert "place" in types and "safety" in types
+
+
+def test_the_server_does_not_claim_to_have_read_a_link_the_client_read(client, auth, trip):
+    """No `reader`, no credit: the stage only appears when a path really ran."""
+    response = client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={"url": "https://example-blog.test/a", "text": "Go to Semuc Champey.", "kind": "link"},
+    )
+    assert [stage for stage in response.json()["stages"] if stage["name"] == "link"] == []
+
+
+def test_the_device_can_ask_which_files_are_already_saved(client, auth, trip, tmp_path):
+    """Re-selecting a whole album should cost kilobytes, not gigabytes.
+
+    The device hashes locally and asks first, so only genuinely new media is
+    uploaded. The hash is the same SHA-256 of the raw bytes the server stores.
+    """
+    import hashlib
+
+    from tests.media_fixtures import build_reel, can_build
+
+    if not can_build():
+        import pytest
+
+        pytest.skip("ffmpeg or a usable font is unavailable")
+
+    reel = build_reel(tmp_path / "clip.mp4")
+    data = reel.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    unseen = hashlib.sha256(b"a clip that was never imported").hexdigest()
+
+    # Nothing is known before the first import.
+    first = client.post(
+        "/api/v1/sources/known", headers=auth, json={"fingerprints": [digest, unseen]}
+    ).json()
+    assert first["known"] == []
+    assert first["new_count"] == 2
+
+    client.post(
+        "/api/v1/sources/upload",
+        headers=auth,
+        files={"files": ("clip.mp4", data, "video/mp4")},
+    )
+
+    # After it, the device is told to skip that one and send only the other.
+    second = client.post(
+        "/api/v1/sources/known", headers=auth, json={"fingerprints": [digest, unseen]}
+    ).json()
+    assert second["known"] == [digest]
+    assert second["new_count"] == 1
+
+
+def test_one_traveller_is_never_told_about_another_travellers_media(client, auth, trip):
+    """A hash is opaque, but whether it is *known* must not leak across trips."""
+    import hashlib
+
+    digest = hashlib.sha256(b"private clip").hexdigest()
+    client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={"text": "a note", "kind": "note"},
+    )
+
+    other = client.post(
+        "/api/v1/auth/register",
+        json={"email": "other@example.com", "password": "another-long-password"},
+    ).json()
+    other_auth = {"Authorization": f"Bearer {other['access_token']}"}
+    client.post("/api/v1/trips", headers=other_auth, json={"name": "Different trip"})
+
+    response = client.post(
+        "/api/v1/sources/known", headers=other_auth, json={"fingerprints": [digest]}
+    )
+    assert response.json()["known"] == []

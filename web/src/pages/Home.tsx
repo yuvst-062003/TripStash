@@ -34,6 +34,7 @@ import {
   Inbox,
   KNOWLEDGE_ICON,
   MapPin,
+  RefreshCw,
   Ticket,
 } from '../components/icons'
 import type { HomePayload } from '../lib/types'
@@ -197,6 +198,25 @@ export default function Home() {
         </div>
       )}
 
+      <div className="pad">
+        <button
+          className="card card--press"
+          onClick={() => openSave('album')}
+          style={{ display: 'flex', alignItems: 'center', gap: 'var(--s-4)', width: '100%', textAlign: 'start' }}
+        >
+          <Glyph Icon={RefreshCw} />
+          <span className="grow">
+            <span className="t-head" style={{ display: 'block' }}>
+              Sync album
+            </span>
+            <span className="t-small dim" style={{ display: 'block', marginTop: 2 }}>
+              Bring in what you saved since last time.
+            </span>
+          </span>
+          <ChevronRight size={17} className="dimmer" />
+        </button>
+      </div>
+
       <SectionLabel action={<Link className="btn btn--sm btn--ghost" to="/trip?section=plan">Plan</Link>}>
         Today
       </SectionLabel>
@@ -232,7 +252,7 @@ export default function Home() {
           title="Nothing saved yet"
           body="Save a link, a screenshot or a video and TripStash brings it back when it becomes relevant."
           action={
-            <button className="btn btn--ink" onClick={openSave}>
+            <button className="btn btn--ink" onClick={() => openSave()}>
               Save something
             </button>
           }

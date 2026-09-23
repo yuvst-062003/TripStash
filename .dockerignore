@@ -1,11 +1,17 @@
+# Keep the build context to the two things the image is made of.
 **/node_modules
 **/dist
 **/.venv
 **/__pycache__
+**/*.pyc
 **/.pytest_cache
 **/.ruff_cache
-var
-docs
+**/*.tsbuildinfo
 .git
+.env
+var/
+docs/
+infra/
+api/tests/
 .claude
 .playwright-mcp

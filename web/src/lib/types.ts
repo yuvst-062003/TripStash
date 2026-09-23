@@ -37,6 +37,14 @@ export interface Destination {
   notes: string | null
 }
 
+export interface MediaStage {
+  name: string
+  engine: string
+  status: 'ok' | 'skipped' | 'failed'
+  duration_ms: number
+  detail: string | null
+}
+
 export interface SourceSummary {
   id: string
   kind: string
@@ -56,6 +64,10 @@ export interface SourceSummary {
   pending_count: number
   file_url: string | null
   duplicate?: boolean
+  duration_seconds: number | null
+  stages: MediaStage[]
+  transcript_chars: number
+  ocr_chars: number
 }
 
 export interface Evidence {
@@ -389,4 +401,47 @@ export interface Recommendation {
   summary: string
   grounded: boolean
   cards: AskCard[]
+}
+
+export interface ReelSpot {
+  trip_place_id: string
+  place_id: string
+  name: string
+  category: string
+  city: string | null
+  country: string | null
+  status: PlaceStatus
+  destination_id: string | null
+  scope_label: string
+  clip_count: number
+  playable_count: number
+  latest_saved_at: string | null
+}
+
+export interface ReelClip {
+  id: string
+  source_id: string
+  trip_place_id: string
+  place_id: string
+  place_name: string
+  place_category: string
+  city: string | null
+  country: string | null
+  scope_label: string
+  title: string | null
+  author: string | null
+  url: string | null
+  file_url: string | null
+  media_type: string | null
+  duration_seconds: number | null
+  width: number | null
+  height: number | null
+  moment_seconds: number | null
+  start_seconds: number
+  end_seconds: number | null
+  is_whole_video: boolean
+  takeaway: string | null
+  quote: string | null
+  confidence: number
+  saved_at: string | null
 }

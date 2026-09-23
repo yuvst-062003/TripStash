@@ -10,9 +10,6 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from typing import Literal
-
-from pydantic import BaseModel
 
 from app.adapters.base import MediaPayload
 from app.adapters.gazetteer import DESTINATION_HINTS, GAZETTEER
@@ -244,7 +241,9 @@ class FakeAIAdapter:
             return raw, None
         return None, None
 
-    def extract(self, payload: MediaPayload) -> ExtractionResult:
+    def extract(self, payload: MediaPayload, hints: object | None = None) -> ExtractionResult:
+        # Hints steer a model; the rules do not need them.
+        del hints
         channels: list[tuple[str, str]] = []
         if payload.text:
             channels.append(("caption" if payload.url else "text", payload.text))
@@ -421,203 +420,6 @@ class FakeAIAdapter:
         for sentence in _sentences(text):
             if normalize_name(needle) in normalize_name(sentence):
                 return sentence
-        return None
-
-
-class AnthropicAIAdapter:
-    """Real extraction through the Claude API.
-
-    Deliberately thin: the model fills the same typed contract the fake
-    adapter fills, through structured outputs, and the reply is validated
-    against it — so a malformed or refused response fails loudly rather than
-    reaching the review screen. The rules the product enforces (verbatim
-    evidence, nothing invented, events carry dates, border advice flagged)
-    are in the system prompt, which is cached across calls.
-    """
-
-    name = "anthropic"
-
-    def __init__(self, api_key: str | None, model: str, client: object | None = None) -> None:
-        self.api_key = api_key
-        self.model = model
-        self._client = client
-
-    def _get_client(self):
-        if self._client is None:
-            # Imported here so the fake provider needs no SDK installed.
-            import anthropic
-
-            self._client = anthropic.Anthropic(api_key=self.api_key)
-        return self._client
-
-    def transcribe(self, payload: MediaPayload) -> tuple[str | None, str | None]:
-        raise NotImplementedError(
-            "Wire a speech-to-text and OCR provider before enabling the anthropic adapter."
-        )
-
-    def extract(self, payload: MediaPayload) -> ExtractionResult:
-        channels = [
-            (name, text)
-            for name, text in (
-                ("caption", payload.text),
-                ("transcript", payload.transcript),
-                ("ocr", payload.ocr_text),
-            )
-            if text and text.strip()
-        ]
-        if not channels:
-            # The honest failure: nothing readable, nothing to invent.
-            return ExtractionResult(
-                failure_reason="No readable caption, transcript or text — paste the caption "
-                "or add a screenshot and try again."
-            )
-
-        parts = [f"[{name}]\n{text.strip()}" for name, text in channels]
-        if payload.url:
-            parts.insert(0, f"[url]\n{payload.url}")
-        user_message = (
-            f"Today is {today().isoformat()}.\n\n"
-            "Extract every travel claim from this capture:\n\n" + "\n\n".join(parts)
-        )
-
-        response = self._get_client().messages.parse(
-            model=self.model,
-            max_tokens=16000,
-            system=[
-                {
-                    "type": "text",
-                    "text": _EXTRACTION_SYSTEM,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_message}],
-            output_format=_ExtractionOut,
-        )
-        if response.stop_reason == "refusal":
-            return ExtractionResult(failure_reason="The model declined to read this capture.")
-        parsed: _ExtractionOut | None = response.parsed_output
-        if parsed is None:
-            return ExtractionResult(failure_reason="The model returned nothing usable.")
-        return parsed.to_result()
-
-
-_EXTRACTION_SYSTEM = """You turn one piece of saved travel content — a Reel caption, a \
-transcript, a screenshot's text, a message — into typed, checkable claims for a private \
-travel memory.
-
-Rules, in order of importance:
-1. Never invent. Every candidate must be backed by a verbatim quote from the text, in \
-`evidence`. If the text names nothing concrete, return no candidates and say why in \
-`failure_reason`.
-2. One candidate per claim. A video that names a hostel, warns about a taxi scam and \
-quotes a shuttle price yields three candidates, not one.
-3. `type` is the kind of thing it is: `place` for somewhere you can go (attach `place` with \
-the best name, category and city/country hints; never guess coordinates), `accommodation` \
-for a stay, `safety` for a warning, `border` for entry/visa/customs, `transport` for getting \
-around, `route` for an order of stops, `price` for a cost, `packing` for what to bring, \
-`event` for something that happens on a date (festival, market day, party), `general` for \
-any other tip.
-4. Events carry their date in `happens_on` (ISO, and `ends_on` for a range) when the text \
-gives one; resolve a month-and-day to the next occurrence after today.
-5. `border` claims always set `requires_official_verification`.
-6. `confidence` is how sure you are the claim is real and correctly typed (0.3–0.9), lower \
-for hedged or second-hand statements.
-7. `title` is a short gist (under 60 characters); `body` is the claim in one plain sentence. \
-Keep the creator's language; do not translate.
-"""
-
-
-class _EvidenceOut(BaseModel):
-    quote: str
-    channel: Literal["text", "transcript", "ocr", "caption", "frame"] = "caption"
-    media_timestamp_seconds: float | None = None
-
-
-class _PlaceOut(BaseModel):
-    name: str
-    category: PlaceCategory = PlaceCategory.OTHER
-    address_hint: str | None = None
-    city_hint: str | None = None
-    country_hint: str | None = None
-
-
-class _CandidateOut(BaseModel):
-    type: KnowledgeType
-    title: str
-    body: str | None = None
-    destination_scope: str | None = None
-    confidence: float = 0.5
-    evidence: list[_EvidenceOut] = []
-    place: _PlaceOut | None = None
-    happens_on: str | None = None
-    ends_on: str | None = None
-    requires_official_verification: bool = False
-
-
-class _ExtractionOut(BaseModel):
-    """The model's side of the contract: plain strings for dates, no regex constraints."""
-
-    title: str | None = None
-    author: str | None = None
-    published_on: str | None = None
-    language: str | None = None
-    summary: str | None = None
-    candidates: list[_CandidateOut] = []
-    failure_reason: str | None = None
-
-    def to_result(self) -> ExtractionResult:
-        return ExtractionResult(
-            title=self.title,
-            author=self.author,
-            published_on=_iso_date(self.published_on),
-            language=self.language,
-            summary=self.summary,
-            failure_reason=self.failure_reason,
-            candidates=[
-                KnowledgeCandidate(
-                    type=c.type,
-                    title=c.title[:240],
-                    body=c.body,
-                    category=c.place.category if c.place else None,
-                    destination_scope=c.destination_scope,
-                    confidence=min(0.95, max(0.05, c.confidence)),
-                    evidence=[
-                        Evidence(
-                            quote=e.quote[:2000],
-                            channel=e.channel,
-                            media_timestamp_seconds=e.media_timestamp_seconds,
-                        )
-                        for e in c.evidence
-                        if e.quote.strip()
-                    ],
-                    place=(
-                        PlaceCandidate(
-                            name=c.place.name[:200],
-                            category=c.place.category,
-                            address_hint=c.place.address_hint,
-                            city_hint=c.place.city_hint,
-                            country_hint=c.place.country_hint,
-                        )
-                        if c.place
-                        else None
-                    ),
-                    happens_on=_iso_date(c.happens_on),
-                    ends_on=_iso_date(c.ends_on),
-                    requires_official_verification=c.requires_official_verification
-                    or c.type is KnowledgeType.BORDER,
-                )
-                for c in self.candidates
-                if c.evidence  # rule 1: no quote, no claim
-            ],
-        )
-
-
-def _iso_date(value: str | None) -> date | None:
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value[:10])
-    except ValueError:
         return None
 
 

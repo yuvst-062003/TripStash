@@ -16,8 +16,9 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.config import get_settings
 from app.db import init_db
-from app.routers import account, assistant, auth, capture, places, planner, trips
+from app.routers import account, assistant, auth, capture, places, planner, reels, trips
 from app.services.extraction import CaptureError
+from app.web import mount_web
 
 logging.basicConfig(level=logging.INFO)
 
@@ -42,7 +43,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for router in (auth, trips, capture, places, assistant, planner, account):
+for router in (auth, trips, capture, places, reels, assistant, planner, account):
     app.include_router(router.router, prefix=API_PREFIX)
 
 
@@ -65,6 +66,11 @@ def health() -> dict:
             "storage": settings.storage_provider,
         },
     }
+
+
+# Last, so every API route is already declared and keeps matching first.
+if settings.static_dir is not None:
+    mount_web(app, settings.static_dir)
 
 
 @app.exception_handler(CaptureError)

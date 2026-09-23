@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from app.adapters.ai import AnthropicAIAdapter, FakeAIAdapter
+from app.adapters.ai import FakeAIAdapter
 from app.adapters.base import (
     AIAdapter,
     FxProvider,
@@ -28,11 +28,22 @@ from app.config import get_settings
 
 @lru_cache
 def get_ai() -> AIAdapter:
+    """`fake` is the zero-dependency default; `local` runs open weights.
+
+    The local adapter keeps the rule-based one as its fallback, so a stopped
+    model server degrades the quality of extraction rather than breaking it.
+    """
     settings = get_settings()
-    if settings.ai_provider == "anthropic":
-        if not settings.anthropic_api_key:
-            raise RuntimeError("TRIPSTASH_ANTHROPIC_API_KEY is required for the anthropic adapter")
-        return AnthropicAIAdapter(settings.anthropic_api_key, settings.anthropic_model)
+    if settings.ai_provider == "local":
+        from app.adapters.local_llm import LocalLLMAdapter
+
+        return LocalLLMAdapter(
+            settings.llm_base_url,
+            settings.llm_model,
+            timeout_seconds=settings.llm_timeout_seconds,
+            api_key=settings.llm_api_key,
+            fallback=FakeAIAdapter(),
+        )
     return FakeAIAdapter()
 
 

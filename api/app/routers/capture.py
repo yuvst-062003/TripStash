@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 
 from fastapi import (
     APIRouter,
@@ -12,6 +13,7 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     Response,
     UploadFile,
     status,
@@ -24,7 +26,7 @@ from app.adapters.storage import ALLOWED_MEDIA_TYPES, SignatureError, Unsupporte
 from app.config import get_settings
 from app.db import get_session
 from app.deps import audit, current_trip, current_user, owned_or_404
-from app.models.capture import ExtractionCandidate, Source
+from app.models.capture import ExtractionCandidate, MediaStage, Source
 from app.models.core import Trip, User
 from app.models.enums import CandidateStatus, SourceKind
 from app.models.places import Place
@@ -32,7 +34,10 @@ from app.schemas.api import (
     ApproveCandidate,
     CandidateEdit,
     CandidateResponse,
+    KnownFingerprints,
+    KnownFingerprintsResponse,
     LinkCapture,
+    MediaStageResponse,
     SourceResponse,
 )
 from app.services.extraction import (
@@ -45,6 +50,13 @@ from app.services.extraction import (
 from app.worker import enqueue_source_processing
 
 router = APIRouter(tags=["capture"])
+
+# Friendly names for the paths that can recover a caption, best first.
+READER_LABELS = {
+    "share-target": "share sheet",
+    "browser-oembed": "browser · oEmbed",
+    "manual": "typed by you",
+}
 
 
 def _serialise_source(session: Session, source: Source) -> SourceResponse:
@@ -73,6 +85,10 @@ def _serialise_source(session: Session, source: Source) -> SourceResponse:
         candidate_count=int(counts[0] or 0),
         pending_count=int(counts[1] or 0),
         file_url=file_url,
+        duration_seconds=source.duration_seconds,
+        stages=[MediaStageResponse.model_validate(stage) for stage in source.stages],
+        transcript_chars=len(source.transcript or ""),
+        ocr_chars=len(source.ocr_text or ""),
     )
 
 
@@ -136,6 +152,22 @@ def capture_link(
         return original
     except CaptureError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+    # The client can read a link the server cannot: it is on the traveller's own
+    # connection rather than a datacenter IP. Record which path supplied the
+    # text so the status is honest about it.
+    if body.reader and body.text:
+        session.add(
+            MediaStage(
+                source_id=source.id,
+                position=0,
+                name="link",
+                engine=READER_LABELS.get(body.reader, body.reader),
+                status="ok",
+                duration_ms=0,
+                detail=f"caption of {len(body.text)} chars supplied by the client",
+            )
+        )
 
     session.commit()
     enqueue_source_processing(source.id, background)
@@ -210,6 +242,32 @@ async def capture_upload(
         out.append(_serialise_source(session, source))
 
     return out
+
+
+@router.post("/sources/known", response_model=KnownFingerprintsResponse)
+def known_fingerprints(
+    body: KnownFingerprints,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> KnownFingerprintsResponse:
+    """Which of these have been imported already?
+
+    The device hashes each file locally and asks before sending anything, so
+    selecting the whole album again costs a handful of kilobytes instead of
+    re-uploading everything. Hashes are opaque; nothing about a file that is
+    not already saved is revealed by asking.
+    """
+    offered = {value.strip().lower() for value in body.fingerprints if value.strip()}
+    if not offered:
+        return KnownFingerprintsResponse(known=[], new_count=0)
+
+    rows = session.execute(
+        select(Source.fingerprint).where(
+            Source.trip_id == trip.id, Source.fingerprint.in_(offered)
+        )
+    ).scalars()
+    known = sorted(set(rows))
+    return KnownFingerprintsResponse(known=known, new_count=len(offered) - len(known))
 
 
 @router.get("/sources", response_model=list[SourceResponse])
@@ -339,19 +397,68 @@ def ignore(
 # ----------------------------------------------------------------- files
 
 
+# Keys are generated internally from the uploaded filename, so the extension
+# is the only type hint the signed URL carries. Anything unrecognised is served
+# as an opaque download rather than guessed at.
+def _served_media_type(key: str) -> str:
+    guessed, _ = mimetypes.guess_type(key)
+    return guessed if guessed in ALLOWED_MEDIA_TYPES else "application/octet-stream"
+
+
+def _parse_range(header: str, size: int) -> tuple[int, int] | None:
+    """A single `bytes=` range, clamped to the file. Anything else plays whole."""
+    if not header.startswith("bytes=") or "," in header:
+        return None
+    first, _, last = header[len("bytes=") :].strip().partition("-")
+    try:
+        if not first:
+            # A suffix range: the final N bytes.
+            length = int(last)
+            if length <= 0:
+                return None
+            return max(0, size - length), size - 1
+        start = int(first)
+        end = int(last) if last else size - 1
+    except ValueError:
+        return None
+    end = min(end, size - 1)
+    if start > end or start >= size:
+        return None
+    return start, end
+
+
 @router.get("/files/{key:path}")
 def get_file(
     key: str,
+    request: Request,
     expires: int = Query(...),
     signature: str = Query(...),
 ) -> Response:
-    """Short-lived signed access; the storage root is never publicly served."""
+    """Short-lived signed access; the storage root is never publicly served.
+
+    Range requests are answered because the video feed opens each clip at the
+    second it was saved from, and a browser can only seek into a response that
+    advertises `Accept-Ranges`.
+    """
     storage = get_storage()
     try:
         storage.verify(key, expires, signature)
-        data = storage.get(key)
+        size = storage.size(key)
+        requested = _parse_range(request.headers.get("range", ""), size)
+        data = storage.read_range(key, *requested) if requested else storage.get(key)
     except SignatureError as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, OSError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found.") from exc
-    return Response(content=data, media_type="application/octet-stream")
+
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=600"}
+    if requested is None:
+        return Response(content=data, media_type=_served_media_type(key), headers=headers)
+    start, end = requested
+    headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    return Response(
+        content=data,
+        status_code=status.HTTP_206_PARTIAL_CONTENT,
+        media_type=_served_media_type(key),
+        headers=headers,
+    )

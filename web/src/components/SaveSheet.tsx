@@ -6,16 +6,18 @@ import { useApp } from '../lib/context'
 import { useOnlineStatus } from '../lib/hooks'
 import { EXIT, useMotionPrefs } from '../lib/motion'
 import { tick } from '../lib/haptics'
+import { hasBrowserReader, readLinkInBrowser } from '../lib/linkReader'
 import type { SourceSummary } from '../lib/types'
 import { DrawerClose } from './Drawer'
 import Segmented from './Segmented'
+import AlbumSync from './AlbumSync'
 import { StampDrop } from './Stamp'
 import { Glyph, Meta, Note, SOURCE_LABEL, Sheet, fmtDay } from './ui'
-import { Check, Image as ImageIcon, KNOWLEDGE_ICON, Link2, Navigation, SOURCE_ICON, X } from './icons'
+import { Check, Image as ImageIcon, KNOWLEDGE_ICON, Link2, Loader2, Navigation, SOURCE_ICON, X } from './icons'
 import { UploadIcon, type UploadIconHandle } from './motion'
 
-type Mode = 'link' | 'upload' | 'note' | 'event' | 'place'
-const MODES: Mode[] = ['link', 'upload', 'note', 'event', 'place']
+type Mode = 'album' | 'link' | 'upload' | 'note' | 'event' | 'place'
+const MODES: Mode[] = ['album', 'link', 'upload', 'note', 'event', 'place']
 
 // What the API accepts, spelled out, so the picker never offers what it will refuse.
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/gif,video/mp4,video/quicktime,video/webm,application/pdf,text/plain,text/vtt,.srt'
@@ -52,16 +54,22 @@ const host = (url: string | null) => {
  * Source immediately, then hands it to the review queue. The sheet keeps one
  * height and one place for the primary, whatever kind is being saved.
  */
-export default function SaveSheet({ onClose }: { onClose: () => void }) {
+export default function SaveSheet({
+  onClose,
+  initialMode = 'link',
+}: {
+  onClose: () => void
+  initialMode?: Mode
+}) {
   const { position, location, requestLocation } = useApp()
   const online = useOnlineStatus()
   const navigate = useNavigate()
   const { reduced, spring } = useMotionPrefs()
-  const [mode, setMode] = useState<Mode>('link')
+  const [mode, setMode] = useState<Mode>(initialMode)
   const dir = useRef(1)
   const [url, setUrl] = useState('')
   // Each kind keeps its own words; switching never carries a note into a link.
-  const [text, setText] = useState<Record<Mode, string>>({ link: '', upload: '', note: '', event: '', place: '' })
+  const [text, setText] = useState<Record<Mode, string>>({ album: '', link: '', upload: '', note: '', event: '', place: '' })
   const [files, setFiles] = useState<File[]>([])
   const [over, setOver] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -69,6 +77,8 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
   const [result, setResult] = useState<SourceSummary[] | null>(null)
   const [event, setEvent] = useState({ title: '', where: '', on: '', until: '' })
   const [eventSaved, setEventSaved] = useState<{ title: string; past: boolean } | null>(null)
+  const [reader, setReader] = useState<string | null>(null)
+  const [reading, setReading] = useState(false)
   const uploadRef = useRef<UploadIconHandle>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const previews = useMemo(
@@ -79,6 +89,26 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
 
   const words = text[mode]
   const setWords = (value: string) => setText((all) => ({ ...all, [mode]: value }))
+
+  /**
+   * Ask the platform for the caption from here rather than from the server.
+   * The browser is on the traveller's own connection, which is the one a
+   * platform will actually answer. Finding nothing is an ordinary outcome.
+   */
+  async function tryReadLink(candidate: string) {
+    const trimmed = candidate.trim()
+    if (!trimmed || !hasBrowserReader(trimmed)) return
+    setReading(true)
+    try {
+      const read = await readLinkInBrowser(trimmed)
+      if (read?.text) {
+        setWords(words.trim() || read.text)
+        setReader(read.reader)
+      }
+    } finally {
+      setReading(false)
+    }
+  }
 
   function choose(next: Mode) {
     dir.current = Math.sign(MODES.indexOf(next) - MODES.indexOf(mode)) || 1
@@ -131,6 +161,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
           url: link || null,
           text: words.trim() || null,
           kind: link ? 'link' : 'note',
+          reader: link ? reader : null,
         })
         setResult([data])
       }
@@ -273,6 +304,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
           value={mode}
           onChange={choose}
           options={[
+            { value: 'album', label: 'Album' },
             { value: 'link', label: 'Link' },
             { value: 'upload', label: 'Media' },
             { value: 'note', label: 'Note' },
@@ -296,6 +328,8 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
             exit={reduced ? { opacity: 0, transition: EXIT } : { opacity: 0, x: -8 * dir.current, transition: EXIT }}
             transition={spring}
           >
+            {mode === 'album' && <AlbumSync onDone={onClose} />}
+
             {mode === 'link' && (
               <>
                 <label className="field">
@@ -307,9 +341,26 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
                     autoFocus
                     placeholder="Reel, TikTok, article or Maps link"
                     value={url}
-                    onChange={(change) => setUrl(change.target.value)}
+                    onChange={(change) => {
+                      setUrl(change.target.value)
+                      setReader(null)
+                    }}
+                    onBlur={(change) => void tryReadLink(change.target.value)}
+                    onPaste={(change) => {
+                      const pasted = change.clipboardData.getData('text')
+                      if (pasted) window.setTimeout(() => void tryReadLink(pasted), 0)
+                    }}
                   />
                 </label>
+                {reading && (
+                  <p className="row t-small dim" style={{ gap: 6 }}>
+                    <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                    Asking the platform for the caption…
+                  </p>
+                )}
+                {reader && !reading && (
+                  <Note Icon={Check}>Caption read by your browser, straight from the platform.</Note>
+                )}
                 <label className="field">
                   <span>Caption or transcript</span>
                   <textarea
@@ -526,6 +577,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
           </motion.div>
         </AnimatePresence>
 
+        {mode !== 'album' && (
         <div className="save__foot">
           {error && (
             <div style={{ marginBottom: 'var(--s-3)' }} role="alert">
@@ -548,6 +600,7 @@ export default function SaveSheet({ onClose }: { onClose: () => void }) {
                   : 'Save and extract'}
           </motion.button>
         </div>
+        )}
       </form>
     </Sheet>
   )

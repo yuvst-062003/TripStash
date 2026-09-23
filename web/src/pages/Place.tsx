@@ -42,6 +42,7 @@ import {
   Flag,
   KNOWLEDGE_ICON,
   Navigation,
+  Play,
   Sparkles,
   Star,
 } from '../components/icons'
@@ -98,6 +99,10 @@ function FactValue({ fact }: { fact: FactGroup }) {
   }
   return <>{value}</>
 }
+
+// Mirrors the server's list; a link to one of these can be watched even when
+// the app does not hold the file.
+const VIDEO_HOSTS = ['tiktok.com', 'instagram.com', 'youtube.com', 'youtu.be', 'vimeo.com']
 
 /** The smart place page: saved evidence and live facts, deliberately separated. */
 export default function Place() {
@@ -184,6 +189,12 @@ export default function Place() {
       </div>
     )
   }
+
+  // Only video is worth a feed; the rest of the saved content reads better as
+  // the list below.
+  const clipCount = page.data.saved_content.filter(
+    (source) => source.kind === 'video' || VIDEO_HOSTS.some((host) => source.url?.includes(host)),
+  ).length
 
   const {
     header,
@@ -483,7 +494,18 @@ export default function Place() {
         )}
       </div>
 
-      <SectionLabel count={documents.length > 1 ? documents.length : undefined}>Saved content</SectionLabel>
+      <SectionLabel
+        count={documents.length > 1 ? documents.length : undefined}
+        action={
+          clipCount > 0 ? (
+            <Link className="btn btn--sm" to={`/clips/feed?spot=${tripPlaceId}`}>
+              <Play size={14} /> Play {clipCount}
+            </Link>
+          ) : undefined
+        }
+      >
+        Saved content
+      </SectionLabel>
       {documents.length === 0 ? (
         <p className="pad t-small dimmer">No source is attached to this place yet.</p>
       ) : (

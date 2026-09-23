@@ -118,6 +118,34 @@ class LinkCapture(ApiModel):
     # Where you stood when you saved it (the "Here" capture).
     lat: float | None = Field(default=None, ge=-90, le=90)
     lon: float | None = Field(default=None, ge=-180, le=180)
+    # Who recovered the caption: the operating system's share sheet, the
+    # traveller's own browser, or the traveller typing it. Recorded so the
+    # status shows which path worked, and never trusted for anything else.
+    reader: str | None = Field(default=None, max_length=40)
+
+
+class MediaStageResponse(ApiModel):
+    name: str
+    engine: str
+    status: str
+    duration_ms: int
+    detail: str | None = None
+
+
+class KnownFingerprints(ApiModel):
+    """Content hashes the device already holds, offered before uploading.
+
+    Re-selecting a whole album is the natural way to "sync" on a phone, and
+    most of what comes back is already saved. Asking first turns a gigabyte of
+    re-uploaded video into a few kilobytes of hashes.
+    """
+
+    fingerprints: list[str] = Field(min_length=1, max_length=2000)
+
+
+class KnownFingerprintsResponse(ApiModel):
+    known: list[str]
+    new_count: int
 
 
 class SourceResponse(ApiModel):
@@ -141,6 +169,11 @@ class SourceResponse(ApiModel):
     # True when this capture was already saved: the original is returned.
     duplicate: bool = False
 
+    duration_seconds: float | None = None
+    # What the media pipeline managed to read, stage by stage.
+    stages: list[MediaStageResponse] = Field(default_factory=list)
+    transcript_chars: int = 0
+    ocr_chars: int = 0
 
 
 class EvidenceResponse(ApiModel):
@@ -331,3 +364,59 @@ class KnowledgeUpdate(ApiModel):
     category: str | None = None
     destination_scope: str | None = None
     is_archived: bool | None = None
+
+
+# ------------------------------------------------------------------ reels
+
+
+class ReelSpot(ApiModel):
+    """One saved place that has video behind it, for the feed's index."""
+
+    trip_place_id: str
+    place_id: str
+    name: str
+    category: str
+    city: str | None
+    country: str | None
+    status: str
+    destination_id: str | None
+    # The heading this spot appears under: its destination when it has one,
+    # otherwise its city or country. Never invented.
+    scope_label: str
+    clip_count: int
+    playable_count: int
+    latest_saved_at: datetime | None
+
+
+class ReelClip(ApiModel):
+    """A saved video, opened at the section this spot was saved from."""
+
+    id: str
+    source_id: str
+    trip_place_id: str
+    place_id: str
+    place_name: str
+    place_category: str
+    city: str | None
+    country: str | None
+    scope_label: str
+    title: str | None
+    author: str | None
+    url: str | None
+    # Signed, short-lived, and absent when the app does not hold the bytes.
+    file_url: str | None
+    media_type: str | None
+    duration_seconds: float | None
+    width: int | None
+    height: int | None
+    # The second the claim was actually made, kept separate from the window
+    # around it so the interface can cite the moment rather than the padding.
+    moment_seconds: float | None
+    start_seconds: float
+    end_seconds: float | None
+    is_whole_video: bool
+    # Why this spot was saved from this video, with the words that said it.
+    takeaway: str | None
+    quote: str | None
+    confidence: float
+    saved_at: datetime | None

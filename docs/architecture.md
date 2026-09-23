@@ -41,6 +41,12 @@ provider SDK; a service never imports FastAPI.
    only path to `TripPlace` or `KnowledgeItem`.
 7. Provider facts are written to `PlaceFact` with provenance and an expiry.
 
+## Clips
+
+`services/reels.py` turns one saved evidence timestamp into a playable window,
+and `routers/reels.py` scopes those clips to a spot, a city or a destination.
+Nothing is re-extracted for it — see [Clips](clips.md).
+
 ## Spatial queries
 
 `app/services/spatial.py` picks a strategy from the dialect:

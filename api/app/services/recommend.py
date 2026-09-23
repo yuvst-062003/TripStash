@@ -14,7 +14,6 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.adapters import get_ai
 from app.models.capture import KnowledgeItem
 from app.models.core import Trip
 from app.models.enums import KnowledgeType, PlaceStatus
@@ -108,13 +107,7 @@ def recommend(
     cards = cards[:limit]
 
     summary = _plain_summary(query, places, events, other)
-    grounded = True
-    ai = get_ai()
-    if cards and getattr(ai, "name", "fake") == "anthropic":
-        written = _model_summary(ai, query, cards)
-        if written:
-            summary, grounded = written, False
-    return Recommendation(query=query, summary=summary, cards=cards, grounded=grounded)
+    return Recommendation(query=query, summary=summary, cards=cards, grounded=True)
 
 
 def _plain_summary(
@@ -141,41 +134,3 @@ def _plain_summary(
     if warnings:
         bits.append(f"{len(warnings)} warning{'s' if len(warnings) != 1 else ''} to read first")
     return f"For {query}: " + "; ".join(bits) + "."
-
-
-def _model_summary(ai, query: str, cards: list[dict]) -> str | None:
-    """Two sentences from the model, grounded on the cards and nothing else."""
-    try:
-        client = ai._get_client()  # noqa: SLF001 - same package, deliberately thin adapter
-        lines = [
-            f"- ({c['type']}{'/' + c['knowledge_type'] if c.get('knowledge_type') else ''}) "
-            f"{c['title']}"
-            + (
-                f" — {c.get('why_saved') or c.get('body')}"
-                if c.get("why_saved") or c.get("body")
-                else ""
-            )
-            + (f" [{c['when']}]" if c.get("when") else "")
-            for c in cards
-        ]
-        response = client.messages.create(
-            model=ai.model,
-            max_tokens=400,
-            output_config={"effort": "low"},
-            system=(
-                "You write two plain sentences telling a traveller what they themselves saved "
-                "about a place, in their own terms. Only use the items given; never add places, "
-                "prices or facts that are not in the list. Lead with the thing that matters "
-                "most now (an event that is soon, a warning), then the rest. "
-                "No preamble, no bullets."
-            ),
-            messages=[
-                {"role": "user", "content": f"Place: {query}\nSaved items:\n" + "\n".join(lines)}
-            ],
-        )
-        if response.stop_reason == "refusal":
-            return None
-        text = next((b.text for b in response.content if b.type == "text"), "").strip()
-        return text or None
-    except Exception:  # noqa: BLE001 - a model hiccup must never break the list
-        return None

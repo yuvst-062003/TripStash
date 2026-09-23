@@ -40,7 +40,7 @@ export interface AppContextValue {
   screenContext: ScreenContext | null
   setScreenContext: (context: ScreenContext | null) => void
   openAsk: (seed?: AskSeed) => void
-  openSave: () => void
+  openSave: (mode?: 'link' | 'album') => void
   openProfile: () => void
   signOut: () => void
 }

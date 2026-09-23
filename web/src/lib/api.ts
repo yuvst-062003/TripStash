@@ -16,6 +16,8 @@ import type {
   PlaceSummary,
   ProposedAction,
   Recommendation,
+  ReelClip,
+  ReelSpot,
   Resolution,
   Resurfaced,
   SourceSummary,
@@ -151,6 +153,8 @@ export const api = {
 
   // capture and review
   captureLink: (body: Record<string, unknown>) => post<SourceSummary>('/api/v1/sources', body),
+  // `reader` records which path recovered the caption: the browser, the
+  // operating system's share sheet, or the traveller typing it.
   upload: (files: File[], note?: string) => {
     const form = new FormData()
     files.forEach((file) => form.append('files', file))
@@ -158,6 +162,9 @@ export const api = {
     return request<SourceSummary[]>('/api/v1/sources/upload', { method: 'POST', body: form })
   },
   sources: (status?: string) => get<SourceSummary[]>('/api/v1/sources', { status }),
+  // Hashes only. Asking costs kilobytes where uploading would cost gigabytes.
+  knownFingerprints: (fingerprints: string[]) =>
+    post<{ known: string[]; new_count: number }>('/api/v1/sources/known', { fingerprints }),
   retrySource: (id: string) => post<SourceSummary>(`/api/v1/sources/${id}/retry`),
   deleteSource: (id: string) => del<void>(`/api/v1/sources/${id}`),
   inbox: (sourceId?: string) => get<Candidate[]>('/api/v1/inbox', { source_id: sourceId }),
@@ -181,6 +188,11 @@ export const api = {
     get<Resolution[]>('/api/v1/places/search/provider', { q, lat, lon }),
   collections: () => get<{ id: string; name: string; colour: string | null }[]>('/api/v1/collections'),
   createCollection: (name: string) => post<unknown>('/api/v1/collections', { name }),
+
+  // clips - the traveller's own saved video, scoped to a spot
+  reelSpots: (query?: Record<string, unknown>) => get<ReelSpot[]>('/api/v1/reels/spots', query),
+  reelSpot: (tripPlaceId: string) => get<ReelSpot>(`/api/v1/reels/spots/${tripPlaceId}`),
+  reels: (query?: Record<string, unknown>) => get<ReelClip[]>('/api/v1/reels', query),
 
   // assistant
   ask: (body: Record<string, unknown>) => post<AskResponse>('/api/v1/ask', body),

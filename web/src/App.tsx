@@ -24,8 +24,11 @@ import MapScreen from './pages/MapScreen'
 import Saved from './pages/Saved'
 import TripScreen from './pages/TripScreen'
 import Place from './pages/Place'
+import Clips from './pages/Clips'
+import ClipFeed from './pages/ClipFeed'
+import ShareTarget from './pages/ShareTarget'
 import { ErrorNote, Note, SkeletonRows } from './components/ui'
-import { Globe } from './components/icons'
+import { Film, Globe, type IconComponent } from './components/icons'
 import {
   BookmarkIcon,
   BriefcaseBusinessIcon,
@@ -37,27 +40,40 @@ import {
 
 type AnimatedIcon = typeof HomeIcon
 
-const TABS: { to: string; label: string; Icon: AnimatedIcon }[] = [
-  { to: '/', label: 'Home', Icon: HomeIcon },
-  { to: '/map', label: 'Map', Icon: MapPinIcon },
-  { to: '/saved', label: 'Saved', Icon: BookmarkIcon },
-  { to: '/trip', label: 'Trip', Icon: BriefcaseBusinessIcon },
+/** Most tabs animate on becoming active; Clips cannot, so it says so in its type. */
+type TabEntry =
+  | { to: string; label: string; animated: true; Icon: AnimatedIcon }
+  | { to: string; label: string; animated: false; Icon: IconComponent }
+
+const TABS: TabEntry[] = [
+  { to: '/', label: 'Home', animated: true, Icon: HomeIcon },
+  { to: '/map', label: 'Map', animated: true, Icon: MapPinIcon },
+  { to: '/saved', label: 'Saved', animated: true, Icon: BookmarkIcon },
+  // The animated set is hand-copied and has no film glyph, so this one is plain.
+  { to: '/clips', label: 'Clips', animated: false, Icon: Film },
+  { to: '/trip', label: 'Trip', animated: true, Icon: BriefcaseBusinessIcon },
 ]
 
 /** The tab icon plays its animation once each time the tab becomes active. */
-function TabIcon({ Icon, active }: { Icon: AnimatedIcon; active: boolean }) {
+function TabIcon({ tab, active }: { tab: TabEntry; active: boolean }) {
   const ref = useRef<{ startAnimation: () => void; stopAnimation: () => void }>(null)
   const { reduced } = useMotionPrefs()
+  const animated = tab.animated
   useEffect(() => {
-    if (!active || reduced) return
+    if (!active || reduced || !animated) return
     ref.current?.startAnimation()
     const id = window.setTimeout(() => ref.current?.stopAnimation(), 500)
     return () => window.clearTimeout(id)
-  }, [active, reduced])
-  return <Icon ref={ref} size={22} aria-hidden />
+  }, [active, reduced, animated])
+  if (!tab.animated) {
+    const Plain = tab.Icon
+    return <Plain size={22} aria-hidden />
+  }
+  const Animated = tab.Icon
+  return <Animated ref={ref} size={22} aria-hidden />
 }
 
-const TAB_ORDER = ['/', '/map', '/saved', '/trip']
+const TAB_ORDER = ['/', '/map', '/saved', '/clips', '/trip']
 
 /** Which way a route change travels: along the tab bar, or deeper for a detail page. */
 function direction(from: string, to: string): 1 | -1 {
@@ -117,7 +133,7 @@ function Page({ children, dir }: { children: ReactNode; dir: number }) {
 export default function App() {
   const [authed, setAuthed] = useState(() => Boolean(token.get()))
   const [askSeed, setAskSeed] = useState<AskSeed | null>(null)
-  const [saveOpen, setSaveOpen] = useState(false)
+  const [saveOpen, setSaveOpen] = useState<false | 'link' | 'album'>(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [screenContext, setScreenContext] = useState<ScreenContext | null>(null)
   const online = useOnlineStatus()
@@ -157,7 +173,7 @@ export default function App() {
   }, [])
 
   const position = location.status === 'granted' ? location.position : null
-  const immersive = route.pathname === '/trip/journey'
+  const immersive = route.pathname === '/trip/journey' || route.pathname === '/clips/feed'
 
   const value = useMemo(
     () => ({
@@ -182,7 +198,7 @@ export default function App() {
             contextLabel: screenContext?.label,
           },
         ),
-      openSave: () => setSaveOpen(true),
+      openSave: (mode?: 'link' | 'album') => setSaveOpen(mode ?? 'link'),
       openProfile: () => setProfileOpen(true),
       signOut,
     }),
@@ -268,9 +284,14 @@ export default function App() {
             <Route path="/" element={<Page dir={dir.current}><Home /></Page>} />
             <Route path="/map" element={<Page dir={dir.current}><MapScreen /></Page>} />
             <Route path="/saved" element={<Page dir={dir.current}><Saved /></Page>} />
+            <Route path="/clips" element={<Page dir={dir.current}><Clips /></Page>} />
+            {/* The feed takes the whole screen, tab bar and all. */}
+            <Route path="/clips/feed" element={<Page dir={dir.current}><ClipFeed /></Page>} />
             <Route path="/trip" element={<Page dir={dir.current}><TripScreen /></Page>} />
             <Route path="/trip/journey" element={<Page dir={dir.current}><Journey /></Page>} />
             <Route path="/places/:tripPlaceId" element={<Page dir={dir.current}><Place /></Page>} />
+            {/* Declared in the manifest as the share target; the OS lands here. */}
+            <Route path="/save" element={<ShareTarget />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AnimatePresence>
@@ -284,7 +305,7 @@ export default function App() {
           className="fab"
           whileTap={{ scale: 0.97 }}
           exit={{ opacity: 0, transition: EXIT }}
-          onClick={() => setSaveOpen(true)}
+          onClick={() => setSaveOpen('link')}
           onPointerEnter={() => plusRef.current?.startAnimation()}
           onPointerLeave={() => plusRef.current?.stopAnimation()}
         >
@@ -298,8 +319,8 @@ export default function App() {
         {!immersive && (
         <motion.nav key="tabbar" className="tabbar" aria-label="Main" exit={{ opacity: 0, transition: EXIT }}>
           <div className="tabbar__inner">
-            {TABS.map(({ to, label, Icon }) => (
-              <NavLink key={to} to={to} end={to === '/'} className="tabbar__item" onClick={() => tick()}>
+            {TABS.map((tab) => (
+              <NavLink key={tab.to} to={tab.to} end={tab.to === '/'} className="tabbar__item" onClick={() => tick()}>
                 {({ isActive }) => (
                   <>
                     {isActive && (
@@ -315,8 +336,8 @@ export default function App() {
                       whileTap={{ scale: 0.92 }}
                       style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}
                     >
-                      <TabIcon Icon={Icon} active={isActive} />
-                      {label}
+                      <TabIcon tab={tab} active={isActive} />
+                      {tab.label}
                     </motion.span>
                   </>
                 )}
@@ -328,7 +349,7 @@ export default function App() {
         </AnimatePresence>
 
         {askSeed && <AskSheet seed={askSeed} onClose={() => setAskSeed(null)} />}
-        {saveOpen && <SaveSheet onClose={() => setSaveOpen(false)} />}
+        {saveOpen && <SaveSheet initialMode={saveOpen} onClose={() => setSaveOpen(false)} />}
         {profileOpen && <ProfileSheet onClose={() => setProfileOpen(false)} />}
       </div>
     </AppContext.Provider>
