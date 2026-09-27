@@ -108,7 +108,12 @@ export default function Home() {
   }
   if (!data) return null
 
-  const { review_queue: queue, money } = data
+  // A cached payload can outlive the shape that produced it - a reseeded
+  // database, an older release, a half-written cache entry. Home must degrade
+  // to zeros rather than take the whole app down with a blank white screen,
+  // which is what an unguarded read here did.
+  const queue = data.review_queue ?? { pending_candidates: 0, failed_sources: 0 }
+  const money = data.money
   const day = data.phase === 'during' ? dayOfTrip(trip?.start_date, data.date) : null
   const headline = data.current_destination?.name ?? trip?.name ?? 'Your trip'
   const queueTotal = queue.pending_candidates + queue.failed_sources

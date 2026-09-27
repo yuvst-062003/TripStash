@@ -42,6 +42,26 @@ export default function GlobeScreen() {
           {state.data.length} {state.data.length === 1 ? 'country' : 'countries'},{' '}
           {state.data.reduce((sum, c) => sum + c.stop_count, 0)} stops
         </p>
+        {/* The globe is the way in, so the two screens it governs are reachable
+            from it: what gets ranked, and the flat map of everything saved. */}
+        <div style={{ display: 'flex', gap: 'var(--s-3)', marginTop: 'var(--s-3)' }}>
+          <Link
+            to="/activities"
+            className="t-small"
+            style={{ color: 'var(--teal-ink)', fontWeight: 600 }}
+            data-testid="to-activities"
+          >
+            What this trip is about
+          </Link>
+          <Link
+            to="/map"
+            className="t-small"
+            style={{ color: 'var(--teal-ink)', fontWeight: 600 }}
+            data-testid="to-flat-map"
+          >
+            Everything on a flat map
+          </Link>
+        </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', padding: '0 var(--s-4)' }}>

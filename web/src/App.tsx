@@ -52,7 +52,7 @@ type TabEntry =
 
 const TABS: TabEntry[] = [
   { to: '/', label: 'Home', animated: true, Icon: HomeIcon },
-  { to: '/map', label: 'Map', animated: true, Icon: MapPinIcon },
+  { to: '/globe', label: 'Map', animated: true, Icon: MapPinIcon },
   { to: '/saved', label: 'Saved', animated: true, Icon: BookmarkIcon },
   // The animated set is hand-copied and has no film glyph, so this one is plain.
   { to: '/clips', label: 'Clips', animated: false, Icon: Film },
@@ -78,7 +78,7 @@ function TabIcon({ tab, active }: { tab: TabEntry; active: boolean }) {
   return <Animated ref={ref} size={22} aria-hidden />
 }
 
-const TAB_ORDER = ['/', '/map', '/saved', '/clips', '/trip']
+const TAB_ORDER = ['/', '/globe', '/saved', '/clips', '/trip']
 
 /** Which way a route change travels: along the tab bar, or deeper for a detail page. */
 function direction(from: string, to: string): 1 | -1 {
