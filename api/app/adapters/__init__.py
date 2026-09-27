@@ -22,6 +22,7 @@ from app.adapters.base import (
 from app.adapters.fx import FakeFxProvider
 from app.adapters.places import FakePlacesProvider
 from app.adapters.storage import LocalStorageAdapter
+from app.adapters.video_search import FakeVideoSearch, YouTubeVideoSearch
 from app.adapters.weather import FakeWeatherProvider
 from app.config import get_settings
 
@@ -45,6 +46,19 @@ def get_ai() -> AIAdapter:
             fallback=FakeAIAdapter(),
         )
     return FakeAIAdapter()
+
+
+@lru_cache
+def get_video_search():
+    """`fake` is deterministic and keyless; `youtube` is the only real search.
+
+    TikTok bars commercial use of its Research API and Instagram exposes no
+    search a traveller could drive, so a found clip is a YouTube clip.
+    """
+    settings = get_settings()
+    if settings.video_search_provider == "youtube" and settings.youtube_api_key:
+        return YouTubeVideoSearch(settings.youtube_api_key, region=settings.youtube_region)
+    return FakeVideoSearch()
 
 
 @lru_cache
@@ -80,5 +94,6 @@ __all__ = [
     "get_fx",
     "get_places",
     "get_storage",
+    "get_video_search",
     "get_weather",
 ]

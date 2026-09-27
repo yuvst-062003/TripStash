@@ -21,7 +21,7 @@ from fastapi import (
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, object_session
 
-from app.adapters import get_storage
+from app.adapters import get_storage, get_video_search
 from app.adapters.storage import ALLOWED_MEDIA_TYPES, SignatureError, UnsupportedMediaError
 from app.config import get_settings
 from app.db import get_session
@@ -34,6 +34,8 @@ from app.schemas.api import (
     ApproveCandidate,
     CandidateEdit,
     CandidateResponse,
+    FindRequest,
+    FindResponse,
     KnownFingerprints,
     KnownFingerprintsResponse,
     LinkCapture,
@@ -48,6 +50,7 @@ from app.services.extraction import (
     create_source,
     ignore_candidate,
 )
+from app.services.finding import find_videos
 from app.worker import enqueue_source_processing
 
 router = APIRouter(tags=["capture"])
@@ -486,4 +489,38 @@ def get_file(
         status_code=status.HTTP_206_PARTIAL_CONTENT,
         media_type=_served_media_type(key),
         headers=headers,
+    )
+
+
+@router.post("/find", response_model=FindResponse)
+def find(
+    body: FindRequest,
+    background: BackgroundTasks,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> FindResponse:
+    """Look for video the traveller has not saved.
+
+    What comes back is marked found from the moment the row exists, sits on the
+    lowest rung of the provenance ladder, and counts for nothing until it is
+    stamped. A search that finds nothing says so rather than leaving an empty
+    shelf to be read as an answer.
+    """
+    outcome = find_videos(
+        session,
+        trip_id=trip.id,
+        provider=get_video_search(),
+        place=body.place,
+        activity=body.activity,
+    )
+    session.commit()
+    for source in outcome.created:
+        enqueue_source_processing(source.id, background)
+
+    return FindResponse(
+        query=outcome.query,
+        found=len(outcome.created),
+        already_had=outcome.already_had,
+        nothing_reason=outcome.nothing_reason,
+        sources=[_serialise_source(session, source) for source in outcome.created],
     )

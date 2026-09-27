@@ -68,6 +68,10 @@ class Source(IdMixin, TimestampMixin, Base):
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
     provenance: Mapped[str] = mapped_column(String(20), default=Provenance.CREATOR, nullable=False)
+    # True when the app went looking for this rather than the traveller saving
+    # it. Kept separate for good: '9 of your 12' means nine of twelve the
+    # traveller chose, and a found clip must never be able to inflate that.
+    found: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     failure_reason: Mapped[str | None] = mapped_column(Text)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

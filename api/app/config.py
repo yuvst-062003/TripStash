@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 120.0
     llm_api_key: str | None = None
 
+    # Looking for video the traveller has not saved. `fake` is deterministic
+    # and keyless; `youtube` is the only platform that permits real search.
+    video_search_provider: str = "fake"
+    youtube_api_key: str | None = None
+    youtube_region: str | None = None
+
     places_api_key: str | None = None
     weather_api_key: str | None = None
 

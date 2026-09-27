@@ -497,3 +497,20 @@ class CityPlaceResponse(ApiModel):
     playable_count: int
     found_count: int
     quote: str | None
+
+
+class FindRequest(ApiModel):
+    """Go looking for video about somewhere, on the one platform that allows it."""
+
+    place: str = Field(min_length=1, max_length=160)
+    activity: str | None = Field(default=None, max_length=40)
+
+
+class FindResponse(ApiModel):
+    query: str
+    found: int
+    already_had: int
+    # Set when the search produced nothing, so the screen says why rather than
+    # rendering an empty shelf.
+    nothing_reason: str | None = None
+    sources: list[SourceResponse]

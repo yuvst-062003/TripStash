@@ -170,6 +170,7 @@ def list_city_places(
         is_video=is_video_source,
         is_playable=is_playable,
         tag=activities_for,
+        is_found=lambda source: bool(getattr(source, "found", False)),
     )
     if kind:
         wanted = kind.strip().lower()
