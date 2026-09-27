@@ -20,7 +20,10 @@ type Mode = 'album' | 'link' | 'upload' | 'note' | 'event' | 'place'
 const MODES: Mode[] = ['album', 'link', 'upload', 'note', 'event', 'place']
 
 // What the API accepts, spelled out, so the picker never offers what it will refuse.
-const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/gif,video/mp4,video/quicktime,video/webm,application/pdf,text/plain,text/vtt,.srt'
+const ACCEPT =
+  'image/jpeg,image/png,image/webp,image/heic,image/gif,video/mp4,video/quicktime,video/webm,' +
+  'application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
+  'text/plain,text/vtt,.srt,.docx'
 const ACCEPTED_TYPES = new Set(ACCEPT.split(',').filter((t) => t.includes('/')))
 const MAX_MB = 200
 const localToday = () => new Date().toLocaleDateString('en-CA')
@@ -33,7 +36,7 @@ function refuse(file: File): string | null {
   if (file.size > MAX_MB * 1_048_576) return `${file.name} is over the ${MAX_MB} MB limit. Trim it or pick a shorter clip.`
   const type = file.type || (file.name.endsWith('.srt') ? 'text/plain' : '')
   if (type && !ACCEPTED_TYPES.has(type)) {
-    return `${file.name} is not a supported file. Use a photo (JPG, PNG, HEIC, WebP, GIF), a video (MP4, MOV, WebM), a PDF or a text file.`
+    return `${file.name} is not a supported file. Use a photo (JPG, PNG, HEIC, WebP, GIF), a video (MP4, MOV, WebM), a Word document, a PDF or a text file.`
   }
   return null
 }
@@ -398,10 +401,10 @@ export default function SaveSheet({
                 >
                   <Glyph Icon={files.length ? Check : ImageIcon} tint="teal" />
                   <span className="t-head">
-                    {files.length ? `${files.length} file${files.length === 1 ? '' : 's'} ready` : 'Choose photos or videos'}
+                    {files.length ? `${files.length} file${files.length === 1 ? '' : 's'} ready` : 'Choose photos, videos or a plan'}
                   </span>
                   <span className="t-small dimmer">
-                    {files.length ? 'Tap to change what is picked' : 'Only what you pick here is uploaded'}
+                    {files.length ? 'Tap to change what is picked' : 'A Word file or PDF is read as a written plan'}
                   </span>
                   <span className="sr-only">
                     <UploadIcon ref={uploadRef} size={24} aria-hidden />

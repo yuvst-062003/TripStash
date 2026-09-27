@@ -23,6 +23,8 @@ ALLOWED_MEDIA_TYPES = {
     "video/quicktime",
     "video/webm",
     "application/pdf",
+    # Word. A .docx is a zip of XML, so it needs no dependency to read.
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "text/plain",
     "text/vtt",
 }

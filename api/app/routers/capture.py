@@ -28,7 +28,7 @@ from app.db import get_session
 from app.deps import audit, current_trip, current_user, owned_or_404
 from app.models.capture import ExtractionCandidate, MediaStage, Source
 from app.models.core import Trip, User
-from app.models.enums import CandidateStatus, SourceKind
+from app.models.enums import CandidateStatus, SourceKind, SourceStatus
 from app.models.places import Place
 from app.schemas.api import (
     ApproveCandidate,
@@ -40,6 +40,7 @@ from app.schemas.api import (
     MediaStageResponse,
     SourceResponse,
 )
+from app.services.documents import is_document, read_document
 from app.services.extraction import (
     CaptureError,
     DuplicateSourceError,
@@ -208,7 +209,7 @@ async def capture_upload(
             raise HTTPException(
                 status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
                 f"{upload.filename} is not a supported file. Use a photo (JPG, PNG, HEIC, WebP, "
-                "GIF), a video (MP4, MOV, WebM), a PDF or a text file.",
+                "GIF), a video (MP4, MOV, WebM), a Word document, a PDF or a text file.",
             )
         payloads.append((upload, data))
 
@@ -216,12 +217,24 @@ async def capture_upload(
         kind = SourceKind.VIDEO if (upload.content_type or "").startswith("video") else (
             SourceKind.IMAGE if (upload.content_type or "").startswith("image") else SourceKind.NOTE
         )
+        # A Word file or a PDF is a plan someone wrote. Read it here so the
+        # pipeline downstream sees text rather than an opaque blob; a file we
+        # cannot read is still kept, with the reason attached.
+        text = note
+        document_failure: str | None = None
+        if is_document(upload.content_type):
+            kind = SourceKind.ARTICLE
+            read = read_document(data, upload.content_type)
+            if read.text:
+                text = f"{note}\n\n{read.text}" if note else read.text
+            else:
+                document_failure = read.failure_reason
         try:
             source = create_source(
                 session,
                 trip_id=trip.id,
                 kind=kind,
-                text=note,
+                text=text,
                 filename=upload.filename,
                 media_type=upload.content_type,
                 data=data,
@@ -235,6 +248,18 @@ async def capture_upload(
             raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, str(exc)) from exc
         except CaptureError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+        if document_failure:
+            # Recoverable: the file is stored and the traveller is told why it
+            # produced nothing, rather than it appearing to have worked. There
+            # is no text to extract, so the pipeline is not run at all - left to
+            # run it would replace this with generic advice about captions,
+            # which is the wrong remedy for a document that would not open.
+            source.failure_reason = document_failure
+            source.status = SourceStatus.FAILED
+            session.commit()
+            out.append(_serialise_source(session, source))
+            continue
 
         session.commit()
         enqueue_source_processing(source.id, background)
