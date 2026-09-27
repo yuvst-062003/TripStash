@@ -447,3 +447,17 @@ class ActivityPicksResponse(ApiModel):
 
 class ActivityPicksRequest(ApiModel):
     slugs: list[str] = Field(default_factory=list, max_length=40)
+
+
+class GlobeCountrySummary(ApiModel):
+    """A pressable country on the globe: placed, counted, and route-aware."""
+
+    key: str
+    name: str
+    lat: float
+    lon: float
+    in_route: bool
+    stop_count: int
+    place_count: int
+    video_count: int
+    playable_count: int

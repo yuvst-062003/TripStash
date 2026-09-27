@@ -163,3 +163,71 @@ def test_a_country_filter_narrows_the_spots(client, auth, trip):
 
     unfiltered = client.get("/api/v1/reels/spots", headers=auth).json()
     assert len(spots) <= len(unfiltered)
+
+
+# ------------------------------------- the globe's index: route plus evidence
+
+
+def test_the_globe_lists_every_route_country_even_with_no_video(client, auth, trip):
+    """A country you planned but never saved a reel about still has to appear.
+
+    The globe is how a country gets pressed, so a country missing from it is a
+    country the traveller cannot reach.
+    """
+    _capture_and_approve(client, auth)
+    rows = client.get("/api/v1/countries", headers=auth).json()
+    names = {row["name"] for row in rows}
+
+    # The fixture's destination is in Guatemala; it must be listed whether or
+    # not any video names it.
+    assert "Guatemala" in names
+    listed = next(row for row in rows if row["name"] == "Guatemala")
+    assert listed["in_route"] is True
+    assert listed["stop_count"] >= 1
+
+
+def test_a_country_with_video_but_no_stop_is_still_listed(client, auth, trip):
+    """The fixture's only stop is in Guatemala, so Mexico arrives by reel alone."""
+    _capture_and_approve(client, auth)
+    client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={
+            "url": "https://www.instagram.com/reel/Cx2mexico",
+            "text": (
+                "Oaxaca is the best food city in Mexico. Mercado 20 de Noviembre for "
+                "tlayudas. Puerto Escondido after for surfing at Zicatela."
+            ),
+        },
+    )
+    for candidate in client.get("/api/v1/inbox", headers=auth).json():
+        if candidate["type"] not in ("place", "accommodation") or not candidate["resolutions"]:
+            continue
+        client.post(
+            f"/api/v1/candidates/{candidate['id']}/approve",
+            headers=auth,
+            json={"provider_place_id": candidate["resolutions"][0]["provider_place_id"]},
+        )
+
+    rows = client.get("/api/v1/countries", headers=auth).json()
+    mexico = [row for row in rows if row["name"] == "Mexico"]
+    assert mexico, "a country named only by a reel must still appear"
+    assert mexico[0]["in_route"] is False
+    assert mexico[0]["video_count"] >= 1
+
+
+def test_every_listed_country_can_be_placed_on_a_globe(client, auth, trip):
+    _capture_and_approve(client, auth)
+    for row in client.get("/api/v1/countries", headers=auth).json():
+        assert row["lat"] is not None and row["lon"] is not None, row["name"]
+        assert -90 <= row["lat"] <= 90
+        assert -180 <= row["lon"] <= 180
+
+
+def test_route_countries_sort_before_ones_only_a_reel_named(client, auth, trip):
+    _capture_and_approve(client, auth)
+    rows = client.get("/api/v1/countries", headers=auth).json()
+    in_route = [index for index, row in enumerate(rows) if row["in_route"]]
+    off_route = [index for index, row in enumerate(rows) if not row["in_route"]]
+    if in_route and off_route:
+        assert max(in_route) < min(off_route)

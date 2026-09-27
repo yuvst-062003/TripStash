@@ -19,8 +19,13 @@ from app.models.capture import Source, SourcePlaceEvidence
 from app.models.core import Destination, Trip
 from app.models.enums import PlaceStatus
 from app.models.places import Place, TripPlace
-from app.schemas.api import CountrySummary, ReelClip, ReelSpot
-from app.services.countries import UNKNOWN_COUNTRY, normalise_country, tally_countries
+from app.schemas.api import CountrySummary, GlobeCountrySummary, ReelClip, ReelSpot
+from app.services.countries import (
+    UNKNOWN_COUNTRY,
+    globe_countries,
+    normalise_country,
+    tally_countries,
+)
 from app.services.reels import clip_window, is_playable, is_video_source
 
 router = APIRouter(tags=["reels"])
@@ -57,6 +62,40 @@ def _destinations(session: Session, trip: Trip) -> dict[str, Destination]:
         select(Destination).where(Destination.trip_id == trip.id)
     ).scalars()
     return {destination.id: destination for destination in rows}
+
+
+@router.get("/countries", response_model=list[GlobeCountrySummary])
+def list_globe_countries(
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> list[GlobeCountrySummary]:
+    """Every country this trip touches, placed for the globe.
+
+    A country the traveller planned but never saved a reel about still belongs
+    here: the globe is how a country gets opened, so one missing from it is one
+    they cannot reach.
+    """
+    destinations = list(_destinations(session, trip).values())
+    found = globe_countries(
+        destinations,
+        _rows(session, trip),
+        is_video=is_video_source,
+        is_playable=is_playable,
+    )
+    return [
+        GlobeCountrySummary(
+            key=c.key,
+            name=c.name,
+            lat=c.lat,
+            lon=c.lon,
+            in_route=c.in_route,
+            stop_count=c.stop_count,
+            place_count=c.place_count,
+            video_count=c.video_count,
+            playable_count=c.playable_count,
+        )
+        for c in found
+    ]
 
 
 @router.get("/reels/countries", response_model=list[CountrySummary])

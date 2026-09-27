@@ -87,3 +87,97 @@ def tally_countries(
     ]
     out.sort(key=lambda c: (-c.video_count, c.name.casefold()))
     return out
+
+
+@dataclass(frozen=True)
+class GlobeCountry:
+    """One pressable country on the globe.
+
+    Two things put a country here, and either is enough: the traveller planned
+    a stop in it, or a video they saved names a place in it. A country that
+    only satisfies the first has no video yet and still has to be reachable,
+    because the globe is how a country gets opened.
+    """
+
+    key: str
+    name: str
+    lat: float
+    lon: float
+    in_route: bool
+    stop_count: int
+    place_count: int
+    video_count: int
+    playable_count: int
+
+
+def _mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def globe_countries(
+    destinations: Iterable,
+    rows: Iterable[tuple],
+    *,
+    is_video: Callable[[object], bool],
+    is_playable: Callable[[object], bool],
+) -> list[GlobeCountry]:
+    """The globe's index: every country the trip touches, placed and counted.
+
+    Coordinates are averaged from whatever the country actually holds - its
+    stops first, since those are where the traveller decided to be, and its
+    saved places otherwise. A country with neither cannot be drawn and is left
+    out rather than dropped at a guessed position.
+    """
+    # Read once: `rows` is walked twice below, and a generator would be empty
+    # the second time round.
+    rows = list(rows)
+
+    names: dict[str, str] = {}
+    stops: dict[str, int] = {}
+    coords: dict[str, list[tuple[float, float]]] = {}
+    place_coords: dict[str, list[tuple[float, float]]] = {}
+
+    for destination in destinations:
+        key = normalise_country(destination.country)
+        if not key:
+            continue
+        names.setdefault(key, (destination.country or "").strip())
+        stops[key] = stops.get(key, 0) + 1
+        if destination.lat is not None and destination.lon is not None:
+            coords.setdefault(key, []).append((destination.lat, destination.lon))
+
+    tallies = {t.key: t for t in tally_countries(rows, is_video=is_video, is_playable=is_playable)}
+    for _evidence, source, _trip_place, place in rows:
+        if not is_video(source):
+            continue
+        key = normalise_country(place.country)
+        names.setdefault(key, place.country.strip() if place.country else UNKNOWN_COUNTRY)
+        if place.lat is not None and place.lon is not None:
+            place_coords.setdefault(key, []).append((place.lat, place.lon))
+
+    out: list[GlobeCountry] = []
+    for key, name in names.items():
+        points = coords.get(key) or place_coords.get(key) or []
+        lat = _mean([p[0] for p in points])
+        lon = _mean([p[1] for p in points])
+        if lat is None or lon is None:
+            # Nothing to place it by. Better absent than drawn on the equator.
+            continue
+        tally = tallies.get(key)
+        out.append(
+            GlobeCountry(
+                key=key,
+                name=name,
+                lat=lat,
+                lon=lon,
+                in_route=key in stops,
+                stop_count=stops.get(key, 0),
+                place_count=tally.place_count if tally else 0,
+                video_count=tally.video_count if tally else 0,
+                playable_count=tally.playable_count if tally else 0,
+            )
+        )
+
+    # The route first, because those are the countries already decided on.
+    out.sort(key=lambda c: (not c.in_route, -c.video_count, c.name.casefold()))
+    return out
