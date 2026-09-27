@@ -76,6 +76,9 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("extraction_candidate", "user_edited", "BOOLEAN NOT NULL DEFAULT 0"),
     ("source", "lat", "FLOAT"),
     ("source", "lon", "FLOAT"),
+    # The found tier. A database built before it exists has this column
+    # missing, and every count that reads it would fail on the first query.
+    ("source", "found", "BOOLEAN NOT NULL DEFAULT 0"),
 )
 
 
