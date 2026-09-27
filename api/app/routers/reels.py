@@ -19,7 +19,8 @@ from app.models.capture import Source, SourcePlaceEvidence
 from app.models.core import Destination, Trip
 from app.models.enums import PlaceStatus
 from app.models.places import Place, TripPlace
-from app.schemas.api import ReelClip, ReelSpot
+from app.schemas.api import CountrySummary, ReelClip, ReelSpot
+from app.services.countries import UNKNOWN_COUNTRY, normalise_country, tally_countries
 from app.services.reels import clip_window, is_playable, is_video_source
 
 router = APIRouter(tags=["reels"])
@@ -58,12 +59,39 @@ def _destinations(session: Session, trip: Trip) -> dict[str, Destination]:
     return {destination.id: destination for destination in rows}
 
 
+@router.get("/reels/countries", response_model=list[CountrySummary])
+def list_countries(
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> list[CountrySummary]:
+    """Every country this trip has video in, most-evidenced first.
+
+    The one scope that could not be asked for until now: `_scope_label` returns
+    a destination when a place has one, so a place inside a destination never
+    grouped under its country.
+    """
+    tallies = tally_countries(
+        _rows(session, trip), is_video=is_video_source, is_playable=is_playable
+    )
+    return [
+        CountrySummary(
+            key=t.key,
+            name=t.name,
+            place_count=t.place_count,
+            video_count=t.video_count,
+            playable_count=t.playable_count,
+        )
+        for t in tallies
+    ]
+
+
 @router.get("/reels/spots", response_model=list[ReelSpot])
 def list_spots(
     session: Session = Depends(get_session),
     trip: Trip = Depends(current_trip),
     destination_id: str | None = Query(default=None),
     scope: str | None = Query(default=None),
+    country: str | None = Query(default=None),
 ) -> list[ReelSpot]:
     """Which spots have video behind them, grouped by where they are.
 
@@ -77,6 +105,13 @@ def list_spots(
         if not is_video_source(source):
             continue
         label = _scope_label(trip_place, place, destinations)
+        if country is not None:
+            wanted = normalise_country(country)
+            # "Country not known" is how the empty key is spelled to a person.
+            if wanted == normalise_country(UNKNOWN_COUNTRY):
+                wanted = ""
+            if normalise_country(place.country) != wanted:
+                continue
         if destination_id and trip_place.destination_id != destination_id:
             continue
         if scope and label.casefold() != scope.casefold():
