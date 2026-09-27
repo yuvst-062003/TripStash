@@ -41,6 +41,12 @@ export default function MapCanvas({ target, going, bottomInset = 0, onReady }: P
   const ready = useRef(onReady)
   ready.current = onReady
   const [broken, setBroken] = useState(false)
+  // A GL context the browser took back. Phones do this under memory pressure,
+  // and it is the difference between "the map is loading" and "the map was
+  // here a second ago and now is not".
+  const [contextLost, setContextLost] = useState(false)
+  // Bumped to rebuild the map from scratch once the context returns.
+  const [generation, setGeneration] = useState(0)
   const inset = useRef(bottomInset)
   inset.current = bottomInset
 
@@ -75,6 +81,25 @@ export default function MapCanvas({ target, going, bottomInset = 0, onReady }: P
         fly(instance, waiting.target, waiting.going, inset.current)
       }
     })
+    // The browser can take the GL context back at any moment - most often on a
+    // phone, under memory pressure, a few seconds after everything looked fine.
+    // Calling preventDefault is what makes the loss recoverable at all;
+    // without it the context is gone for good and the canvas stays blank
+    // forever with nothing said about why.
+    const canvas = instance.getCanvas()
+    const onLost = (event: Event) => {
+      event.preventDefault()
+      setContextLost(true)
+    }
+    const onRestored = () => {
+      setContextLost(false)
+      // MapLibre cannot reliably rebuild its own buffers after a real loss, so
+      // the map is recreated rather than resumed.
+      setGeneration((n) => n + 1)
+    }
+    canvas.addEventListener('webglcontextlost', onLost)
+    canvas.addEventListener('webglcontextrestored', onRestored)
+
     instance.on('error', (event) => {
       // A tile that will not load is not worth breaking the screen over; a
       // style that will not load is.
@@ -83,10 +108,16 @@ export default function MapCanvas({ target, going, bottomInset = 0, onReady }: P
     })
 
     return () => {
+      canvas.removeEventListener('webglcontextlost', onLost)
+      canvas.removeEventListener('webglcontextrestored', onRestored)
       instance.remove()
       map.current = null
     }
-  }, [])
+    // `generation` rebuilds the map after a context loss; nothing else here
+    // should ever tear it down, because that is what made the old app feel
+    // like changing tabs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generation])
 
   useEffect(() => {
     const instance = map.current
@@ -110,8 +141,27 @@ export default function MapCanvas({ target, going, bottomInset = 0, onReady }: P
   // element and leaves the map 0px tall with its tiles loading into nothing.
   // The frame owns the position; the host owns nothing but its size.
   return (
-    <div className="mapframe" aria-hidden="true">
+    <div className="mapframe" aria-hidden={contextLost ? undefined : true}>
       <div ref={host} className="mapcanvas" data-testid="map-canvas" />
+      {contextLost && (
+        <div className="mapframe__lost" role="status" data-testid="map-context-lost">
+          <p className="t-field">The map stopped drawing</p>
+          <p>
+            Your phone took the graphics back, usually to free memory. It should
+            return on its own; the list below never needed it.
+          </p>
+          <button
+            type="button"
+            className="btn btn--doc-line"
+            onClick={() => {
+              setContextLost(false)
+              setGeneration((n) => n + 1)
+            }}
+          >
+            Draw it again
+          </button>
+        </div>
+      )}
     </div>
   )
 }

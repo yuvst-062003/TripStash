@@ -2279,3 +2279,15 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
   background: rgba(6, 32, 29, 0.82); color: var(--gold);
   text-align: center;
 }
+
+/* The map, when the browser takes its graphics back. A blank rectangle with no
+   explanation is the worst possible answer: the traveller cannot tell a lost
+   context from a broken app. */
+.mapframe__lost {
+  position: absolute; inset: 0; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--s-3); padding: var(--s-6);
+  background: var(--paper-2); color: var(--ink-2); text-align: center;
+}
+.mapframe__lost p { max-width: 34ch; font: var(--small); }
+.mapframe__lost .t-field { color: var(--ink); }
