@@ -19,7 +19,14 @@ from app.models.capture import Source, SourcePlaceEvidence
 from app.models.core import Destination, Trip
 from app.models.enums import PlaceStatus
 from app.models.places import Place, TripPlace
-from app.schemas.api import CountrySummary, GlobeCountrySummary, ReelClip, ReelSpot
+from app.schemas.api import (
+    CityBreakdownResponse,
+    CountrySummary,
+    GlobeCountrySummary,
+    ReelClip,
+    ReelSpot,
+)
+from app.services.cities import cities_in_country
 from app.services.countries import (
     UNKNOWN_COUNTRY,
     globe_countries,
@@ -93,6 +100,44 @@ def list_globe_countries(
             place_count=c.place_count,
             video_count=c.video_count,
             playable_count=c.playable_count,
+        )
+        for c in found
+    ]
+
+
+@router.get("/countries/{country_key}/cities", response_model=list[CityBreakdownResponse])
+def list_country_cities(
+    country_key: str,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> list[CityBreakdownResponse]:
+    """The cities of one country, for the map inside it.
+
+    A country the traveller has nothing in answers with an empty list rather
+    than a 404: pressing somewhere unexplored is the point, not a mistake.
+    """
+    destinations = list(_destinations(session, trip).values())
+    found = cities_in_country(
+        country_key,
+        destinations,
+        _rows(session, trip),
+        is_video=is_video_source,
+        is_playable=is_playable,
+    )
+    return [
+        CityBreakdownResponse(
+            key=c.key,
+            name=c.name,
+            lat=c.lat,
+            lon=c.lon,
+            in_route=c.in_route,
+            destination_id=c.destination_id,
+            explanation=c.explanation,
+            explanation_source=c.explanation_source,
+            place_count=c.place_count,
+            video_count=c.video_count,
+            playable_count=c.playable_count,
+            kinds=c.kinds,
         )
         for c in found
     ]

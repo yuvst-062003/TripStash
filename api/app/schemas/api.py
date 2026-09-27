@@ -461,3 +461,22 @@ class GlobeCountrySummary(ApiModel):
     place_count: int
     video_count: int
     playable_count: int
+
+
+class CityBreakdownResponse(ApiModel):
+    """One city of a country: placed, counted, and explained in whose words."""
+
+    key: str
+    name: str
+    lat: float | None
+    lon: float | None
+    in_route: bool
+    destination_id: str | None
+    explanation: str
+    # "you" when the traveller wrote it, "sources" when it was summarised from
+    # what they saved, "none" when there is honestly nothing to say yet.
+    explanation_source: str
+    place_count: int
+    video_count: int
+    playable_count: int
+    kinds: list[str]
