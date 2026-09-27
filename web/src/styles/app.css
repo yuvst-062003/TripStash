@@ -1868,3 +1868,414 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
 @media (prefers-reduced-motion: reduce) {
   .feed__track { scroll-behavior: auto; }
 }
+
+/* ---------------------------------------------------------------------------
+   Evidence marks
+
+   A clip of yours is an inked impression; one the app found is a dry one - the
+   same die pressed without ink. The two differ in fill and in edge, not only in
+   colour, so the distinction holds without it.
+--------------------------------------------------------------------------- */
+
+.evidence { display: inline-flex; align-items: center; gap: var(--s-1); }
+.evidence__rest {
+  margin-left: 2px;
+  font: var(--tiny);
+  font-variation-settings: 'wdth' 100;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+
+.mark { display: inline-block; flex: none; }
+.evidence--md .mark { width: 16px; height: 16px; }
+.evidence--sm .mark { width: 13px; height: 13px; }
+
+.mark--inked { background: var(--ink); border: 2px solid var(--ink); }
+.mark--dry { background: transparent; border: 1.5px dashed var(--gold); }
+
+/* ---------------------------------------------------------------------------
+   Document type roles
+
+   One family, its width axis doing the work: a place name is condensed like the
+   surname field on a passport, a data field is wide and tracked like a printed
+   form, and a quote gets the largest optical size on the screen it sits on -
+   because the quote is the thing the traveller came for.
+--------------------------------------------------------------------------- */
+
+.t-name {
+  font-weight: 800;
+  font-variation-settings: 'opsz' 32, 'wdth' 78;
+  letter-spacing: -0.025em;
+  line-height: 1.04;
+}
+.t-name--lg { font-size: 1.875rem; font-variation-settings: 'opsz' 40, 'wdth' 75; }
+.t-name--md { font-size: 1.3125rem; font-variation-settings: 'opsz' 24, 'wdth' 78; }
+.t-name--sm { font-size: 1.0625rem; font-variation-settings: 'opsz' 18, 'wdth' 82; }
+
+.t-field {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-variation-settings: 'opsz' 14, 'wdth' 100;
+  letter-spacing: 0.06em;
+}
+
+.t-quote {
+  font-size: 1.0625rem;
+  font-weight: 500;
+  font-variation-settings: 'opsz' 34, 'wdth' 100;
+  line-height: 1.38;
+  letter-spacing: -0.012em;
+}
+.t-quote--hero { font-size: 1.3125rem; font-variation-settings: 'opsz' 42, 'wdth' 100; }
+
+/* The machine-readable strip: the screen's own state, printed the way a travel
+   document prints one. Decorative to look at, accurate to read. */
+.mrz {
+  padding: var(--s-2) var(--s-4);
+  background: var(--paper-2);
+  border-top: 1px solid var(--line);
+}
+.mrz__line {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-variation-settings: 'wdth' 100;
+  letter-spacing: 0.13em;
+  line-height: 1.45;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------------------------
+   The map screen
+
+   One map behind, one page over it, one bar under. The bar is the only thing on
+   screen that never moves: the camera flies, pins fade, the page slides, the
+   conversation opens - and the bar stays, because navigation that comes and
+   goes is navigation people stop trusting.
+--------------------------------------------------------------------------- */
+
+/* The map screen is the one screen that must fill the viewport exactly: the
+   camera needs a real height, and `height: 100%` collapses here because .page
+   carries min-height against a parent with no resolved height. Dynamic viewport
+   units give it one without touching the shell every other screen relies on.
+   The bar overlays the bottom, so the padding every other screen needs for it
+   would only push the map out of view. */
+.screen--map {
+  position: relative;
+  height: 100dvh;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+/* The frame positions, the host only sizes - see the note in MapCanvas.tsx. */
+.mapframe { position: absolute; inset: 0; background: var(--paper-2); }
+.mapcanvas { width: 100%; height: 100%; }
+.mapcanvas canvas { outline: none; }
+.mapframe--broken {
+  display: grid; place-items: center; padding: var(--s-6); text-align: center; color: var(--ink-2);
+}
+
+/* Where you are, and the first of three ways back. */
+.trail {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 3;
+  display: flex; align-items: center; gap: var(--s-1);
+  padding: calc(var(--s-6) + env(safe-area-inset-top, 0px)) var(--s-4) 0;
+}
+.trail__step { display: inline-flex; align-items: center; gap: var(--s-1); }
+.trail__sep { color: var(--line); }
+.trail__link {
+  min-height: var(--tap); padding: var(--s-2); border: 0; cursor: pointer;
+  background: var(--glass); color: var(--ink-2);
+}
+.trail__here { padding: var(--s-1) var(--s-2); background: var(--ink); color: var(--paper); }
+.trail__code {
+  margin-left: auto; padding: var(--s-1) var(--s-2);
+  border: 1.5px solid var(--teal-ink); color: var(--teal-ink);
+}
+
+.map-back, .map-add {
+  position: absolute; z-index: 3; top: calc(88px + env(safe-area-inset-top, 0px));
+  width: var(--tap); height: var(--tap);
+  display: grid; place-items: center; cursor: pointer;
+}
+.map-back { left: var(--s-4); border: 2px solid var(--ink); background: var(--glass); color: var(--ink); }
+.map-add { right: var(--s-4); border: 2px solid var(--ink); background: var(--gold); color: var(--on-gold); }
+
+/* The page over the map. A document edge - square, ruled, no blurred shadow
+   pretending to be depth. */
+.mapsheet {
+  position: absolute; left: 0; right: 0; bottom: var(--nav-h); z-index: 2;
+  max-height: 64%; overflow-y: auto;
+  background: var(--paper); border-top: 2px solid var(--ink);
+}
+.mapsheet__head { padding: var(--s-4) var(--s-4) 0; }
+.mapsheet__head--split { display: flex; align-items: flex-end; gap: var(--s-3); }
+.mapsheet__empty { padding: var(--s-4); color: var(--ink-2); font: var(--body); }
+.mapsheet__actions {
+  display: flex; gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border-top: 2px solid var(--ink); margin-top: var(--s-3);
+}
+
+.doc-meta, .mapsheet__meta {
+  display: flex; gap: var(--s-4); margin-top: var(--s-2); color: var(--ink-2);
+}
+
+/* The world, as a declaration: figures right-aligned the way a customs form
+   lists what you are carrying, so the eye can run the column. */
+.declare { padding: var(--s-3) var(--s-4) 0; }
+.declare__head {
+  display: flex; gap: var(--s-3); padding-bottom: var(--s-2);
+  border-bottom: 2px solid var(--ink); color: var(--ink-2);
+}
+.declare__row {
+  display: flex; gap: var(--s-3); align-items: center; width: 100%;
+  min-height: var(--tap); padding: var(--s-2) 0;
+  border: 0; border-bottom: 1px solid var(--line);
+  background: transparent; text-align: left; cursor: pointer;
+}
+.declare__name { flex-grow: 1; min-width: 0; display: flex; align-items: baseline; gap: var(--s-2); }
+.declare__code { color: var(--ink-2); }
+.declare__stops { flex: none; width: 72px; color: var(--ink-2); }
+.declare__marks { flex: none; display: flex; justify-content: flex-end; min-width: 72px; }
+
+/* A country, as a transit table: nights and legs. */
+.legs { padding: var(--s-2) var(--s-4) 0; }
+.leg {
+  display: block; width: 100%; padding: var(--s-3) 0;
+  border: 0; border-bottom: 1px solid var(--line);
+  background: transparent; text-align: left; cursor: pointer;
+}
+.leg__top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
+.leg__meta { display: flex; gap: var(--s-3); margin-top: var(--s-1); color: var(--ink-2); }
+/* The traveller writes in Hebrew and the place names are Spanish, so a note
+   and its heading pull in opposite directions. Isolating the note means its
+   direction is its own business and cannot drag the row's name to the right,
+   which is what was happening. */
+.leg__note {
+  display: block; margin-top: var(--s-1);
+  font: var(--small); color: var(--ink-2);
+  unicode-bidi: isolate;
+}
+.leg, .leg__top, .leg__meta { direction: ltr; text-align: left; }
+
+/* A city has a main event: one place large, the rest compact. A uniform list
+   would hide the thing you opened the city to look at. */
+.lead {
+  display: block; width: 100%; margin-top: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  background: var(--paper-2); text-align: left; cursor: pointer;
+}
+.lead__top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
+.lead__quote { display: block; margin-top: var(--s-2); }
+.lead__note { display: block; margin-top: var(--s-2); color: var(--warn); }
+
+.compactlist { padding: 0 var(--s-4); }
+.compactrow {
+  display: flex; align-items: center; gap: var(--s-2); width: 100%;
+  min-height: var(--tap); padding: var(--s-2) 0;
+  border: 0; border-top: 1px solid var(--line);
+  background: transparent; text-align: left; cursor: pointer;
+}
+.compactrow__body { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
+.compactrow__kind { color: var(--ink-2); }
+
+/* One place: the quote is the screen, everything else is caption. */
+.evidencecard {
+  margin: var(--s-3) 0 0; padding: var(--s-3) var(--s-4);
+  background: var(--paper-2);
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.placefacts {
+  display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4) 0;
+}
+.placefacts__note { color: var(--ink-2); }
+
+/* Pins. Coral means one thing on this whole screen: you are here. */
+.mappin { display: flex; flex-direction: column; align-items: center; }
+/* The visual is compact so a dozen of them can share a country without
+   stacking; the tap area is still 44px, expanded past the paint by the
+   pseudo-element rather than by padding that would bloat the box. */
+.mappin__label {
+  position: relative;
+  padding: var(--s-1) var(--s-2);
+  display: flex; align-items: center; gap: var(--s-1);
+  border: 1.5px solid var(--ink); background: var(--card);
+  font: var(--tiny); font-variation-settings: 'wdth' 90; font-weight: 800;
+  white-space: nowrap; cursor: pointer;
+}
+.mappin__label::before {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: max(100%, var(--tap)); height: var(--tap);
+  transform: translate(-50%, -50%);
+}
+.mappin--here .mappin__label { background: var(--coral); border-width: 2px; color: var(--on-coral); }
+.mappin__found { color: var(--warn); font-weight: 600; }
+.mappin--here .mappin__found { color: var(--on-coral); }
+.mappin__stem { width: 2px; height: 12px; background: var(--ink); }
+.mappin__dot { width: 9px; height: 9px; border-radius: var(--r-pill); background: var(--ink); }
+.mappin--here .mappin__dot { width: 11px; height: 11px; background: var(--coral); border: 2px solid var(--ink); }
+
+/* ---------------------------------------------------------------------------
+   Catalog, Explore and Profile
+--------------------------------------------------------------------------- */
+
+.chips {
+  display: flex; gap: var(--s-2); overflow-x: auto; padding-bottom: var(--s-2);
+  scrollbar-width: none;
+}
+.chips::-webkit-scrollbar { display: none; }
+.chips--wrap { flex-wrap: wrap; overflow: visible; margin-top: var(--s-3); }
+
+/* The waiting pile, at the top of the catalog. Dry marks, because that is
+   exactly what is waiting: impressions with no ink in them yet. */
+.waiting {
+  display: flex; align-items: center; gap: var(--s-3);
+  margin: 0 var(--s-4) var(--s-3);
+  padding: var(--s-3) var(--s-3);
+  background: var(--gold-soft); border-left: 4px solid var(--gold);
+}
+.waiting__body { flex-grow: 1; display: flex; flex-direction: column; gap: 2px; }
+.waiting__note { font: var(--small); color: var(--warn); }
+
+.filegroup { padding: 0 var(--s-4); margin-top: var(--s-5); }
+.filegroup__head {
+  display: flex; align-items: baseline; gap: var(--s-2);
+  padding-bottom: var(--s-2); border-bottom: 2px solid var(--ink);
+}
+.filegroup__span { margin-left: auto; color: var(--ink-2); }
+.filerow {
+  display: flex; align-items: center; gap: var(--s-2); width: 100%;
+  min-height: var(--tap); padding: var(--s-2) 0;
+  border: 0; border-bottom: 1px solid var(--line);
+  background: transparent; text-align: left; cursor: pointer;
+}
+.filerow__body { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
+.filerow__where { color: var(--ink-2); }
+
+/* Explore: a form you file, and a clerk who answers with evidence. */
+.explore__label { display: block; color: var(--teal-ink); margin-bottom: var(--s-2); }
+.explore__bar { display: flex; gap: var(--s-2); }
+.explore__field {
+  flex-grow: 1; min-height: 52px; display: flex; align-items: center; gap: var(--s-2);
+  padding: var(--s-2) var(--s-3); border: 2px solid var(--ink); background: var(--card);
+  color: var(--ink-2);
+}
+.explore__input {
+  flex-grow: 1; min-width: 0; border: 0; background: transparent;
+  font: var(--head); color: var(--ink); outline: none;
+}
+.explore__input::-webkit-search-cancel-button { display: none; }
+
+.explore__blank {
+  display: flex; flex-direction: column; align-items: center; gap: var(--s-5);
+  padding: var(--s-10) var(--s-4) 0;
+}
+.explore__blank-note {
+  max-width: 32ch; text-align: center; font: var(--body); color: var(--ink-2);
+}
+
+/* A visa-sized impression, used once per screen at most. */
+.bigstamp {
+  position: relative; display: inline-flex; flex-direction: column;
+  align-items: center; gap: 1px; padding: var(--s-2) var(--s-3);
+  border: 2.5px dashed var(--gold); color: var(--warn);
+  transform: rotate(-5deg);
+}
+.bigstamp--inked { border-style: solid; border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.bigstamp__inner {
+  position: absolute; inset: 3px; border: 1px dashed currentColor; opacity: .45;
+}
+.bigstamp__word, .bigstamp__sub { position: relative; letter-spacing: .1em; }
+.bigstamp__sub { opacity: .9; }
+
+.explore__progress { color: var(--ink-2); margin-bottom: var(--s-3); }
+.askblock { margin: 0 0 var(--s-3); padding: var(--s-3) 0 0; border: 0; border-top: 1px solid var(--line); }
+.askblock__legend { padding: 0; color: var(--ink-2); }
+.askblock__note { margin-top: var(--s-1); font: var(--small); color: var(--ink-2); }
+.explore__actions { display: flex; gap: var(--s-2); margin-top: var(--s-4); }
+.explore__skip-note { margin-top: var(--s-2); font: var(--small); color: var(--ink-2); }
+.explore__result-head { display: flex; align-items: baseline; gap: var(--s-2); }
+.quota {
+  margin-left: auto; padding: var(--s-1) var(--s-2);
+  border: 1.5px dashed var(--gold); color: var(--warn);
+}
+.found-note {
+  display: flex; align-items: flex-start; gap: var(--s-3);
+  padding: var(--s-3); background: var(--gold-soft); border-left: 4px solid var(--gold);
+  font: var(--small);
+}
+
+/* Profile: a data page. */
+.datapage__head { display: flex; align-items: flex-start; gap: var(--s-3); }
+.datapage__photo {
+  flex: none; width: 76px; height: 96px;
+  display: flex; align-items: flex-end; justify-content: center; padding-bottom: var(--s-2);
+  background: var(--paper-2); border: 2px solid var(--ink); color: var(--teal-ink);
+}
+.datapage__fields { flex-grow: 1; min-width: 0; }
+
+.panel {
+  display: block; margin: var(--s-5) var(--s-4) 0;
+  padding: var(--s-4) 0 0; border-top: 2px solid var(--ink);
+}
+.panel--link { padding-bottom: var(--s-4); }
+.panel__note { margin-top: var(--s-2); font: var(--small); color: var(--ink-2); }
+.panel__split { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
+.panel__alarm { color: var(--coral-ink); }
+
+.tickbox {
+  width: 13px; height: 13px; margin-right: var(--s-1);
+  border: 1.5px solid currentColor; background: transparent;
+}
+.tickbox[data-on='true'] { background: currentColor; }
+
+.meter { height: 10px; margin-top: var(--s-2); background: var(--line); }
+.meter__fill { display: block; height: 10px; background: var(--gold); }
+
+/* ---------------------------------------------------------------------------
+   Document buttons
+
+   Square, flat, ruled. The app's older pill-and-gradient button is right for
+   the screens it already sits on; these screens are a travel document, and a
+   glossy pill on a customs form reads as a sticker somebody added later.
+--------------------------------------------------------------------------- */
+
+.btn--doc {
+  border-radius: 0;
+  border: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 800;
+  font-variation-settings: 'wdth' 90;
+  min-height: 48px;
+}
+.btn--doc:hover:not(:disabled) { background: var(--teal-deep); }
+.btn--doc-line {
+  border-radius: 0;
+  border: 2px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 800;
+  min-height: 48px;
+}
+
+/* ---------------------------------------------------------------------------
+   Clips that live on someone else's platform
+
+   They play in the panel. There is no chip that opens their app, because the
+   one rule this screen has is that nothing hands the traveller out of it.
+--------------------------------------------------------------------------- */
+
+.slide__embed {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  border: 0; background: #000;
+}
+.slide__scrub {
+  position: absolute; left: var(--s-4); right: var(--s-4); top: calc(56px + env(safe-area-inset-top, 0px));
+  z-index: 2; padding: var(--s-2) var(--s-3);
+  background: rgba(6, 32, 29, 0.82); color: var(--gold);
+  text-align: center;
+}

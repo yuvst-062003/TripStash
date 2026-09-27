@@ -90,6 +90,7 @@ def list_globe_countries(
         _rows(session, trip),
         is_video=is_video_source,
         is_playable=is_playable,
+        is_found=lambda source: bool(getattr(source, "found", False)),
     )
     return [
         GlobeCountrySummary(
@@ -102,6 +103,7 @@ def list_globe_countries(
             place_count=c.place_count,
             video_count=c.video_count,
             playable_count=c.playable_count,
+            found_count=c.found_count,
         )
         for c in found
     ]
@@ -125,6 +127,7 @@ def list_country_cities(
         _rows(session, trip),
         is_video=is_video_source,
         is_playable=is_playable,
+        is_found=lambda source: bool(getattr(source, "found", False)),
     )
     return [
         CityBreakdownResponse(
@@ -139,6 +142,7 @@ def list_country_cities(
             place_count=c.place_count,
             video_count=c.video_count,
             playable_count=c.playable_count,
+            found_count=c.found_count,
             kinds=c.kinds,
         )
         for c in found

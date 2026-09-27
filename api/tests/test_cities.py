@@ -117,3 +117,16 @@ def test_one_travellers_cities_are_not_anothers(client, auth, trip):
     other_auth = {"Authorization": f"Bearer {other.json()['access_token']}"}
     client.post("/api/v1/trips", headers=other_auth, json={"name": "Another trip"})
     assert client.get("/api/v1/countries/guatemala/cities", headers=other_auth).json() == []
+
+
+def test_a_city_reports_what_was_found_so_the_map_can_draw_the_difference(client, auth, trip):
+    """The map draws an inked mark for a clip of yours and a dry one for a clip
+    the app found. Without this count every city reads as entirely the
+    traveller's own, which is the one thing the distinction exists to prevent.
+    """
+    _capture_guatemala(client, auth)
+    cities = client.get("/api/v1/countries/guatemala/cities", headers=auth).json()
+    assert cities, "the capture should have produced at least one city"
+    for city in cities:
+        assert "found_count" in city
+        assert city["found_count"] <= city["video_count"]

@@ -43,6 +43,10 @@ class CountryTally:
     place_count: int
     video_count: int
     playable_count: int
+    #: How many of `video_count` the app found rather than the traveller saved.
+    #: The two are never merged: a found clip counts for nothing until stamped,
+    #: and the map draws the difference as a dry impression against an inked one.
+    found_count: int = 0
 
 
 def tally_countries(
@@ -50,6 +54,7 @@ def tally_countries(
     *,
     is_video: Callable[[object], bool],
     is_playable: Callable[[object], bool],
+    is_found: Callable[[object], bool] | None = None,
 ) -> list[CountryTally]:
     """Gather evidence rows into one tally per country.
 
@@ -62,6 +67,7 @@ def tally_countries(
     places: dict[str, set[str]] = {}
     videos: dict[str, int] = {}
     playable: dict[str, int] = {}
+    found: dict[str, int] = {}
 
     for _evidence, source, _trip_place, place in rows:
         if not is_video(source):
@@ -74,6 +80,10 @@ def tally_countries(
         videos[key] = videos.get(key, 0) + 1
         if is_playable(source):
             playable[key] = playable.get(key, 0) + 1
+        # A caller with no notion of a found tier leaves every count at zero
+        # rather than having to invent a predicate.
+        if is_found is not None and is_found(source):
+            found[key] = found.get(key, 0) + 1
 
     out = [
         CountryTally(
@@ -82,6 +92,7 @@ def tally_countries(
             place_count=len(places[key]),
             video_count=videos[key],
             playable_count=playable.get(key, 0),
+            found_count=found.get(key, 0),
         )
         for key in names
     ]
@@ -108,6 +119,7 @@ class GlobeCountry:
     place_count: int
     video_count: int
     playable_count: int
+    found_count: int = 0
 
 
 def _mean(values: list[float]) -> float | None:
@@ -120,6 +132,7 @@ def globe_countries(
     *,
     is_video: Callable[[object], bool],
     is_playable: Callable[[object], bool],
+    is_found: Callable[[object], bool] | None = None,
 ) -> list[GlobeCountry]:
     """The globe's index: every country the trip touches, placed and counted.
 
@@ -146,7 +159,12 @@ def globe_countries(
         if destination.lat is not None and destination.lon is not None:
             coords.setdefault(key, []).append((destination.lat, destination.lon))
 
-    tallies = {t.key: t for t in tally_countries(rows, is_video=is_video, is_playable=is_playable)}
+    tallies = {
+        t.key: t
+        for t in tally_countries(
+            rows, is_video=is_video, is_playable=is_playable, is_found=is_found
+        )
+    }
     for _evidence, source, _trip_place, place in rows:
         if not is_video(source):
             continue
@@ -175,6 +193,7 @@ def globe_countries(
                 place_count=tally.place_count if tally else 0,
                 video_count=tally.video_count if tally else 0,
                 playable_count=tally.playable_count if tally else 0,
+                found_count=tally.found_count if tally else 0,
             )
         )
 

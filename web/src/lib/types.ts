@@ -479,6 +479,8 @@ export interface GlobeCountry {
   place_count: number
   video_count: number
   playable_count: number
+  /** How many of video_count the app found rather than you saving them. */
+  found_count: number
 }
 
 /** One city of a country, explained in whoever's words we actually have. */
@@ -495,6 +497,8 @@ export interface CityBreakdown {
   place_count: number
   video_count: number
   playable_count: number
+  /** How many of video_count the app found rather than you saving them. */
+  found_count: number
   kinds: string[]
 }
 

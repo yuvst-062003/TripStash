@@ -19,27 +19,28 @@ import ProfileSheet from './components/ProfileSheet'
 import Journey from './pages/Journey'
 import Login from './pages/Login'
 import NewTrip from './pages/NewTrip'
-import Home, { forgetHome } from './pages/Home'
+import { forgetHome } from './pages/Home'
 import MapScreen from './pages/MapScreen'
 import Saved from './pages/Saved'
 import TripScreen from './pages/TripScreen'
 import Place from './pages/Place'
 import Activities from './pages/Activities'
-import Countries from './pages/Countries'
-import CountryView from './pages/CountryView'
-import CityView from './pages/CityView'
-import GlobeScreen from './pages/GlobeScreen'
-import Clips from './pages/Clips'
 import ClipFeed from './pages/ClipFeed'
 import ShareTarget from './pages/ShareTarget'
+import { sectionKey } from './lib/section'
+import Catalog from './pages/Catalog'
+import Explore from './pages/Explore'
+import Profile from './pages/Profile'
+import OldLink from './pages/OldLink'
 import { ErrorNote, Note, SkeletonRows } from './components/ui'
-import { Film, Globe, type IconComponent } from './components/icons'
+import { Globe, UserRound, type IconComponent } from './components/icons'
 import {
   BookmarkIcon,
   BriefcaseBusinessIcon,
   HomeIcon,
   MapPinIcon,
   PlusIcon,
+  SearchIcon,
   type PlusIconHandle,
 } from './components/motion'
 
@@ -50,13 +51,25 @@ type TabEntry =
   | { to: string; label: string; animated: true; Icon: AnimatedIcon }
   | { to: string; label: string; animated: false; Icon: IconComponent }
 
+/**
+ * Five tabs, and each answers a question no other one does.
+ *
+ * Map is "where is it" and is now home - the app opens on the globe. Explore is
+ * "what else is out there", the only way into a place you have saved nothing
+ * about. Catalog is "what have I got", cut by what you do rather than where it
+ * is. Trip is "when am I going". Profile is "who am I", and earns its place on
+ * the activity picks, which order every recommendation in the app.
+ *
+ * Home and Clips are gone because neither passed that test: Home became the
+ * map, and Clips was the map's own data in a flat list.
+ */
 const TABS: TabEntry[] = [
-  { to: '/', label: 'Home', animated: true, Icon: HomeIcon },
-  { to: '/globe', label: 'Map', animated: true, Icon: MapPinIcon },
-  { to: '/saved', label: 'Saved', animated: true, Icon: BookmarkIcon },
-  // The animated set is hand-copied and has no film glyph, so this one is plain.
-  { to: '/clips', label: 'Clips', animated: false, Icon: Film },
+  { to: '/map', label: 'Map', animated: true, Icon: MapPinIcon },
+  { to: '/explore', label: 'Explore', animated: true, Icon: SearchIcon },
+  { to: '/catalog', label: 'Catalog', animated: true, Icon: BookmarkIcon },
   { to: '/trip', label: 'Trip', animated: true, Icon: BriefcaseBusinessIcon },
+  // The animated set is hand-copied and has no person glyph, so this one is plain.
+  { to: '/profile', label: 'Profile', animated: false, Icon: UserRound },
 ]
 
 /** The tab icon plays its animation once each time the tab becomes active. */
@@ -78,7 +91,7 @@ function TabIcon({ tab, active }: { tab: TabEntry; active: boolean }) {
   return <Animated ref={ref} size={22} aria-hidden />
 }
 
-const TAB_ORDER = ['/', '/globe', '/saved', '/clips', '/trip']
+const TAB_ORDER = ['/map', '/explore', '/catalog', '/trip', '/profile']
 
 /** Which way a route change travels: along the tab bar, or deeper for a detail page. */
 function direction(from: string, to: string): 1 | -1 {
@@ -178,7 +191,16 @@ export default function App() {
   }, [])
 
   const position = location.status === 'granted' ? location.position : null
+  // Two different questions, so two different flags.
+  //
+  // `immersive` means the screen takes the whole phone and the bar goes with
+  // it - the feed, because a video should own the screen.
+  //
+  // `ownsSaving` means the screen already offers this action in its own right:
+  // the map carries a + over the camera, scoped to whatever you are looking at,
+  // and two buttons for one action is one too many. The bar stays.
   const immersive = route.pathname === '/trip/journey' || route.pathname === '/clips/feed'
+  const ownsSaving = immersive || route.pathname.startsWith('/map')
 
   const value = useMemo(
     () => ({
@@ -285,16 +307,27 @@ export default function App() {
             requestAnimationFrame(() => window.scrollTo({ top: y, behavior: 'instant' }))
           }}
         >
-          <Routes location={route} key={route.pathname}>
-            <Route path="/" element={<Page dir={dir.current}><Home /></Page>} />
-            <Route path="/map" element={<Page dir={dir.current}><MapScreen /></Page>} />
-            <Route path="/saved" element={<Page dir={dir.current}><Saved /></Page>} />
+          <Routes location={route} key={sectionKey(route.pathname)}>
+            {/* The map is home: the app opens on the globe. */}
+            <Route path="/" element={<Navigate to="/map" replace />} />
+            <Route path="/map/*" element={<Page dir={dir.current}><MapScreen /></Page>} />
+            <Route path="/explore" element={<Page dir={dir.current}><Explore /></Page>} />
+            <Route path="/catalog" element={<Page dir={dir.current}><Catalog /></Page>} />
+            <Route path="/catalog/inbox" element={<Page dir={dir.current}><Saved /></Page>} />
+            <Route path="/profile" element={<Page dir={dir.current}><Profile /></Page>} />
+            <Route path="/profile/sources" element={<Page dir={dir.current}><Saved /></Page>} />
             <Route path="/activities" element={<Page dir={dir.current}><Activities /></Page>} />
-            <Route path="/countries" element={<Page dir={dir.current}><Countries /></Page>} />
-            <Route path="/countries/:key" element={<Page dir={dir.current}><CountryView /></Page>} />
-            <Route path="/countries/:key/cities/:city" element={<Page dir={dir.current}><CityView /></Page>} />
-            <Route path="/globe" element={<Page dir={dir.current}><GlobeScreen /></Page>} />
-            <Route path="/clips" element={<Page dir={dir.current}><Clips /></Page>} />
+
+            {/* Links people already have. The service worker has served this app
+                for months, so an old bundle's links will keep arriving for a
+                while yet and should land somewhere sensible rather than home. */}
+            <Route path="/home" element={<Navigate to="/map" replace />} />
+            <Route path="/globe" element={<Navigate to="/map" replace />} />
+            <Route path="/countries" element={<Navigate to="/map" replace />} />
+            <Route path="/countries/:key" element={<OldLink kind="country" />} />
+            <Route path="/countries/:key/cities/:city" element={<OldLink kind="city" />} />
+            <Route path="/saved" element={<Navigate to="/catalog" replace />} />
+            <Route path="/clips" element={<Navigate to="/catalog" replace />} />
             {/* The feed takes the whole screen, tab bar and all. */}
             <Route path="/clips/feed" element={<Page dir={dir.current}><ClipFeed /></Page>} />
             <Route path="/trip" element={<Page dir={dir.current}><TripScreen /></Page>} />
@@ -309,7 +342,7 @@ export default function App() {
         {/* Save is the one action worth floating; Ask lives in each screen's
             header, where the context it inherits is visible. */}
         <AnimatePresence initial={false}>
-        {!immersive && (
+        {!ownsSaving && (
         <motion.button
           key="fab"
           className="fab"

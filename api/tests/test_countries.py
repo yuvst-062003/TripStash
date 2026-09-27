@@ -231,3 +231,55 @@ def test_route_countries_sort_before_ones_only_a_reel_named(client, auth, trip):
     off_route = [index for index, row in enumerate(rows) if not row["in_route"]]
     if in_route and off_route:
         assert max(in_route) < min(off_route)
+
+
+# ---------------------------------------------------------------------------
+# The found tier, carried up to the country
+#
+# A clip the app found counts for nothing until the traveller stamps it, and the
+# map draws that difference as an inked mark against a dry one. For the marks to
+# be drawable at country level the tally has to carry the split, not just the
+# total - otherwise every country reads as entirely the traveller's own.
+# ---------------------------------------------------------------------------
+
+
+class _FoundSource:
+    def __init__(self, video: bool, playable: bool, found: bool) -> None:
+        self.video = video
+        self.playable = playable
+        self.found = found
+
+
+def _found_row(pid: str, country: str | None, *, found: bool = False):
+    return (None, _FoundSource(True, True, found), None, _Place(pid, country))
+
+
+def _found_tally(rows):
+    return tally_countries(
+        rows,
+        is_video=lambda s: s.video,
+        is_playable=lambda s: s.playable,
+        is_found=lambda s: s.found,
+    )
+
+
+def test_a_country_counts_what_was_found_separately_from_what_is_yours():
+    rows = [
+        _found_row("p1", "Guatemala"),
+        _found_row("p2", "Guatemala", found=True),
+        _found_row("p3", "Guatemala", found=True),
+    ]
+    (tally,) = _found_tally(rows)
+    assert tally.video_count == 3
+    assert tally.found_count == 2
+
+
+def test_a_country_with_nothing_found_reports_zero_rather_than_nothing():
+    (tally,) = _found_tally([_found_row("p1", "Belize")])
+    assert tally.found_count == 0
+
+
+def test_found_is_optional_so_existing_callers_keep_working():
+    # Callers that have no notion of a found tier must not have to invent one.
+    (tally,) = _tally([_row("p1", "Guatemala")])
+    assert tally.found_count == 0

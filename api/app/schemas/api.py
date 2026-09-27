@@ -461,6 +461,10 @@ class GlobeCountrySummary(ApiModel):
     place_count: int
     video_count: int
     playable_count: int
+    #: How many of `video_count` the app found rather than the traveller
+    #: saved. Never merged into the total: a found clip is a suggestion
+    #: until it is stamped.
+    found_count: int = 0
 
 
 class CityBreakdownResponse(ApiModel):
@@ -479,6 +483,10 @@ class CityBreakdownResponse(ApiModel):
     place_count: int
     video_count: int
     playable_count: int
+    #: How many of `video_count` the app found rather than the traveller
+    #: saved. Never merged into the total: a found clip is a suggestion
+    #: until it is stamped.
+    found_count: int = 0
     kinds: list[str]
 
 

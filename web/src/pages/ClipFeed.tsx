@@ -13,10 +13,10 @@ import { api } from '../lib/api'
 import { useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import type { ReelClip } from '../lib/types'
+import { embedFor, hostLabel } from '../lib/videoSource'
 import { Empty, ErrorNote, SkeletonRows, pairText } from '../components/ui'
 import {
   ArrowLeft,
-  ArrowUpRight,
   CATEGORY_ICON,
   Film,
   MapPin,
@@ -173,6 +173,32 @@ function Slide({ clip, active, muted, whole, onToggleWhole, onVisible }: SlidePr
   // A browser that cannot decode this file should say so once, rather than
   // leaving a play button that never does anything.
   const [undecodable, setUndecodable] = useState(false)
+  // A clip that is a link rather than a file: play it in the panel if its host
+  // allows an embed at all.
+  const embed = useMemo(
+    () => (clip.file_url ? null : embedFor(clip.url, clip.start_seconds)),
+    [clip.file_url, clip.url, clip.start_seconds],
+  )
+  const [embedFailed, setEmbedFailed] = useState(false)
+  const embedLoaded = useRef(false)
+
+  // An embed that never fires load is a private reel, a pulled video or a
+  // region block. None of those resolve by waiting longer, and a panel that
+  // spins forever is worse than one that says what happened.
+  //
+  // The load flag lives in a ref rather than state on purpose: the timer reads
+  // it at the moment it fires, and a state read would be the value captured
+  // when the effect ran - which is how the first version of this failed every
+  // clip in the feed exactly eight seconds after it appeared.
+  useEffect(() => {
+    if (!embed) return
+    embedLoaded.current = false
+    setEmbedFailed(false)
+    const giveUp = window.setTimeout(() => {
+      if (!embedLoaded.current) setEmbedFailed(true)
+    }, 8000)
+    return () => window.clearTimeout(giveUp)
+  }, [embed])
   const [elapsed, setElapsed] = useState(clip.start_seconds)
 
   const start = whole ? 0 : clip.start_seconds
@@ -256,14 +282,47 @@ function Slide({ clip, active, muted, whole, onToggleWhole, onVisible }: SlidePr
             </button>
           )}
         </>
+      ) : embed && !embedFailed ? (
+        <>
+          {/* A clip that lives on someone else's platform, playing HERE. The
+              alternative was a chip that opened their app, which took the
+              traveller out of the trip they were planning. */}
+          <iframe
+            className="slide__embed"
+            src={embed.src}
+            title={`${clip.place_name}, on ${hostLabel(embed.host)}`}
+            allow="autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+            loading="lazy"
+            onLoad={() => {
+              embedLoaded.current = true
+            }}
+            onError={() => setEmbedFailed(true)}
+            data-testid="clip-embed"
+          />
+          {!embed.seekable && clip.start_seconds > 0 && (
+            <p className="slide__scrub t-small" data-testid="clip-scrub-note">
+              {hostLabel(embed.host)} gives no way to jump. The line below was said at{' '}
+              {clock(clip.start_seconds)}.
+            </p>
+          )}
+        </>
       ) : (
-        <div className="slide__missing">
+        <div className="slide__missing" data-testid="clip-unplayable">
           <Film size={28} />
-          <p className="t">{undecodable ? 'This browser cannot play it' : 'Saved as a link'}</p>
+          <p className="t">
+            {undecodable
+              ? 'This browser cannot play it'
+              : embedFailed
+                ? 'This one is gone'
+                : 'Not playable here'}
+          </p>
           <p className="t-small">
             {undecodable
               ? `The file is here${clip.media_type ? ` as ${clip.media_type}` : ''}, but this browser has no decoder for it. It will play in the app on your phone.`
-              : 'TripStash kept what it could read from this one, not the video itself.'}
+              : embedFailed
+                ? 'It was made private or taken down where it came from. What it said is below, and that is the part worth keeping.'
+                : 'TripStash kept what it could read from this one, not the video itself.'}
           </p>
         </div>
       )}
@@ -289,16 +348,9 @@ function Slide({ clip, active, muted, whole, onToggleWhole, onVisible }: SlidePr
               {whole ? 'Saved section' : 'Whole video'}
             </button>
           )}
-          {clip.url && (
-            <a
-              className="feed__chip feed__chip--wide"
-              href={clip.url}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              <ArrowUpRight size={15} /> Original
-            </a>
-          )}
+          {/* There is deliberately no "open the original" here. Nothing in the
+              feed may hand the traveller to another app: that is the rule the
+              whole screen turns on, and a chip is all it would take to break. */}
         </div>
       </div>
 

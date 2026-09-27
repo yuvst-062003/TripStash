@@ -1,841 +1,526 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import L from 'leaflet'
-import { Link } from 'react-router-dom'
-import { AnimatePresence, animate, motion, useMotionValue, type PanInfo } from 'motion/react'
-import { api } from '../lib/api'
-import { useApp, useScreenContext } from '../lib/context'
-import { addTintPane } from '../lib/mapTint'
-import { useAsync } from '../lib/hooks'
-import { useMotionPrefs } from '../lib/motion'
-import type { MapFeature, PlaceStatus } from '../lib/types'
-import { STATUS_STAMP, Stamp, StatusStamp } from '../components/Stamp'
-import {
-  CATEGORY_LABEL,
-  CacheNote,
-  Empty,
-  ErrorNote,
-  Freshness,
-  Glyph,
-  Meta,
-  MotionList,
-  MotionRow,
-  Note,
-  Pill,
-  SkeletonRows,
-  categoryTint,
-} from '../components/ui'
-import {
-  CATEGORY_ICON,
-  ChevronRight,
-  Crosshair,
-  Filter,
-  Navigation,
-  Search,
-  Sparkles,
-  X,
-} from '../components/icons'
-
-const STATUS_FILTERS: PlaceStatus[] = ['saved', 'must_visit', 'planned', 'visited']
-const CATEGORY_FILTERS = ['attraction', 'restaurant', 'cafe', 'accommodation', 'nature', 'viewpoint']
-
-/** Sheet snap points as a share of the viewport — the map-app pattern. */
-const SNAP = { peek: 0.28, half: 0.55, full: 0.9 } as const
-type Snap = keyof typeof SNAP
-const SNAP_ORDER: Snap[] = ['peek', 'half', 'full']
-/** A selected place's card sizes to its content, up to this share of the viewport. */
-const CARD_MAX = 0.6
-
-/** OSM tiles; the colour scheme is handled in CSS on the tile pane and a tint pane. */
-const TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-const ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-
-const STATUS_COLOUR: Record<PlaceStatus, string> = {
-  inbox: 'var(--ink-3)',
-  saved: 'var(--ink)',
-  must_visit: 'var(--coral)',
-  planned: 'var(--teal)',
-  visited: 'var(--ink-3)',
-  archived: 'var(--ink-3)',
-}
-
-/** Pins closer than this on screen become one cluster pin. */
-const CLUSTER_PX = 30
-const PIN = 44
-
 /**
- * A stamp pin inside a 44px hit area. Status is a badge icon, not just a
- * hue; must-visit is a filled coral disc so it reads by weight.
+ * The map screen: one camera, one scope, four levels.
+ *
+ * It replaces /globe, /countries, /countries/:key and the city route. Those
+ * were four React routes, which is exactly why moving between them felt like
+ * changing tabs - each press unmounted one component and mounted another. Here
+ * the map is mounted once and the level is a value.
+ *
+ * The page over the map changes shape by level on purpose. A world is a
+ * declaration of what you are carrying; a country is a transit table of nights
+ * and legs; a city has a main event, so one place is set large and the rest sit
+ * compact beneath it. Giving all three the same list would hide all three.
  */
-function pinIcon(feature: MapFeature, enter: boolean, index = 0): L.DivIcon {
-  const { status, is_favourite: favourite, category } = feature.properties
-  const Icon = CATEGORY_ICON[category] ?? CATEGORY_ICON.other
-  const StatusIcon = STATUS_STAMP[status].Icon
-  const classes = ['pin']
-  if (favourite) classes.push('pin--fav')
-  if (status === 'must_visit') classes.push('pin--must')
-  if (enter) classes.push('pin--enter')
-  const html = renderToStaticMarkup(
-    <div className="pin-hit">
-      <div
-        className={classes.join(' ')}
-        style={{ '--pin': STATUS_COLOUR[status], '--i': Math.min(index, 12) } as React.CSSProperties}
-      >
-        <Icon strokeWidth={2.6} />
-        {status !== 'saved' && (
-          <span className="pin__badge">
-            <StatusIcon strokeWidth={3} />
-          </span>
-        )}
-      </div>
-    </div>,
-  )
-  return L.divIcon({ className: '', html, iconSize: [PIN, PIN], iconAnchor: [PIN / 2, PIN / 2] })
-}
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type maplibregl from 'maplibre-gl'
+import { useLocation, useNavigate } from 'react-router-dom'
+import MapCanvas from '../components/MapCanvas'
+import MapPins from '../components/MapPins'
+import ScopeTrail from '../components/ScopeTrail'
+import Evidence from '../components/Evidence'
+import { ArrowLeft, Plus } from '../components/icons'
+import { api } from '../lib/api'
+import { useApp } from '../lib/context'
+import { useAsync } from '../lib/hooks'
+import { targetFor } from '../lib/cameraTarget'
+import { prefersReducedMotion, settleMs } from '../lib/flight'
+import { useEdgeSwipe } from '../lib/useEdgeSwipe'
+import { crumbsOf, depthOf, parentOf, parseScope, scopePath, type Scope } from '../lib/scope'
+import { ErrorNote, SkeletonRows } from '../components/ui'
+import type { CityBreakdown, CityPlace, GlobeCountry } from '../lib/types'
 
-function clusterIcon(count: number): L.DivIcon {
-  const html = renderToStaticMarkup(
-    <div className="pin-hit">
-      <div className="pin pin--cluster">{count}</div>
-    </div>,
-  )
-  return L.divIcon({ className: '', html, iconSize: [PIN, PIN], iconAnchor: [PIN / 2, PIN / 2] })
-}
-
-/** The traveller's own saves on a familiar base map. */
 export default function MapScreen() {
-  const { position, location, requestLocation, trip, openSave } = useApp()
-  const [statuses, setStatuses] = useState<PlaceStatus[]>([])
-  const [categories, setCategories] = useState<string[]>([])
-  const [selected, setSelected] = useState<MapFeature | null>(null)
-  const [snap, setSnap] = useState<Snap>('peek')
-  const [query, setQuery] = useState('')
-  const [showFilters, setShowFilters] = useState(false)
-  const { reduced, spring } = useMotionPrefs()
+  const route = useLocation()
+  const navigate = useNavigate()
+  const { openAsk } = useApp()
 
-  useScreenContext({
-    surface: 'map',
-    tripPlaceId: selected?.properties.trip_place_id,
-    label: selected?.properties.name,
-  })
+  const scope = useMemo(() => parseScope(route.pathname), [route.pathname])
 
-  const params = useMemo(
-    () => ({
-      status: statuses.length ? statuses : undefined,
-      category: categories.length ? categories : undefined,
-    }),
-    [statuses, categories],
-  )
-  const mapData = useAsync(() => api.map(params), [JSON.stringify(params)])
-
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const mapRef = useRef<L.Map | null>(null)
-  const markersRef = useRef<Map<string, L.Marker>>(new Map())
-  const clustersRef = useRef<L.LayerGroup | null>(null)
-  const meRef = useRef<L.Marker | null>(null)
-  const drawnOnce = useRef(false)
-  const fittedIds = useRef('')
-  const featuresRef = useRef<MapFeature[]>([])
-  /** The sheet's current height in px, for fit padding. */
-  const sheetPx = useRef(window.innerHeight * SNAP.peek)
-  const selectRef = useRef<(feature: MapFeature) => void>(() => {})
-  /** Where the list was before a pin was tapped, so closing the card goes back there. */
-  const snapBefore = useRef<Snap>('peek')
-
-  const all = mapData.data?.features ?? []
-  const features = useMemo(() => {
-    if (!query.trim()) return all
-    const needle = query.trim().toLowerCase()
-    return all.filter((feature) => feature.properties.name.toLowerCase().includes(needle))
-  }, [all, query])
-  featuresRef.current = features
-
-  /**
-   * Pins that would overlap on screen become one cluster pin; tapping it
-   * zooms to just those places. Re-run after every zoom and data change.
-   */
-  const layoutPins = useCallback(() => {
-    const map = mapRef.current
-    const clusters = clustersRef.current
-    if (!map || !clusters) return
-    clusters.clearLayers()
-    const pending = featuresRef.current.filter((f) => markersRef.current.has(f.properties.trip_place_id))
-    const placed: { point: L.Point; members: MapFeature[] }[] = []
-    for (const feature of pending) {
-      const [lon, lat] = feature.geometry.coordinates
-      const point = map.latLngToLayerPoint([lat, lon])
-      const near = placed.find((group) => group.point.distanceTo(point) < CLUSTER_PX)
-      if (near) near.members.push(feature)
-      else placed.push({ point, members: [feature] })
-    }
-    for (const group of placed) {
-      const single = group.members.length === 1
-      for (const member of group.members) {
-        const marker = markersRef.current.get(member.properties.trip_place_id)
-        if (!marker) continue
-        if (single) {
-          if (!map.hasLayer(marker)) marker.addTo(map)
-        } else if (map.hasLayer(marker)) {
-          marker.remove()
-        }
-      }
-      if (!single) {
-        const bounds = L.latLngBounds(
-          group.members.map((m) => [m.geometry.coordinates[1], m.geometry.coordinates[0]] as [number, number]),
-        )
-        L.marker(bounds.getCenter(), { icon: clusterIcon(group.members.length), keyboard: true })
-          .on('click', () => map.fitBounds(bounds, { padding: [60, 60], maxZoom: 17, animate: !reduced }))
-          .on('add', (event) => {
-            const element = (event.target as L.Marker).getElement()
-            element?.setAttribute('aria-label', `${group.members.length} places here — tap to zoom in`)
-          })
-          .addTo(clusters)
-      }
-    }
-  }, [reduced])
-
+  // "In or out" is only a comparison of depth, which is why it needs no state
+  // machine: the camera reads it, and the page below reads the same answer.
+  const previous = useRef(scope)
+  const going: 'in' | 'out' = depthOf(scope) >= depthOf(previous.current) ? 'in' : 'out'
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return
-    // Nothing is invented: the first view is where you are, else the current
-    // stop, else the first stop with a pin, else the world.
-    const stop = trip?.destinations.find((d) => d.is_current && d.lat != null) ?? trip?.destinations.find((d) => d.lat != null)
-    const first: [number, number] | null = position
-      ? [position.lat, position.lon]
-      : stop?.lat != null && stop.lon != null
-        ? [stop.lat, stop.lon]
-        : null
-    const map = L.map(containerRef.current, {
-      zoomControl: false,
-      attributionControl: true,
-    }).setView(first ?? [20, 0], first ? 11 : 2)
-    // Attribution is required. It sits bottom-right, opposite the locate
-    // control and above the sheet, so nothing overlaps it.
-    map.attributionControl.setPosition('bottomright').setPrefix('')
-    L.tileLayer(TILES, { maxZoom: 19, attribution: ATTRIBUTION }).addTo(map)
-    addTintPane(map)
-    clustersRef.current = L.layerGroup().addTo(map)
-    mapRef.current = map
-    map.on('zoomend', () => layoutPins())
-    return () => {
-      map.remove()
-      mapRef.current = null
-      clustersRef.current = null
-      markersRef.current.clear()
-      meRef.current = null
-    }
-  }, [layoutPins])
+    previous.current = scope
+  }, [scope])
 
-  /**
-   * The search bar and the sheet sit over the map, so a plain `fitBounds`
-   * drops pins underneath them.
-   */
-  const visiblePadding = useCallback(
-    (): L.FitBoundsOptions => ({
-      paddingTopLeft: [24, 120],
-      paddingBottomRight: [24, Math.round(sheetPx.current) + 24],
-      maxZoom: 15,
-      animate: drawnOnce.current && !reduced,
-      duration: 0.35,
-    }),
-    [reduced],
-  )
+  const [map, setMap] = useState<maplibregl.Map | null>(null)
+  const [settled, setSettled] = useState(false)
 
-  // Markers are kept by id: a tap, a filter or a keystroke adds and removes
-  // only what changed, so pins never re-mount and the drop-in plays once.
+  // How much of the map the page over it hides. Measured rather than guessed,
+  // because the page is as tall as its content and a world, a country and a
+  // place leave very different strips of map visible.
+  const sheet = useRef<HTMLElement>(null)
+  const [hidden, setHidden] = useState(0)
   useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    const wanted = new Set(features.map((f) => f.properties.trip_place_id))
-    for (const [id, marker] of markersRef.current) {
-      if (!wanted.has(id)) {
-        marker.remove()
-        markersRef.current.delete(id)
-      }
-    }
-    let added = 0
-    const enter = !drawnOnce.current
-    for (const feature of features) {
-      const id = feature.properties.trip_place_id
-      if (markersRef.current.has(id)) continue
-      const [lon, lat] = feature.geometry.coordinates
-      const marker = L.marker([lat, lon], {
-        icon: pinIcon(feature, enter, added),
-        keyboard: true,
-        riseOnHover: true,
-      })
-        .on('click', () => selectRef.current(feature))
-        .on('add', (event) => {
-          const element = (event.target as L.Marker).getElement()
-          element?.setAttribute(
-            'aria-label',
-            `${feature.properties.name} — ${STATUS_STAMP[feature.properties.status].label}`,
-          )
-        })
-      markersRef.current.set(id, marker)
-      added += 1
-    }
-    if (enter) {
-      // Drop-in classes are only for the first draw; strip them once played.
-      window.setTimeout(() => {
-        for (const marker of markersRef.current.values()) {
-          marker.getElement()?.querySelector('.pin--enter')?.classList.remove('pin--enter')
-        }
-      }, 1000)
-    }
-    layoutPins()
-    const ids = features.map((f) => f.properties.trip_place_id).sort().join(',')
-    if (features.length && ids !== fittedIds.current && !selected) {
-      fittedIds.current = ids
-      map.fitBounds(
-        L.latLngBounds(
-          features.map((f) => [f.geometry.coordinates[1], f.geometry.coordinates[0]] as [number, number]),
-        ),
-        visiblePadding(),
-      )
-    }
-    drawnOnce.current = true
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [features])
-
-  // Selection only touches the two pins involved.
-  useEffect(() => {
-    for (const [id, marker] of markersRef.current) {
-      const pin = marker.getElement()?.querySelector('.pin')
-      const active = id === selected?.properties.trip_place_id
-      pin?.classList.toggle('pin--active', active)
-      marker.setZIndexOffset(active ? 1000 : 0)
-    }
-  }, [selected])
-
-  const select = useCallback(
-    (feature: MapFeature) => {
-      const map = mapRef.current
-      if (!map) return
-      setSelected((current) => {
-        if (!current) snapBefore.current = snap
-        return feature
-      })
-      setSnap('half')
-      // Lift the pin above the card that is about to cover the lower part.
-      const [lon, lat] = feature.geometry.coordinates
-      const zoom = map.getZoom()
-      const point = map.project([lat, lon], zoom)
-      point.y += Math.min(window.innerHeight * CARD_MAX, 360) / 2
-      map.panTo(map.unproject(point, zoom), { animate: !reduced })
-    },
-    [reduced, snap],
-  )
-  selectRef.current = select
-  const clearSelection = () => {
-    setSelected(null)
-    setSnap(snapBefore.current)
-  }
-
-  // Your position: a dot, and the map goes to it when you ask.
-  const wantCentre = useRef(false)
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !position) return
-    meRef.current?.remove()
-    meRef.current = L.marker([position.lat, position.lon], {
-      icon: L.divIcon({ className: '', html: '<div class="me-dot"></div>', iconSize: [16, 16] }),
-      interactive: false,
-    }).addTo(map)
-    if (wantCentre.current) {
-      wantCentre.current = false
-      map.flyTo([position.lat, position.lon], Math.max(map.getZoom(), 15), {
-        animate: !reduced,
-        duration: 0.6,
-      })
-    }
-  }, [position, reduced])
-  const locate = () => {
-    const map = mapRef.current
-    if (location.status === 'granted' && position && map) {
-      map.flyTo([position.lat, position.lon], Math.max(map.getZoom(), 15), {
-        animate: !reduced,
-        duration: 0.6,
-      })
-      return
-    }
-    wantCentre.current = true
-    requestLocation()
-  }
-
-  const toggle = useCallback(
-    <T,>(list: T[], value: T, set: (next: T[]) => void) =>
-      set(list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value]),
-    [],
-  )
-
-  const hasFilters = statuses.length > 0 || categories.length > 0
-  const searching = query.trim() !== ''
-  const clearFilters = () => {
-    setStatuses([])
-    setCategories([])
-  }
-  const onHeight = useCallback((px: number) => {
-    sheetPx.current = px
+    const node = sheet.current
+    if (!node || typeof ResizeObserver === 'undefined') return
+    const watch = new ResizeObserver(() => setHidden(node.getBoundingClientRect().height))
+    watch.observe(node)
+    setHidden(node.getBoundingClientRect().height)
+    return () => watch.disconnect()
   }, [])
 
+  const countries = useAsync(() => api.globeCountries(), [], true, 'globe')
+  const countryKey = scope.level === 'world' ? null : scope.countryKey
+  const cities = useAsync(
+    () =>
+      countryKey
+        ? api.cities(countryKey)
+        : Promise.resolve({ data: [] as CityBreakdown[], fromCache: false }),
+    [countryKey],
+  )
+  const cityKey = scope.level === 'city' || scope.level === 'place' ? scope.cityKey : null
+  const places = useAsync(
+    () =>
+      countryKey && cityKey
+        ? api.cityPlaces(countryKey, cityKey)
+        : Promise.resolve({ data: [] as CityPlace[], fromCache: false }),
+    [countryKey, cityKey],
+  )
+
+  const country = countries.data?.find((c) => c.key === countryKey)
+  const city = cities.data?.find((c) => c.key === cityKey)
+  const place = places.data?.find(
+    (p) => scope.level === 'place' && p.trip_place_id === scope.tripPlaceId,
+  )
+
+  const target = useMemo(
+    () =>
+      targetFor(scope, {
+        countryName: country?.name,
+        city,
+        place,
+        countryPoints: (countries.data ?? []).map((c) => ({ lat: c.lat, lon: c.lon })),
+      }),
+    [scope, country?.name, city, place, countries.data],
+  )
+
+  // Pins wait for the camera. The delay is read from the flight's own length so
+  // the two cannot drift apart, and a new scope restarts it - which is what
+  // makes a second press mid-flight land with the right pins.
+  useEffect(() => {
+    setSettled(false)
+    const wait = settleMs(going, prefersReducedMotion())
+    const timer = window.setTimeout(() => setSettled(true), wait)
+    return () => window.clearTimeout(timer)
+  }, [scope, going])
+
+  const go = useCallback((next: Scope) => navigate(scopePath(next)), [navigate])
+  const up = parentOf(scope)
+  const goUp = useCallback(() => {
+    if (up) go(up)
+  }, [up, go])
+  const swipe = useEdgeSwipe(goUp, Boolean(up))
+
+  const onPressPin = useCallback(
+    (id: string) => {
+      if (scope.level === 'world') go({ level: 'country', countryKey: id })
+      else if (scope.level === 'country')
+        go({ level: 'city', countryKey: scope.countryKey, cityKey: id })
+      else if (scope.level === 'city')
+        go({
+          level: 'place',
+          countryKey: scope.countryKey,
+          cityKey: scope.cityKey,
+          tripPlaceId: id,
+        })
+    },
+    [scope, go],
+  )
+
+  if (countries.error) return <ErrorNote message={countries.error} onRetry={countries.reload} />
+
+  const crumbs = crumbsOf(scope, {
+    country: country?.name,
+    city: city?.name,
+    place: place?.name,
+  })
+  const here = crumbs[crumbs.length - 1].label
+
   return (
-    <div className="map-screen">
-      <div className="map-canvas" ref={containerRef} role="application" aria-label="Map of your saved places" />
-
-      <div className="map-top">
-        <div className="searchbar">
-          <Search size={17} className="dimmer" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search your saved places"
-            aria-label="Search your saved places"
-          />
-          {query ? (
-            <button className="icon-btn" onClick={() => setQuery('')} aria-label="Clear search">
-              <X size={17} />
-            </button>
-          ) : (
-            <button
-              className="icon-btn"
-              onClick={() => setShowFilters((open) => !open)}
-              aria-label="Filters"
-              aria-expanded={showFilters}
-              style={hasFilters || showFilters ? { color: 'var(--ink)', background: 'var(--paper-2)' } : undefined}
-            >
-              <Filter size={17} />
-            </button>
-          )}
-        </div>
-
-        <AnimatePresence initial={false}>
-          {showFilters && (
-            <motion.div
-              className="rail"
-              initial={reduced ? false : { opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reduced ? undefined : { opacity: 0, y: -6, transition: { duration: 0.12, ease: [0.4, 0, 1, 1] } }}
-              transition={spring}
-            >
-              {hasFilters && (
-                <Pill onClick={clearFilters} Icon={X}>
-                  Clear
-                </Pill>
-              )}
-              {STATUS_FILTERS.map((status) => (
-                <Pill
-                  key={status}
-                  on={statuses.includes(status)}
-                  onClick={() => toggle(statuses, status, setStatuses)}
-                  Icon={STATUS_STAMP[status].Icon}
-                >
-                  {STATUS_STAMP[status].label}
-                </Pill>
-              ))}
-              {CATEGORY_FILTERS.map((category) => (
-                <Pill
-                  key={category}
-                  on={categories.includes(category)}
-                  onClick={() => toggle(categories, category, setCategories)}
-                >
-                  {CATEGORY_LABEL[category] ?? category}
-                </Pill>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {location.status === 'denied' && (
-          <div className="pad">
-            <div className="banner banner--warn" style={{ boxShadow: 'var(--shadow-float)' }}>
-              <Crosshair size={15} strokeWidth={2.2} />
-              <div className="grow">
-                {location.message === 'Location was refused.'
-                  ? 'Location off — distances and walking times stay hidden until you allow it.'
-                  : location.message}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="map-side">
-        <motion.button
-          className="icon-btn icon-btn--glass"
-          onClick={locate}
-          whileTap={{ scale: 0.96 }}
-          aria-label="Centre on my location"
-          aria-busy={location.status === 'locating'}
-          style={location.status === 'granted' ? { color: 'var(--teal)' } : undefined}
-        >
-          <Crosshair size={19} className={location.status === 'locating' ? 'spin' : undefined} />
-        </motion.button>
-      </div>
-
-      <MapSheet
-        snap={snap}
-        onSnap={setSnap}
-        selected={selected}
-        onSelect={select}
-        onClearSelection={clearSelection}
-        features={features}
-        total={all.length}
-        query={query}
-        loading={mapData.loading && !mapData.data}
-        error={mapData.error}
-        fromCache={mapData.fromCache}
-        onRetry={mapData.reload}
-        hasFilters={hasFilters}
-        searching={searching}
-        onClearFilters={clearFilters}
-        onClearSearch={() => setQuery('')}
-        onHeight={onHeight}
-        onSave={openSave}
-        tripName={trip?.name}
+    <div className="screen screen--map" data-testid="map-screen" {...swipe}>
+      <MapCanvas target={target} going={going} bottomInset={hidden} onReady={setMap} />
+      <MapPins
+        map={map}
+        scope={scope}
+        settled={settled}
+        data={{
+          countries: countries.data ?? [],
+          cities: cities.data ?? [],
+          places: places.data ?? [],
+        }}
+        onPress={onPressPin}
       />
+
+      <ScopeTrail crumbs={crumbs} code={codeFor(scope, country)} onGo={go} />
+
+      {up && (
+        <button
+          type="button"
+          className="map-back"
+          data-testid="map-back"
+          aria-label={`Back to ${crumbs[crumbs.length - 2].label}`}
+          onClick={goUp}
+        >
+          <ArrowLeft size={20} />
+        </button>
+      )}
+
+      {scope.level !== 'world' && (
+        <button
+          type="button"
+          className="map-add"
+          data-testid="map-add"
+          aria-label={`Add a reel, a plan or a video to ${here}`}
+          onClick={() => navigate('/save')}
+        >
+          <Plus size={22} />
+        </button>
+      )}
+
+      <section className="mapsheet" data-testid="map-sheet" ref={sheet}>
+        {!countries.data ? (
+          <SkeletonRows />
+        ) : (
+          <Sheet
+            scope={scope}
+            here={here}
+            countries={countries.data}
+            cities={cities.data ?? []}
+            places={places.data ?? []}
+            place={place}
+            onGo={go}
+            onAsk={() => openAsk({ surface: scope.level, contextLabel: here })}
+          />
+        )}
+      </section>
     </div>
   )
 }
 
-function MapSheet({
-  snap,
-  onSnap,
-  selected,
-  onSelect,
-  onClearSelection,
-  features,
-  total,
-  query,
-  loading,
-  error,
-  fromCache,
-  onRetry,
-  hasFilters,
-  searching,
-  onClearFilters,
-  onClearSearch,
-  onSave,
-  tripName,
-  onHeight,
+/** The small code in the corner of the trail. A document always has one. */
+function codeFor(scope: Scope, country?: GlobeCountry): string | undefined {
+  if (scope.level === 'world') return undefined
+  if (scope.level === 'country') return country?.name.slice(0, 3).toUpperCase()
+  return scope.level === 'city' ? 'z11' : 'z14'
+}
+
+interface SheetProps {
+  scope: Scope
+  here: string
+  countries: GlobeCountry[]
+  cities: CityBreakdown[]
+  places: CityPlace[]
+  place?: CityPlace
+  onGo: (next: Scope) => void
+  onAsk: () => void
+}
+
+function Sheet({ scope, here, countries, cities, places, place, onGo, onAsk }: SheetProps) {
+  switch (scope.level) {
+    case 'world':
+      return <WorldSheet countries={countries} onGo={onGo} onAsk={onAsk} />
+    case 'country':
+      return <CountrySheet here={here} cities={cities} scope={scope} onGo={onGo} onAsk={onAsk} />
+    case 'city':
+      return <CitySheet here={here} places={places} scope={scope} onGo={onGo} onAsk={onAsk} />
+    case 'place':
+      return <PlaceSheet place={place} onAsk={onAsk} />
+  }
+}
+
+/**
+ * The world, as a declaration of what you are carrying.
+ *
+ * Figures right-aligned in a column, the way a customs form lists things, so
+ * the eye can run down the numbers without reading a word.
+ */
+function WorldSheet({
+  countries,
+  onGo,
+  onAsk,
 }: {
-  snap: Snap
-  onSnap: (next: Snap) => void
-  selected: MapFeature | null
-  onSelect: (feature: MapFeature) => void
-  onClearSelection: () => void
-  features: MapFeature[]
-  total: number
-  query: string
-  loading: boolean
-  error: string | null
-  fromCache: boolean
-  onRetry: () => void
-  hasFilters: boolean
-  searching: boolean
-  onClearFilters: () => void
-  onClearSearch: () => void
-  onSave: () => void
-  tripName?: string
-  onHeight: (px: number) => void
+  countries: GlobeCountry[]
+  onGo: (s: Scope) => void
+  onAsk: () => void
 }) {
-  const { reduced, spring } = useMotionPrefs()
-  const height = useMotionValue(window.innerHeight * SNAP[snap])
-  const panStart = useRef(0)
-  const sectionRef = useRef<HTMLElement | null>(null)
-  const topRef = useRef<HTMLDivElement | null>(null)
-  const bodyRef = useRef<HTMLDivElement | null>(null)
-  const [contentPx, setContentPx] = useState(0)
-  // A selected card and a fresh account's empty state are both content-sized.
-  const nothingYet = total === 0 && !loading && !error && !searching && !hasFilters
-  const contentSized = (Boolean(selected) || nothingYet) && snap !== 'full'
-
-  // A selected place's card is as tall as its content (measured live) up to
-  // CARD_MAX; the list uses the snap points. One motion value drives both.
-  useEffect(() => {
-    const body = bodyRef.current
-    if (!body) return
-    const measure = () => setContentPx(body.scrollHeight)
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(body)
-    for (const child of Array.from(body.children)) observer.observe(child)
-    return () => observer.disconnect()
-  }, [selected])
-
-  const target = contentSized
-    ? Math.min((topRef.current?.offsetHeight ?? 64) + contentPx, window.innerHeight * CARD_MAX)
-    : window.innerHeight * SNAP[snap]
-
-  useEffect(() => {
-    const root = document.documentElement
-    root.toggleAttribute('data-sheet-live', true)
-    const controls = animate(height, target, reduced ? { duration: 0 } : spring)
-    controls.then(() => root.toggleAttribute('data-sheet-live', false))
-    return () => controls.stop()
-  }, [target, height, reduced, spring])
-
-  // One variable drives everything that must sit above the sheet — the
-  // locate button, the FAB and the attribution — from the real height.
-  useEffect(() => {
-    const node = sectionRef.current
-    if (!node) return
-    const root = document.documentElement
-    const apply = () => {
-      const px = Math.round(node.getBoundingClientRect().height)
-      root.style.setProperty('--sheet-h', `${px}px`)
-      root.style.setProperty('--fab-lift', `${px}px`)
-      onHeight(px)
-    }
-    apply()
-    const observer = new ResizeObserver(apply)
-    observer.observe(node)
-    return () => {
-      observer.disconnect()
-      root.style.removeProperty('--sheet-h')
-      root.style.removeProperty('--fab-lift')
-      root.toggleAttribute('data-sheet-live', false)
-    }
-  }, [onHeight])
-
-  const step = (direction: 1 | -1) => {
-    const index = SNAP_ORDER.indexOf(snap)
-    onSnap(SNAP_ORDER[Math.min(SNAP_ORDER.length - 1, Math.max(0, index + direction))])
-  }
-
-  const onPanStart = () => {
-    panStart.current = height.get()
-    document.documentElement.toggleAttribute('data-sheet-live', true)
-  }
-  const onPan = (_: PointerEvent, info: PanInfo) => {
-    if (contentSized) return
-    const max = window.innerHeight * SNAP.full
-    const min = window.innerHeight * SNAP.peek
-    height.set(Math.min(max, Math.max(min, panStart.current - info.offset.y)))
-  }
-  const onPanEnd = (_: PointerEvent, info: PanInfo) => {
-    if (contentSized) {
-      if (Math.abs(info.offset.y) < 24) step(1)
-      else step(info.offset.y < 0 ? 1 : -1)
-      return
-    }
-    // A flick decides by direction; a slow drag decides by nearest point.
-    if (Math.abs(info.velocity.y) > 600) {
-      step(info.velocity.y < 0 ? 1 : -1)
-      return
-    }
-    const current = height.get() / window.innerHeight
-    const nearest = SNAP_ORDER.reduce((best, key) =>
-      Math.abs(SNAP[key] - current) < Math.abs(SNAP[best] - current) ? key : best,
-    )
-    if (nearest === snap) {
-      animate(height, window.innerHeight * SNAP[snap], spring).then(() =>
-        document.documentElement.toggleAttribute('data-sheet-live', false),
-      )
-    } else {
-      onSnap(nearest)
-    }
-  }
-
-  const title = selected
-    ? selected.properties.name
-    : loading
-      ? 'Loading your places…'
-      : searching || hasFilters
-        ? `${features.length} of ${total} match`
-        : total === 0
-          ? (tripName ?? 'Saved places')
-          : `${features.length} saved place${features.length === 1 ? '' : 's'}`
+  const stops = countries.reduce((sum, c) => sum + c.stop_count, 0)
+  const clips = countries.reduce((sum, c) => sum + c.video_count, 0)
 
   return (
-    <motion.section ref={sectionRef} className="map-sheet" style={{ height }} aria-label="Saved places">
-      <div className="map-sheet__top" ref={topRef}>
-        <motion.button
-          className="map-sheet__handle"
-          onPanStart={onPanStart}
-          onPan={onPan}
-          onPanEnd={onPanEnd}
-          onClick={() => step(snap === 'full' ? -1 : 1)}
-          aria-label={snap === 'full' ? 'Collapse list' : 'Expand list'}
-        >
-          <span className="drawer__grip" />
-          <span className="drawer__title clamp-1">{title}</span>
-        </motion.button>
-        {selected && (
-          <button className="icon-btn map-sheet__close" onClick={onClearSelection} aria-label="Back to the list">
-            <X size={18} />
-          </button>
-        )}
-      </div>
+    <>
+      <header className="mapsheet__head">
+        <h1 className="t-name t-name--lg">Where this trip goes</h1>
+        <p className="mapsheet__meta t-field" data-testid="world-meta">
+          <span>
+            {countries.length} {countries.length === 1 ? 'country' : 'countries'}
+          </span>
+          <span>{stops} stops</span>
+          <span>{clips} clips</span>
+        </p>
+      </header>
 
-      <div className="map-sheet__body" ref={bodyRef}>
-        <CacheNote visible={fromCache} />
-        {error && <ErrorNote message={error} onRetry={onRetry} />}
-        {loading && <SkeletonRows rows={4} />}
-
-        {selected ? (
-          <MarkerDetail feature={selected} />
-        ) : features.length === 0 && !loading && !error ? (
-          searching ? (
-            <Empty
-              title={`Nothing saved matches "${query.trim()}"`}
-              body={`${total} place${total === 1 ? '' : 's'} on your map. Try part of the name.`}
-              action={
-                <button className="btn" onClick={onClearSearch}>
-                  Clear search
-                </button>
-              }
-            />
-          ) : hasFilters ? (
-            <Empty
-              title="No places match these filters"
-              body={`${total} place${total === 1 ? '' : 's'} on your map, none in this combination.`}
-              action={
-                <button className="btn" onClick={onClearFilters}>
-                  Clear filters
-                </button>
-              }
-            />
-          ) : (
-            <Empty
-              title="No pins yet"
-              body="Save something, confirm it in Inbox, and the pin lands here."
-              action={
-                <button className="btn btn--ink" onClick={onSave}>
-                  Save something
-                </button>
-              }
-            />
-          )
+      <div className="declare">
+        <div className="declare__head t-field">
+          <span className="declare__name">Country</span>
+          <span className="declare__stops">Stops</span>
+          <span className="declare__marks">Clips</span>
+        </div>
+        {countries.length === 0 ? (
+          <p className="mapsheet__empty">
+            No countries yet. Share a reel about somewhere and it appears here.
+          </p>
         ) : (
-          <MotionList>
-            {features.map((feature, index) => {
-              const props = feature.properties
-              return (
-                <MotionRow key={props.trip_place_id}>
-                  <button className="item" onClick={() => onSelect(feature)}>
-                    <Glyph
-                      Icon={CATEGORY_ICON[props.category] ?? CATEGORY_ICON.other}
-                      tint={categoryTint(props.category)}
-                    />
-                    <div className="item__body">
-                      <div className="row between row--top" style={{ gap: 'var(--s-2)' }}>
-                        <p className="item__title grow clamp-1">{props.name}</p>
-                        <StatusStamp status={props.status} rotate={index % 2 ? 4 : -6} />
-                      </div>
-                      <Meta
-                        parts={[
-                          CATEGORY_LABEL[props.category] ?? props.category,
-                          `${props.source_count} source${props.source_count === 1 ? '' : 's'}`,
-                        ]}
-                      />
-                      {props.reason_saved && (
-                        <p className="t-small dim clamp-2" style={{ marginTop: 4 }}>
-                          {props.reason_saved}
-                        </p>
-                      )}
-                    </div>
-                    <ChevronRight size={18} className="item__chev" />
-                  </button>
-                </MotionRow>
-              )
-            })}
-          </MotionList>
+          countries.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              className="declare__row"
+              data-testid="world-country"
+              onClick={() => onGo({ level: 'country', countryKey: c.key })}
+            >
+              <span className="declare__name">
+                <span className="t-name t-name--md">{c.name}</span>
+                <span className="t-field declare__code">{c.name.slice(0, 3).toUpperCase()}</span>
+              </span>
+              <span className="declare__stops t-field">
+                {c.in_route ? c.stop_count : '—'}
+              </span>
+              <span className="declare__marks">
+                <Evidence
+                  yours={Math.max(0, c.video_count - (c.found_count ?? 0))}
+                  found={c.found_count ?? 0}
+                  size="sm"
+                />
+              </span>
+            </button>
+          ))
         )}
       </div>
-    </motion.section>
+
+      <Actions primary="Ask anywhere" onPrimary={onAsk} />
+    </>
   )
 }
 
-/** First tap on a marker: a compact recall card, not the full page. */
-function MarkerDetail({ feature }: { feature: MapFeature }) {
-  const { position, openAsk } = useApp()
-  const props = feature.properties
-  const detail = useAsync(
-    () => api.place(props.trip_place_id, { lat: position?.lat, lon: position?.lon }),
-    [props.trip_place_id, position?.lat, position?.lon],
-  )
-  const page = detail.data
-  const hours = page?.live_information.facts.find((fact) => fact.kind === 'hours')
+/** A country, as a transit table: nights and how you get there. */
+function CountrySheet({
+  here,
+  cities,
+  scope,
+  onGo,
+  onAsk,
+}: {
+  here: string
+  cities: CityBreakdown[]
+  scope: Scope & { level: 'country' }
+  onGo: (s: Scope) => void
+  onAsk: () => void
+}) {
+  const clips = cities.reduce((s, c) => s + c.video_count, 0)
+  const found = cities.reduce((s, c) => s + (c.found_count ?? 0), 0)
 
   return (
-    <div className="pad" style={{ paddingBottom: 'var(--s-6)' }}>
-      <CacheNote visible={detail.fromCache} />
-      <div className="row between">
-        <Meta
-          parts={[
-            CATEGORY_LABEL[props.category] ?? props.category,
-            page?.header.city,
-            page?.header.walking_minutes != null
-              ? `${page.header.walking_minutes} min walk`
-              : page?.header.distance_km != null && `${Math.round(page.header.distance_km)} km away`,
-            `${props.source_count} source${props.source_count === 1 ? '' : 's'}`,
-          ]}
-        />
-        <StatusStamp status={props.status} rotate={-6} />
+    <>
+      <header className="mapsheet__head">
+        <h1 className="t-name t-name--lg">{here}</h1>
+        <p className="mapsheet__meta t-field">
+          <span>
+            {cities.length} {cities.length === 1 ? 'city' : 'cities'}
+          </span>
+          <span>{clips} clips</span>
+          {found > 0 && <span>{found} found</span>}
+        </p>
+      </header>
+
+      <div className="legs">
+        {cities.length === 0 ? (
+          <p className="mapsheet__empty">
+            Nothing saved in {here} yet. Ask below and I will look for something.
+          </p>
+        ) : (
+          cities.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              className="leg"
+              data-testid="country-city"
+              onClick={() =>
+                onGo({ level: 'city', countryKey: scope.countryKey, cityKey: c.key })
+              }
+            >
+              <span className="leg__top">
+                <span className="t-name t-name--md">{c.name}</span>
+                <Evidence
+                  yours={Math.max(0, c.video_count - (c.found_count ?? 0))}
+                  found={c.found_count ?? 0}
+                  size="sm"
+                />
+              </span>
+              <span className="leg__meta t-field">
+                <span>
+                  {c.place_count} {c.place_count === 1 ? 'thing' : 'things'}
+                </span>
+                <span>{c.in_route ? 'on your route' : 'not on your route'}</span>
+              </span>
+              {c.explanation && (
+                <span className="leg__note" dir="auto">
+                  {c.explanation}
+                </span>
+              )}
+            </button>
+          ))
+        )}
       </div>
 
-      {hours ? (
-        <div className="row between row--top" style={{ marginTop: 'var(--s-3)' }}>
-          <p className="t-small grow">
-            <span className="dimmer">Hours </span>
-            {hours.primary.value}
+      <Actions primary={`Ask about ${here}`} onPrimary={onAsk} />
+    </>
+  )
+}
+
+/**
+ * A city has a main event.
+ *
+ * The place with the most behind it is set large with its quote; the rest sit
+ * compact underneath. A uniform list would hide the one thing you opened the
+ * city to look at.
+ */
+function CitySheet({
+  here,
+  places,
+  scope,
+  onGo,
+  onAsk,
+}: {
+  here: string
+  places: CityPlace[]
+  scope: Scope & { level: 'city' }
+  onGo: (s: Scope) => void
+  onAsk: () => void
+}) {
+  const sorted = [...places].sort((a, b) => b.video_count - a.video_count)
+  const [lead, ...rest] = sorted
+  const clips = places.reduce((s, p) => s + p.video_count, 0)
+  const found = places.reduce((s, p) => s + p.found_count, 0)
+
+  const open = (id: string) =>
+    onGo({ level: 'place', countryKey: scope.countryKey, cityKey: scope.cityKey, tripPlaceId: id })
+
+  return (
+    <>
+      <header className="mapsheet__head mapsheet__head--split">
+        <div>
+          <h1 className="t-name t-name--lg">{here}</h1>
+          <p className="mapsheet__meta t-field">
+            <span>
+              {places.length} {places.length === 1 ? 'thing' : 'things'}
+            </span>
+            <span>{clips} clips</span>
+            {found > 0 && <span>{found} found</span>}
           </p>
-          <Freshness status={hours.primary.freshness} label={hours.primary.age_label} />
         </div>
-      ) : (
-        <p className="t-small dimmer" style={{ marginTop: 'var(--s-3)' }}>
-          No opening hours on record — TripStash will not guess them.
+      </header>
+
+      {!lead ? (
+        <p className="mapsheet__empty">
+          Nothing in {here} yet. Ask below and I will look for something.
         </p>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="lead"
+            data-testid="city-lead"
+            onClick={() => open(lead.trip_place_id)}
+          >
+            <span className="lead__top">
+              <span className="t-name t-name--md">{lead.name}</span>
+              <Evidence yours={lead.video_count - lead.found_count} found={lead.found_count} />
+            </span>
+            {lead.quote && <span className="lead__quote t-quote">&ldquo;{lead.quote}&rdquo;</span>}
+            {lead.found_count > 0 && (
+              <span className="lead__note t-field">
+                {lead.found_count} of these {lead.video_count} were found, so this is mostly not
+                yours yet.
+              </span>
+            )}
+          </button>
+
+          <div className="compactlist">
+            {rest.map((p) => (
+              <button
+                key={p.trip_place_id}
+                type="button"
+                className="compactrow"
+                data-testid="city-place"
+                onClick={() => open(p.trip_place_id)}
+              >
+                <span className="compactrow__body">
+                  <span className="t-name t-name--sm">{p.name}</span>
+                  <span className="t-field compactrow__kind">{p.kind}</span>
+                </span>
+                <Evidence yours={p.video_count - p.found_count} found={p.found_count} size="sm" />
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
-      {props.reason_saved && (
-        <blockquote className="quote" style={{ marginTop: 'var(--s-4)' }}>
-          {props.reason_saved}
+      <Actions primary={`Ask about ${here}`} onPrimary={onAsk} />
+    </>
+  )
+}
+
+/** One place: the quote is the screen, everything else is caption. */
+function PlaceSheet({ place, onAsk }: { place?: CityPlace; onAsk: () => void }) {
+  if (!place) return <SkeletonRows />
+
+  return (
+    <>
+      <header className="mapsheet__head">
+        <h1 className="t-name t-name--lg">{place.name}</h1>
+        <p className="mapsheet__meta t-field">
+          {place.lat !== null && place.lon !== null && (
+            <>
+              <span>{place.lat.toFixed(4)} N</span>
+              <span>{Math.abs(place.lon).toFixed(4)} W</span>
+            </>
+          )}
+        </p>
+      </header>
+
+      {place.quote && (
+        <blockquote className="evidencecard" data-testid="place-quote">
+          <p className="t-quote t-quote--hero">&ldquo;{place.quote}&rdquo;</p>
         </blockquote>
       )}
 
-      <div className="row" style={{ marginTop: 'var(--s-4)', gap: 'var(--s-2)' }}>
-        {page ? (
-          <a className="btn btn--ink grow" href={page.actions.primary[0].url} target="_blank" rel="noreferrer">
-            <Navigation size={16} strokeWidth={2.2} />
-            Navigate
-          </a>
-        ) : (
-          <span className="btn btn--ink grow" aria-busy>
-            <Navigation size={16} strokeWidth={2.2} />
-            Navigate
-          </span>
-        )}
-        <button
-          className="btn"
-          onClick={() =>
-            openAsk({
-              surface: 'map',
-              tripPlaceId: props.trip_place_id,
-              question: 'Does visiting now make sense?',
-              contextLabel: props.name,
-            })
-          }
-        >
-          <Sparkles size={16} strokeWidth={2.1} />
-          Ask
-        </button>
-        <Link className="btn btn--ghost" to={`/places/${props.trip_place_id}`}>
-          Details
-        </Link>
+      <div className="placefacts">
+        <Evidence yours={place.video_count - place.found_count} found={place.found_count} />
+        <span className="t-field placefacts__note">
+          {place.found_count > 0
+            ? `${place.video_count - place.found_count} of these ${place.video_count} are yours`
+            : 'all of these are yours'}
+        </span>
       </div>
-      {props.is_favourite && (
-        <div style={{ marginTop: 'var(--s-3)' }}>
-          <Stamp tone="gold" size="sm" rotate={-4}>
-            Favourite
-          </Stamp>
-        </div>
-      )}
-      {detail.error && (
-        <div style={{ marginTop: 'var(--s-3)' }}>
-          <Note tone="danger">{detail.error}</Note>
-        </div>
-      )}
+
+      <Actions primary="Ask about this" onPrimary={onAsk} />
+    </>
+  )
+}
+
+function Actions({ primary, onPrimary }: { primary: string; onPrimary: () => void }) {
+  return (
+    <div className="mapsheet__actions">
+      <button
+        type="button"
+        className="btn btn--doc grow"
+        data-testid="ask-scope"
+        onClick={onPrimary}
+      >
+        {primary}
+      </button>
     </div>
   )
 }

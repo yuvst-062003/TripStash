@@ -43,6 +43,11 @@ class CityBreakdown:
     place_count: int
     video_count: int
     playable_count: int
+    #: How many of `video_count` the app found rather than the traveller saved.
+    #: Kept apart from the total for the same reason it is at every other level:
+    #: a found clip is a suggestion until it is stamped, and the map draws that
+    #: as a dry impression rather than an inked one.
+    found_count: int = 0
     kinds: list[str] = field(default_factory=list)
 
 
@@ -57,6 +62,7 @@ def cities_in_country(
     *,
     is_video: Callable[[object], bool],
     is_playable: Callable[[object], bool],
+    is_found: Callable[[object], bool] | None = None,
 ) -> list[CityBreakdown]:
     """Every city of one country, placed, counted and explained.
 
@@ -91,6 +97,7 @@ def cities_in_country(
             place_count=0,
             video_count=0,
             playable_count=0,
+            found_count=0,
         )
 
     for _evidence, source, _trip_place, place in rows:
@@ -113,6 +120,7 @@ def cities_in_country(
                 place_count=0,
                 video_count=0,
                 playable_count=0,
+                found_count=0,
             )
         if place.lat is not None and place.lon is not None:
             coords.setdefault(key, []).append((place.lat, place.lon))
@@ -123,6 +131,8 @@ def cities_in_country(
             city.video_count += 1
             if is_playable(source):
                 city.playable_count += 1
+            if is_found is not None and is_found(source):
+                city.found_count += 1
 
     for key, city in cities.items():
         city.place_count = len(place_ids.get(key, ()))
