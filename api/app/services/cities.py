@@ -137,3 +137,85 @@ def cities_in_country(
     placed = [city for city in cities.values() if city.lat is not None and city.lon is not None]
     placed.sort(key=lambda c: (not c.in_route, -c.video_count, c.name.casefold()))
     return placed
+
+
+@dataclass
+class CityPlace:
+    trip_place_id: str
+    place_id: str
+    name: str
+    kind: str
+    activities: list[str]
+    status: str
+    lat: float | None
+    lon: float | None
+    video_count: int
+    playable_count: int
+    found_count: int
+    quote: str | None
+
+
+def places_in_city(
+    country_key: str,
+    city_key: str,
+    rows: Iterable[tuple],
+    *,
+    is_video: Callable[[object], bool],
+    is_playable: Callable[[object], bool],
+    tag: Callable[[str | None, list[str]], list[str]],
+    is_found: Callable[[object], bool] | None = None,
+) -> list[CityPlace]:
+    """Everything saved in one city, tagged for the filter strip.
+
+    Videos are counted in one list whether the traveller saved them or the app
+    found them; `found_count` says how many of the total were found, so the
+    shelf can mark those without splitting them off.
+    """
+    wanted_country = normalise_country(country_key)
+    wanted_city = normalise_city(city_key)
+
+    places: dict[str, CityPlace] = {}
+    quotes: dict[str, list[str]] = {}
+
+    for evidence, source, trip_place, place in rows:
+        if normalise_country(place.country) != wanted_country:
+            continue
+        if normalise_city(place.city) != wanted_city:
+            continue
+
+        entry = places.get(trip_place.id)
+        if entry is None:
+            places[trip_place.id] = entry = CityPlace(
+                trip_place_id=trip_place.id,
+                place_id=place.id,
+                name=place.name,
+                kind=str(place.category or "other"),
+                activities=[],
+                status=str(trip_place.status),
+                lat=place.lat,
+                lon=place.lon,
+                video_count=0,
+                playable_count=0,
+                found_count=0,
+                quote=None,
+            )
+
+        quote = (getattr(evidence, "quote", None) or "").strip()
+        if quote:
+            quotes.setdefault(trip_place.id, []).append(quote)
+            if entry.quote is None:
+                entry.quote = quote
+
+        if is_video(source):
+            entry.video_count += 1
+            if is_playable(source):
+                entry.playable_count += 1
+            if is_found is not None and is_found(source):
+                entry.found_count += 1
+
+    for key, entry in places.items():
+        entry.activities = tag(entry.name, quotes.get(key, []))
+
+    out = list(places.values())
+    out.sort(key=lambda p: (-p.video_count, p.name.casefold()))
+    return out

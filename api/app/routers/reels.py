@@ -21,18 +21,20 @@ from app.models.enums import PlaceStatus
 from app.models.places import Place, TripPlace
 from app.schemas.api import (
     CityBreakdownResponse,
+    CityPlaceResponse,
     CountrySummary,
     GlobeCountrySummary,
     ReelClip,
     ReelSpot,
 )
-from app.services.cities import cities_in_country
+from app.services.cities import cities_in_country, places_in_city
 from app.services.countries import (
     UNKNOWN_COUNTRY,
     globe_countries,
     normalise_country,
     tally_countries,
 )
+from app.services.facets import activities_for
 from app.services.reels import clip_window, is_playable, is_video_source
 
 router = APIRouter(tags=["reels"])
@@ -140,6 +142,58 @@ def list_country_cities(
             kinds=c.kinds,
         )
         for c in found
+    ]
+
+
+@router.get(
+    "/countries/{country_key}/cities/{city_key}/places",
+    response_model=list[CityPlaceResponse],
+)
+def list_city_places(
+    country_key: str,
+    city_key: str,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+    kind: str | None = Query(default=None),
+    activity: str | None = Query(default=None),
+) -> list[CityPlaceResponse]:
+    """Everything saved in one city, tagged for the filter strip.
+
+    `kind` is what a place is, `activity` is what you do there. They are two
+    columns because Tremendo Hostel answers to both, and a chip reads whichever
+    one it belongs to without the traveller having to know which.
+    """
+    found = places_in_city(
+        country_key,
+        city_key,
+        _rows(session, trip),
+        is_video=is_video_source,
+        is_playable=is_playable,
+        tag=activities_for,
+    )
+    if kind:
+        wanted = kind.strip().lower()
+        found = [p for p in found if p.kind.lower() == wanted]
+    if activity:
+        wanted = activity.strip().lower()
+        found = [p for p in found if wanted in p.activities]
+
+    return [
+        CityPlaceResponse(
+            trip_place_id=p.trip_place_id,
+            place_id=p.place_id,
+            name=p.name,
+            kind=p.kind,
+            activities=p.activities,
+            status=p.status,
+            lat=p.lat,
+            lon=p.lon,
+            video_count=p.video_count,
+            playable_count=p.playable_count,
+            found_count=p.found_count,
+            quote=p.quote,
+        )
+        for p in found
     ]
 
 

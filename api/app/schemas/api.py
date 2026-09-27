@@ -480,3 +480,20 @@ class CityBreakdownResponse(ApiModel):
     video_count: int
     playable_count: int
     kinds: list[str]
+
+
+class CityPlaceResponse(ApiModel):
+    """One thing to do in a city, with what it is and what you do there."""
+
+    trip_place_id: str
+    place_id: str
+    name: str
+    kind: str
+    activities: list[str]
+    status: str
+    lat: float | None
+    lon: float | None
+    video_count: int
+    playable_count: int
+    found_count: int
+    quote: str | None
