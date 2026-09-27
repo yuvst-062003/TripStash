@@ -14,8 +14,14 @@ const UNKNOWN_COUNTRY = 'Country not known'
  */
 export default function CountryView() {
   const { key } = useParams<{ key: string }>()
-  const name = key === 'unknown' ? UNKNOWN_COUNTRY : decodeURIComponent(key ?? '')
-  const state = useAsync(() => api.reelSpots({ country: name }), [name])
+  const wanted = key === 'unknown' ? '' : decodeURIComponent(key ?? '')
+  const state = useAsync(() => api.reelSpots({ country: wanted || UNKNOWN_COUNTRY }), [wanted])
+  // The key in the URL is folded for matching, so it cannot be shown to a
+  // person: "guatemala" is not how their own library spells it. The countries
+  // list holds the spelling their data used, so the name comes from there.
+  const countries = useAsync(() => api.countries(), [], true, 'countries')
+  const name =
+    countries.data?.find((one) => one.key === wanted)?.name ?? (wanted || UNKNOWN_COUNTRY)
 
   if (state.error) return <ErrorNote message={state.error} onRetry={state.reload} />
   if (!state.data) return <SkeletonRows />
@@ -48,14 +54,14 @@ export default function CountryView() {
                 className="item"
                 data-testid="country-place"
               >
-                <span className="item__body">
-                  <span className="item__title">{spot.name}</span>
-                  <span className="t-small dim">
+                <div className="item__body">
+                  <p className="item__title">{spot.name}</p>
+                  <p className="t-small dim">
                     {spot.playable_count === spot.clip_count
                       ? spot.scope_label
                       : `${spot.scope_label}, ${spot.clip_count - spot.playable_count} link only`}
-                  </span>
-                </span>
+                  </p>
+                </div>
                 <span className="t-head num">{spot.clip_count}</span>
               </Link>
             </li>

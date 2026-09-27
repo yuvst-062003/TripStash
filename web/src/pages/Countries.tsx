@@ -50,12 +50,12 @@ export default function Countries() {
               className="item"
               data-testid="country-row"
             >
-              <span className="item__body">
-                <span className="item__title">{country.name}</span>
-                <span className="t-small dim">
+              <div className="item__body">
+                <p className="item__title">{country.name}</p>
+                <p className="t-small dim">
                   {country.place_count} {country.place_count === 1 ? 'place' : 'places'}
-                </span>
-              </span>
+                </p>
+              </div>
               <span className="t-head num" data-testid="country-videos">
                 {country.video_count}
               </span>
