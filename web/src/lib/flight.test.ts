@@ -71,6 +71,22 @@ describe('safePadding', () => {
     expect(600 - p.top - p.bottom).toBeGreaterThanOrEqual(80)
   })
 
+  // Fitting a country into a thin strip means zooming out until it fits, and
+  // under the globe projection that swings the camera right out to space. On
+  // the live site a 436px page on an 844px screen put Guatemala's camera over
+  // the South Pacific. The strip has to stay a decent share of the canvas.
+  it('keeps a real share of the canvas, not just a sliver', () => {
+    const tall = safePadding(844, 436)
+    const strip = 844 - tall.top - tall.bottom
+    expect(strip / 844).toBeGreaterThanOrEqual(0.4)
+  })
+
+  it('gives ground back to the camera rather than to the page', () => {
+    // The page keeps its own height on screen; this only limits what the
+    // camera is TOLD is hidden, so the fit stays sane.
+    expect(safePadding(844, 700).bottom).toBeLessThan(700)
+  })
+
   it('passes a reasonable inset straight through', () => {
     expect(safePadding(844, 300).bottom).toBe(300)
   })

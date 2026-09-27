@@ -54,8 +54,18 @@ export function prefersReducedMotion(): boolean {
 
 /** The strip of map the trail needs at the top. */
 const TOP_INSET = 56
-/** The least map worth flying a camera into. */
+/** The least map worth flying a camera into, in pixels. */
 const MIN_VISIBLE = 80
+/**
+ * ...and as a share of the canvas.
+ *
+ * Fitting a country into a thin strip means zooming out until it fits, and
+ * under the globe projection that swings the camera out to space: a 436px page
+ * on an 844px screen put Guatemala's camera over the South Pacific. Telling the
+ * camera that slightly less is hidden than really is costs a little accuracy in
+ * where the centre lands, and buys a view that is actually of the country.
+ */
+const MIN_VISIBLE_SHARE = 0.42
 
 export interface Padding {
   top: number
@@ -79,7 +89,8 @@ export interface Padding {
 export function safePadding(canvasHeight: number, bottomInset: number): Padding {
   if (canvasHeight <= 0) return { top: 0, right: 16, bottom: 0, left: 16 }
 
-  const room = Math.max(0, canvasHeight - MIN_VISIBLE)
+  const keep = Math.max(MIN_VISIBLE, canvasHeight * MIN_VISIBLE_SHARE)
+  const room = Math.max(0, canvasHeight - keep)
   const top = Math.min(TOP_INSET, room)
   const bottom = Math.max(0, Math.min(bottomInset, room - top))
   return { top, right: 16, bottom, left: 16 }
