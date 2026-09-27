@@ -2291,3 +2291,22 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
 }
 .mapframe__lost p { max-width: 34ch; font: var(--small); }
 .mapframe__lost .t-field { color: var(--ink); }
+
+/* A page the app read off the web.
+
+   Deliberately unlike every other answer card: dashed like a dry stamp,
+   because that is exactly what it is - something found, not something kept. */
+.webcard {
+  padding: var(--s-3);
+  background: var(--card);
+  border: 1.5px dashed var(--gold);
+}
+.webcard__head { display: flex; align-items: baseline; gap: var(--s-2); }
+.webcard__tier { color: var(--warn); }
+.webcard__host { margin-left: auto; color: var(--ink-2); }
+.webcard h3 { margin-top: var(--s-2); }
+.webcard__quote { margin-top: var(--s-2); font: var(--small); line-height: 1.5; }
+.webcard__check {
+  display: inline-block; margin-top: var(--s-3);
+  color: var(--teal-ink); text-decoration: underline;
+}

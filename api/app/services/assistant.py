@@ -20,7 +20,8 @@ from datetime import UTC, date, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.adapters import get_fx, get_weather
+from app.adapters import get_fx, get_weather, get_web_search
+from app.services.web_answers import web_cards, web_disclaimer
 from app.models.capture import KnowledgeItem, Source, SourcePlaceEvidence
 from app.models.core import Destination, Trip
 from app.models.enums import KnowledgeType, PlaceStatus
@@ -589,6 +590,74 @@ def _answer_knowledge_type(session, trip, question, context, on, focus, intent) 
     )
 
 
+def _answer_from_the_web(question: str) -> Answer:
+    """Read the open web, when the traveller's own library has nothing.
+
+    Everything that comes back is labelled as the web's rather than theirs,
+    graded below anything they saved, and dropped entirely if it arrives with
+    no quote behind it. A search that fails returns nothing and says so, rather
+    than letting a network problem look like a place nobody has written about.
+    """
+    subject = _subject_of(question)
+    if not subject:
+        return Answer(
+            text=(
+                "I could not match that to anything you saved, and I am not sure what to "
+                "look up. Name a place and I will read what people have written about it."
+            ),
+            disclaimers=["Answers come from your saved records first."],
+            tools_used=["knowledge:search", "places:search"],
+        )
+
+    results = get_web_search().search(subject)
+    cards = web_cards(results)
+
+    if not cards:
+        return Answer(
+            text=(
+                f"Nothing saved about {subject}, and the web gave me nothing usable either. "
+                "Share a reel about it, or ask me something narrower."
+            ),
+            disclaimers=["Answers come from your saved records first."],
+            tools_used=["knowledge:search", "places:search", "web:search"],
+        )
+
+    return Answer(
+        text=(
+            f"Nothing saved about {subject} yet, so this is from the web rather than from you."
+        ),
+        cards=cards,
+        citations=[{"url": c["url"], "title": c["title"], "host": c["host"]} for c in cards],
+        disclaimers=[web_disclaimer(len(cards))],
+        tools_used=["knowledge:search", "places:search", "web:search"],
+    )
+
+
+#: Words that are never the thing being asked about.
+_NOT_A_SUBJECT = {
+    "what", "where", "when", "why", "how", "who", "which", "there", "here",
+    "about", "should", "could", "would", "there's", "thing", "things", "some",
+    "good", "best", "nice", "much", "many", "does", "doing", "have", "with",
+    "from", "into", "that", "this", "these", "those", "like", "anything",
+}
+
+
+def _subject_of(question: str) -> str:
+    """The place a question is probably about.
+
+    Proper nouns first, because a place name is capitalised in every language
+    this app is likely to see written in Latin script. Falling back to the
+    longest ordinary word is a guess, and a wrong guess only costs one search
+    that returns nothing useful.
+    """
+    words = re.findall(r"[\w\u00C0-\u024F']+", question)
+    proper = [w for w in words[1:] if w[:1].isupper()]
+    if proper:
+        return " ".join(proper)
+    ordinary = [w for w in words if len(w) > 3 and w.casefold() not in _NOT_A_SUBJECT]
+    return max(ordinary, key=len, default="")
+
+
 def _answer_general(session, trip, question, context, on, focus, intent) -> Answer:
     if focus is not None:
         return _answer_why(session, trip, question, context, on, focus, intent)
@@ -615,14 +684,11 @@ def _answer_general(session, trip, question, context, on, focus, intent) -> Answ
     ][:5]
 
     if not hits and not places:
-        return Answer(
-            text=(
-                "I could not match that to anything you saved. I only answer from your own "
-                "trip records, so try a place name, or capture something about it first."
-            ),
-            disclaimers=["Answers are limited to your saved trip records."],
-            tools_used=["knowledge:search", "places:search"],
-        )
+        # Nothing saved about this. Until the web was reachable this was a dead
+        # end - true, and useless to someone still deciding where to go. The
+        # library is still answered from first; this is only what happens when
+        # the library has nothing at all.
+        return _answer_from_the_web(question)
 
     return Answer(
         text=(

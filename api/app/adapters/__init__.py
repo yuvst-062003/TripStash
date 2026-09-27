@@ -49,6 +49,26 @@ def get_ai() -> AIAdapter:
 
 
 @lru_cache
+def get_web_search():
+    """`fake` is deterministic and keyless; `brave` searches the open web.
+
+    A key that is set but wrong should fail loudly at startup rather than turn
+    every search into silence, so the real driver refuses to construct without
+    one. Nothing here decides whether a result is trustworthy: that is
+    `app.services.web_grading`, and it is applied at the point of use.
+    """
+    settings = get_settings()
+    if settings.web_search_provider == "brave":
+        from app.adapters.web_search import BraveWebSearch
+
+        return BraveWebSearch(settings.web_search_api_key)
+
+    from app.adapters.web_search import FakeWebSearch
+
+    return FakeWebSearch()
+
+
+@lru_cache
 def get_video_search():
     """`fake` is deterministic and keyless; `youtube` is the only real search.
 

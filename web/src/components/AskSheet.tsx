@@ -444,6 +444,12 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
 
 /** One card from the answer: a place row, a note, a budget figure or a handoff. */
 function Card({ card, quotes, onClose }: { card: AskCard; quotes: Set<string>; onClose: () => void }) {
+  // A page off the open web. Rendered apart from the rest because the one
+  // thing it must never do is read like something the traveller saved: the
+  // host is shown, the tier it earned is shown, and the link is there so the
+  // claim can actually be checked - which is what makes a citation a citation.
+  if (card.type === 'web') return <WebCard card={card} />
+
   const category = card.subtitle?.split(',')[0]?.trim() ?? 'other'
   const city = card.subtitle?.split(',').slice(1).join(',').trim()
   const isKnowledge = card.type === 'knowledge'
@@ -571,5 +577,31 @@ function Card({ card, quotes, onClose }: { card: AskCard; quotes: Set<string>; o
       )}
       {actions}
     </>
+  )
+}
+
+/** One page the app read off the web, labelled as exactly that. */
+function WebCard({ card }: { card: AskCard }) {
+  return (
+    <article className="webcard" data-testid="ask-web-card">
+      <div className="webcard__head">
+        <span className="t-field webcard__tier">
+          {card.provenance === 'reviews' ? 'review site' : 'someone writing'}
+        </span>
+        <span className="t-field webcard__host">{card.host}</span>
+      </div>
+      <h3 className="t-name t-name--sm">{card.title}</h3>
+      {card.quote && <p className="webcard__quote">&ldquo;{card.quote}&rdquo;</p>}
+      {card.url && (
+        <a
+          className="webcard__check t-field"
+          href={card.url}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          Read it at {card.host}
+        </a>
+      )}
+    </article>
   )
 }

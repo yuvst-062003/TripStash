@@ -270,7 +270,7 @@ export interface HandoffAction {
 export interface AskCard {
   /** "yours" when you saved what it rests on, "found" when the app looked. */
   sourcing?: 'yours' | 'found'
-  type: 'place' | 'knowledge' | 'budget' | 'handoff'
+  type: 'place' | 'knowledge' | 'budget' | 'handoff' | 'web'
   title: string
   subtitle?: string | null
   body?: string | null
@@ -284,6 +284,12 @@ export interface AskCard {
   confidence?: number
   provenance?: string
   requires_official_verification?: boolean
+  /** True on anything read off the open web: never yours, never saved. */
+  from_web?: boolean
+  yours?: boolean
+  url?: string
+  host?: string
+  quote?: string
   currency?: string
   spent?: number
   spent_today?: number

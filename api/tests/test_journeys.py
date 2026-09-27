@@ -301,11 +301,20 @@ def test_assistant_labels_border_advice_as_needing_official_confirmation(client,
 
 
 def test_assistant_says_so_when_nothing_matches(client, auth, trip):
+    """Nothing saved about Tokyo, and the answer says so before anything else.
+
+    This used to be a dead end - "I only answer from your own trip records".
+    It now reads the web instead, but the first thing it must still do is admit
+    the library had nothing, because that is the difference the whole app turns
+    on. Anything it then offers is the web's, never theirs.
+    """
     answer = client.post(
         "/api/v1/ask", headers=auth, json={"question": "Where should I eat in Tokyo?"}
     ).json()
-    assert "could not match" in answer["answer"]
-    assert answer["cards"] == []
+
+    assert "Nothing saved" in answer["answer"]
+    assert all(card.get("from_web") for card in answer["cards"])
+    assert all(card.get("yours") is False for card in answer["cards"])
 
 
 # ------------------------------------------------------- resurfacing and trip
@@ -850,8 +859,13 @@ def test_stopwords_never_match_a_note(client, auth, trip):
     answer = client.post(
         "/api/v1/ask", headers=auth, json={"question": "Tell me about Tokyo"}
     ).json()
-    assert answer["cards"] == []
-    assert "could not match" in answer["answer"]
+
+    # The point of this test is unchanged: a note saved about Guatemala must
+    # not surface for a question about Tokyo just because they share small
+    # words. Web results are allowed here - what is not allowed is a card from
+    # the traveller's own library.
+    assert not [card for card in answer["cards"] if not card.get("from_web")]
+    assert "Nothing saved" in answer["answer"]
 
 
 def test_confirming_the_same_proposal_twice_plans_it_once(client, auth, trip):
