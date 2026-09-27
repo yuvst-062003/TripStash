@@ -5,9 +5,11 @@
  * screens can label stale live data instead of presenting it as current.
  */
 import type {
+  ActivityPicks,
   AskResponse,
   Booking,
   Candidate,
+  CountrySummary,
   HomePayload,
   ItineraryRow,
   KnowledgeItem,
@@ -119,6 +121,8 @@ const post = <T,>(path: string, body?: unknown, query?: Record<string, unknown>)
   request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }, query)
 const patch = <T,>(path: string, body: unknown) =>
   request<T>(path, { method: 'PATCH', body: JSON.stringify(body) })
+const put = <T,>(path: string, body: unknown) =>
+  request<T>(path, { method: 'PUT', body: JSON.stringify(body) })
 const del = <T,>(path: string, query?: Record<string, unknown>) =>
   request<T>(path, { method: 'DELETE' }, query)
 
@@ -193,6 +197,13 @@ export const api = {
   reelSpots: (query?: Record<string, unknown>) => get<ReelSpot[]>('/api/v1/reels/spots', query),
   reelSpot: (tripPlaceId: string) => get<ReelSpot>(`/api/v1/reels/spots/${tripPlaceId}`),
   reels: (query?: Record<string, unknown>) => get<ReelClip[]>('/api/v1/reels', query),
+
+  // where a library clusters, before any one place is opened
+  countries: () => get<CountrySummary[]>('/api/v1/reels/countries'),
+
+  // what this trip is about. Picks filter; they never score.
+  activities: () => get<ActivityPicks>('/api/v1/activities'),
+  setActivities: (slugs: string[]) => put<ActivityPicks>('/api/v1/activities', { slugs }),
 
   // assistant
   ask: (body: Record<string, unknown>) => post<AskResponse>('/api/v1/ask', body),

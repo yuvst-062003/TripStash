@@ -24,6 +24,9 @@ import MapScreen from './pages/MapScreen'
 import Saved from './pages/Saved'
 import TripScreen from './pages/TripScreen'
 import Place from './pages/Place'
+import Activities from './pages/Activities'
+import Countries from './pages/Countries'
+import CountryView from './pages/CountryView'
 import Clips from './pages/Clips'
 import ClipFeed from './pages/ClipFeed'
 import ShareTarget from './pages/ShareTarget'
@@ -284,6 +287,9 @@ export default function App() {
             <Route path="/" element={<Page dir={dir.current}><Home /></Page>} />
             <Route path="/map" element={<Page dir={dir.current}><MapScreen /></Page>} />
             <Route path="/saved" element={<Page dir={dir.current}><Saved /></Page>} />
+            <Route path="/activities" element={<Page dir={dir.current}><Activities /></Page>} />
+            <Route path="/countries" element={<Page dir={dir.current}><Countries /></Page>} />
+            <Route path="/countries/:key" element={<Page dir={dir.current}><CountryView /></Page>} />
             <Route path="/clips" element={<Page dir={dir.current}><Clips /></Page>} />
             {/* The feed takes the whole screen, tab bar and all. */}
             <Route path="/clips/feed" element={<Page dir={dir.current}><ClipFeed /></Page>} />

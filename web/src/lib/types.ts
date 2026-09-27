@@ -445,3 +445,23 @@ export interface ReelClip {
   confidence: number
   saved_at: string | null
 }
+
+/** One country the traveller has saved something in. */
+export interface CountrySummary {
+  key: string
+  name: string
+  place_count: number
+  video_count: number
+  playable_count: number
+}
+
+export interface ActivityOption {
+  slug: string
+  label: string
+}
+
+/** Picks filter what the planning screens show; they are never weighted. */
+export interface ActivityPicks {
+  available: ActivityOption[]
+  picked: string[]
+}
