@@ -447,6 +447,9 @@ function Card({ card, quotes, onClose }: { card: AskCard; quotes: Set<string>; o
   const category = card.subtitle?.split(',')[0]?.trim() ?? 'other'
   const city = card.subtitle?.split(',').slice(1).join(',').trim()
   const isKnowledge = card.type === 'knowledge'
+  // Blended, never blurred: a card built only on clips the app went looking
+  // for says so, so a found claim can never read as one you saved.
+  const found = card.sourcing === 'found'
   const Icon = card.knowledge_type
     ? KNOWLEDGE_ICON[card.knowledge_type] ?? KNOWLEDGE_ICON.general
     : CATEGORY_ICON[category] ?? CATEGORY_ICON.other
@@ -459,6 +462,15 @@ function Card({ card, quotes, onClose }: { card: AskCard; quotes: Set<string>; o
   const inner = (
     <>
       {card.type !== 'budget' && <Glyph Icon={Icon} tint={tint} />}
+      {found && (
+        <span
+          className="t-tiny"
+          style={{ color: 'var(--warn)', fontWeight: 700, alignSelf: 'flex-start' }}
+          data-testid="card-found"
+        >
+          found
+        </span>
+      )}
       <div className="item__body">
         {isKnowledge ? (
           <>

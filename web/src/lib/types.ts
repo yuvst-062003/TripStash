@@ -268,6 +268,8 @@ export interface HandoffAction {
 }
 
 export interface AskCard {
+  /** "yours" when you saved what it rests on, "found" when the app looked. */
+  sourcing?: 'yours' | 'found'
   type: 'place' | 'knowledge' | 'budget' | 'handoff'
   title: string
   subtitle?: string | null

@@ -14,7 +14,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.capture import KnowledgeItem
+from app.models.capture import KnowledgeItem, Source, SourcePlaceEvidence
 from app.models.core import Trip
 from app.models.enums import KnowledgeType, PlaceStatus
 from app.models.places import Place, TripPlace
@@ -106,6 +106,7 @@ def recommend(
         cards.append(_knowledge_card(item))
     cards = cards[:limit]
 
+    mark_sourcing(session, trip.id, cards)
     summary = _plain_summary(query, places, events, other)
     return Recommendation(query=query, summary=summary, cards=cards, grounded=True)
 
@@ -134,3 +135,30 @@ def _plain_summary(
     if warnings:
         bits.append(f"{len(warnings)} warning{'s' if len(warnings) != 1 else ''} to read first")
     return f"For {query}: " + "; ".join(bits) + "."
+
+
+
+def mark_sourcing(session: Session, trip_id: str, cards: list[dict]) -> None:
+    """Say, per card, whether the traveller saved it or the app found it.
+
+    Blended but never blurred. A place is theirs the moment one source behind
+    it is one they saved; only a place standing entirely on clips the app went
+    looking for is marked found. The benefit of the doubt runs that way round
+    on purpose - calling something found when they actually saved it would
+    understate their own library, which is the one thing this app is for.
+    """
+    yours: set[str] = {
+        place_id
+        for (place_id,) in session.execute(
+            select(SourcePlaceEvidence.place_id)
+            .join(Source, Source.id == SourcePlaceEvidence.source_id)
+            .where(
+                SourcePlaceEvidence.trip_id == trip_id,
+                Source.found.is_(False),
+            )
+            .distinct()
+        ).all()
+    }
+    for card in cards:
+        place_id = card.get("place_id")
+        card["sourcing"] = "yours" if (place_id is None or place_id in yours) else "found"

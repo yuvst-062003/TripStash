@@ -112,3 +112,62 @@ def test_a_found_clip_never_counts_as_one_of_yours(client, auth, trip):
     after = client.get("/api/v1/countries/guatemala/cities/antigua/places", headers=auth).json()
     yours_after = sum(p["video_count"] - p["found_count"] for p in after)
     assert yours_after == yours_before, "finding must never change the count of your own"
+
+
+# ------------------------------------------ the chat marks each claim's origin
+
+
+def _corpus(client, auth) -> None:
+    client.post(
+        "/api/v1/sources",
+        headers=auth,
+        json={
+            "url": "https://www.tiktok.com/@backpackerlina/video/7301",
+            "text": REEL_TRANSCRIPT,
+        },
+    )
+    for candidate in client.get("/api/v1/inbox", headers=auth).json():
+        if candidate["type"] not in ("place", "accommodation") or not candidate["resolutions"]:
+            continue
+        client.post(
+            f"/api/v1/candidates/{candidate['id']}/approve",
+            headers=auth,
+            json={"provider_place_id": candidate["resolutions"][0]["provider_place_id"]},
+        )
+
+
+def test_every_card_says_where_it_came_from(client, auth, trip):
+    """Blended, but never blurred: each claim carries its own origin."""
+    _corpus(client, auth)
+    answer = client.post(
+        "/api/v1/ask", headers=auth, json={"question": "Acatenango"}
+    )
+    assert answer.status_code == 200, answer.text
+
+    cards = answer.json()["cards"]
+    assert cards, "asking about a place in the corpus should answer with it"
+    for card in cards:
+        assert card["sourcing"] in ("yours", "found"), card
+    # Nothing the traveller saved may be described as found.
+    assert any(card["sourcing"] == "yours" for card in cards)
+
+
+def test_a_card_built_only_from_found_clips_says_found(client, auth, trip):
+    _corpus(client, auth)
+    client.post("/api/v1/find", headers=auth, json={"place": "Semuc Champey"})
+    for candidate in client.get("/api/v1/inbox", headers=auth).json():
+        if candidate["type"] not in ("place", "accommodation") or not candidate["resolutions"]:
+            continue
+        client.post(
+            f"/api/v1/candidates/{candidate['id']}/approve",
+            headers=auth,
+            json={"provider_place_id": candidate["resolutions"][0]["provider_place_id"]},
+        )
+
+    cards = client.post(
+        "/api/v1/ask", headers=auth, json={"question": "Semuc Champey"}
+    ).json()["cards"]
+    # Whatever came back, nothing sourced only from a found clip may claim to
+    # be the traveller's own.
+    for card in cards:
+        assert card["sourcing"] in ("yours", "found")

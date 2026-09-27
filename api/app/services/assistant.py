@@ -231,6 +231,28 @@ def _place_facts(session: Session, place_id: str) -> list[dict]:
     return group_with_conflicts(facts)
 
 
+
+def _has_saved_source(session: Session, trip_id: str, place_id: str) -> bool:
+    """True when at least one source behind this place is one the traveller saved.
+
+    The benefit of the doubt runs this way on purpose: one saved source makes a
+    place theirs. Only a place resting entirely on found clips is described as
+    found.
+    """
+    from app.models.capture import Source, SourcePlaceEvidence
+
+    return session.execute(
+        select(SourcePlaceEvidence.id)
+        .join(Source, Source.id == SourcePlaceEvidence.source_id)
+        .where(
+            SourcePlaceEvidence.trip_id == trip_id,
+            SourcePlaceEvidence.place_id == place_id,
+            Source.found.is_(False),
+        )
+        .limit(1)
+    ).first() is not None
+
+
 def _sources_for_place(session: Session, trip_id: str, place_id: str) -> list[dict]:
     rows = session.execute(
         select(SourcePlaceEvidence).where(
@@ -378,13 +400,21 @@ def _answer_why(session, trip, question, context, on, focus, intent) -> Answer:
     takeaways = [c["takeaway"] for c in citations if c.get("takeaway")]
     reason = target.reason_saved or (takeaways[0] if takeaways else None)
 
+    # A place standing only on clips the app went looking for was never saved
+    # by anyone, and saying otherwise would hand the traveller a false memory -
+    # the exact failure the found tier exists to prevent.
+    yours = _has_saved_source(session, trip.id, target.place_id)
+    verb = "You saved" if yours else "I found"
     text = (
-        f"You saved {target.place.name} because: {reason}"
-        if reason
-        else f"You saved {target.place.name}, but no reason was recorded."
+        f"{verb} {target.place.name} because: {reason}"
+        if reason and yours
+        else f"{verb} {target.place.name}."
+        if not reason
+        else f"{verb} {target.place.name}: {reason}"
     )
     if citations:
-        text += f" It came from {_plural(len(citations), 'saved source')}, all still attached."
+        kind = "saved source" if yours else "found source"
+        text += f" It came from {_plural(len(citations), kind)}, all still attached."
 
     return Answer(
         text=text,

@@ -18,7 +18,7 @@ from app.models.ops import AgentRun, ItineraryItem
 from app.models.places import TripPlace
 from app.schemas.api import AskRequest, KnowledgeCreate, KnowledgeUpdate
 from app.services.assistant import AskContext, ask
-from app.services.recommend import recommend
+from app.services.recommend import mark_sourcing, recommend
 from app.services.resurfacing import resurface
 
 router = APIRouter(tags=["assistant"])
@@ -50,6 +50,9 @@ def ask_endpoint(
     answer, latency_ms = ask(session, trip=trip, question=body.question, context=context)
 
     payload = answer.to_dict(context)
+    # Blended, but never blurred: each card says whether the traveller saved
+    # what it rests on or the app went looking for it.
+    mark_sourcing(session, trip.id, payload.get("cards") or [])
     session.add(
         AgentRun(
             trip_id=trip.id,
