@@ -208,6 +208,13 @@ export const api = {
   globeCountries: () => get<GlobeCountry[]>('/api/v1/countries'),
   cities: (countryKey: string) =>
     get<CityBreakdown[]>(`/api/v1/countries/${encodeURIComponent(countryKey)}/cities`),
+  find: (place: string, activity?: string) =>
+    post<{
+      query: string
+      found: number
+      already_had: number
+      nothing_reason: string | null
+    }>('/api/v1/find', { place, activity: activity ?? null }),
   cityPlaces: (countryKey: string, cityKey: string, query?: Record<string, unknown>) =>
     get<CityPlace[]>(
       `/api/v1/countries/${encodeURIComponent(countryKey)}/cities/${encodeURIComponent(cityKey)}/places`,

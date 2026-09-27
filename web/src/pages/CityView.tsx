@@ -53,6 +53,8 @@ export default function CityView() {
   const cityKey = decodeURIComponent(city ?? '')
   const { openAsk } = useApp()
   const [chip, setChip] = useState<Chip | null>(null)
+  const [looking, setLooking] = useState(false)
+  const [lookedUp, setLookedUp] = useState<string | null>(null)
 
   const all = useAsync(() => api.cityPlaces(countryKey, cityKey), [countryKey, cityKey])
   const cities = useAsync(() => api.cities(countryKey), [countryKey])
@@ -133,15 +135,41 @@ export default function CityView() {
         </div>
       )}
 
-      <div className="pad">
+      <div className="pad" style={{ display: 'flex', gap: 'var(--s-2)' }}>
         <button
-          className="btn btn--ink btn--block"
+          className="btn btn--ink grow"
           onClick={() => openAsk({ surface: 'map', contextLabel: name })}
           data-testid="ask-city"
         >
           Ask about {name}
         </button>
+        <button
+          className="btn"
+          disabled={looking}
+          data-testid="find-more"
+          onClick={async () => {
+            setLooking(true)
+            try {
+              const result = await api.find(name, chip?.activity)
+              setLookedUp(
+                result.data.nothing_reason ??
+                  `Found ${result.data.found}${result.data.already_had ? `, you already had ${result.data.already_had}` : ''}.`,
+              )
+              all.reload()
+            } finally {
+              setLooking(false)
+            }
+          }}
+        >
+          {looking ? 'Looking' : 'Look for more'}
+        </button>
       </div>
+
+      {lookedUp && (
+        <p className="pad t-small dim" data-testid="find-result">
+          {lookedUp} Found clips are marked, and count for nothing until you stamp them.
+        </p>
+      )}
 
       {shown.length === 0 ? (
         <Empty
@@ -162,6 +190,11 @@ export default function CityView() {
                   <p className="t-small dim">
                     {[KIND_LABELS[place.kind] ?? place.kind, ...place.activities.map((a) => ACTIVITY_LABELS[a] ?? a)].join(', ')}
                   </p>
+                  {place.found_count > 0 && (
+                    <p className="t-small" style={{ color: 'var(--warn)' }} data-testid="found-mark">
+                      {place.video_count - place.found_count} yours, {place.found_count} found
+                    </p>
+                  )}
                   {place.quote && (
                     <p className="t-small dim" data-testid="place-quote">
                       “{place.quote}”
