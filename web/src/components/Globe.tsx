@@ -1,8 +1,16 @@
 import { useEffect, useRef } from 'react'
-import { geoDistance, geoGraticule10, geoInterpolate, geoOrthographic, geoPath } from 'd3-geo'
+import {
+  geoCentroid,
+  geoDistance,
+  geoGraticule10,
+  geoInterpolate,
+  geoOrthographic,
+  geoPath,
+} from 'd3-geo'
 import { feature } from 'topojson-client'
 import type { Topology, GeometryCollection } from 'topojson-specification'
 import land110 from 'world-atlas/land-110m.json'
+import countries110 from 'world-atlas/countries-110m.json'
 import { drift } from '../lib/globeClock'
 import { useMotionPrefs } from '../lib/motion'
 
@@ -18,6 +26,35 @@ const LAND = feature(
   (land110 as unknown as Topology).objects.land as GeometryCollection,
 )
 const GRATICULE = geoGraticule10()
+
+/** Real country polygons, so a country is a shape with borders, not a dot. */
+const COUNTRIES = feature(
+  countries110 as unknown as Topology,
+  (countries110 as unknown as Topology).objects.countries as GeometryCollection,
+).features as GeoCountry[]
+
+interface GeoCountry {
+  type: string
+  properties: { name?: string }
+  geometry: unknown
+}
+
+/**
+ * Match a country however it is spelled.
+ *
+ * The atlas writes "Panama" where the traveller's data may write "Panamá", so
+ * marks are stripped and case folded before comparing - the same rule the API
+ * uses, kept identical on purpose so the two can never disagree about which
+ * country is which.
+ */
+function countryKey(value: string | null | undefined): string {
+  if (!value) return ''
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
 
 function isDark(): boolean {
   const forced = document.documentElement.dataset.theme
@@ -109,10 +146,19 @@ export default function Globe({
   sway = 0,
   interactive = true,
   vivid = false,
+  outlineCountries = false,
+  marked = [],
+  selected = null,
   className,
   style,
 }: {
   points?: GlobePoint[]
+  /** Draw real country borders rather than plain land. */
+  outlineCountries?: boolean
+  /** Country names to fill, however they are spelled. */
+  marked?: string[]
+  /** The one country drawn with a heavy border, a centre dot and its name. */
+  selected?: string | null
   route?: [number, number][]
   focus?: [number, number]
   size?: number
@@ -130,6 +176,23 @@ export default function Globe({
   const rotation = useRef<[number, number]>([focus ? -focus[1] : 0, focus ? -focus[0] : -18])
   // Home is where the hand last left it; idle drift is measured from there.
   const home = useRef<[number, number]>([...rotation.current])
+
+  // Turning to face the selected country.
+  //
+  // Without this the globe carries on drifting and a selection can end up on
+  // the far side, which is worse than not highlighting it at all: the border
+  // is drawn, and the traveller is looking at the wrong hemisphere.
+  useEffect(() => {
+    if (!selected) return
+    const chosen = COUNTRIES.find((c) => countryKey(c.properties?.name) === countryKey(selected))
+    if (!chosen) return
+    const [lon, lat] = geoCentroid(chosen as never) as [number, number]
+    // `home` is the rotation with the idle drift taken back out, because the
+    // draw loop adds drift(now) on top of it every frame. Storing the raw
+    // angle here would be swamped by that and land on another continent.
+    home.current = [-lon - drift(performance.now(), spin, sway) * 57.3, -lat]
+    rotation.current = [-lon, -lat]
+  }, [selected, spin, sway])
   const { reduced } = useMotionPrefs()
 
   useEffect(() => {
@@ -204,6 +267,54 @@ export default function Globe({
       context.strokeStyle = colours.landShade
       context.lineWidth = 0.9
       context.stroke()
+
+      // Countries: a border each, filled where the trip goes, and the selected
+      // one outlined heavily with its name and a dot on its centre. A country
+      // is a shape with edges, which is how anyone actually reads a map.
+      if (outlineCountries) {
+        const markedKeys = new Set(marked.map(countryKey))
+        const selectedKey = countryKey(selected)
+        for (const country of COUNTRIES) {
+          const key = countryKey(country.properties?.name)
+          const isMarked = markedKeys.has(key)
+          const isSelected = Boolean(selectedKey) && key === selectedKey
+          context.beginPath()
+          path(country as never)
+          if (isSelected) {
+            context.fillStyle = colours.pin
+            context.fill()
+          } else if (isMarked) {
+            context.fillStyle = colours.pinCool
+            context.fill()
+          }
+          context.strokeStyle = isSelected ? colours.pin : colours.landShade
+          context.lineWidth = isSelected ? 2.2 : 0.7
+          context.stroke()
+        }
+
+        // The selected country's name, on its own centre, and only while that
+        // centre is actually facing us - a label on the far side would float
+        // over the ocean on the near one.
+        const chosen = COUNTRIES.find((c) => countryKey(c.properties?.name) === selectedKey)
+        if (chosen) {
+          const centre = geoCentroid(chosen as never) as [number, number]
+          const facing = geoDistance(centre, [-lambda, -phi]) < Math.PI / 2 - 0.05
+          const at = projection(centre)
+          if (facing && at) {
+            context.beginPath()
+            context.arc(at[0], at[1], 3.4, 0, Math.PI * 2)
+            context.fillStyle = '#ffffff'
+            context.fill()
+            context.font = '700 12px "Bricolage Grotesque", system-ui, sans-serif'
+            context.textAlign = 'center'
+            context.lineWidth = 3
+            context.strokeStyle = 'rgba(0,0,0,0.55)'
+            context.strokeText(chosen.properties?.name ?? '', at[0], at[1] - 10)
+            context.fillStyle = '#ffffff'
+            context.fillText(chosen.properties?.name ?? '', at[0], at[1] - 10)
+          }
+        }
+      }
 
       // Terminator: the far side of the lit hemisphere darkens.
       const shade = context.createRadialGradient(cx - r * 0.4, cx - r * 0.45, r * 0.2, cx, cx, r * 1.05)
@@ -289,7 +400,18 @@ export default function Globe({
     }
     // Points and route change identity every render; compare by content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(points), JSON.stringify(route), size, spin, sway, reduced, vivid])
+  }, [
+    JSON.stringify(points),
+    JSON.stringify(route),
+    size,
+    spin,
+    sway,
+    reduced,
+    vivid,
+    outlineCountries,
+    JSON.stringify(marked),
+    selected,
+  ])
 
   return (
     <canvas

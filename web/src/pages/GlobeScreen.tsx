@@ -19,22 +19,16 @@ import { Empty, ErrorNote, SkeletonRows } from '../components/ui'
 export default function GlobeScreen() {
   const state = useAsync(() => api.globeCountries(), [], true, 'globe')
   const [query, setQuery] = useState('')
+  // Which country the globe is showing the borders of. Selecting is a step of
+  // its own: you look at a country before you commit to opening it.
+  const [selected, setSelected] = useState<string | null>(null)
 
-  const points = useMemo(
-    () =>
-      (state.data ?? []).map((country) => ({
-        lat: country.lat,
-        lon: country.lon,
-        // Weight by evidence so the globe shows where the thinking is thick.
-        size: 0.05 + Math.min(country.video_count, 12) * 0.006,
-        hot: country.in_route,
-      })),
-    [state.data],
-  )
+  const marked = useMemo(() => (state.data ?? []).map((c) => c.name), [state.data])
 
   if (state.error) return <ErrorNote message={state.error} onRetry={state.reload} />
   if (!state.data) return <SkeletonRows />
 
+  const selectedName = state.data.find((c) => c.key === selected)?.name ?? null
   const needle = query.trim().toLowerCase()
   const shown = needle
     ? state.data.filter((country) => country.name.toLowerCase().includes(needle))
@@ -51,7 +45,19 @@ export default function GlobeScreen() {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', padding: '0 var(--s-4)' }}>
-        <Globe points={points} size={300} vivid />
+        <Globe
+          outlineCountries
+          marked={marked}
+          selected={selectedName}
+          points={[]}
+          size={300}
+          vivid
+          // Still while a country is selected. The idle drift grows with the
+          // clock, so a spinning globe walks away from whatever it was just
+          // turned to face - and a highlighted border you have to chase is
+          // worse than none.
+          spin={selectedName ? 0 : 0.004}
+        />
       </div>
 
       <div className="pad" style={{ marginTop: 'var(--s-4)' }}>
@@ -83,6 +89,9 @@ export default function GlobeScreen() {
                 to={`/countries/${encodeURIComponent(country.key)}`}
                 className="item"
                 data-testid="globe-country"
+                onMouseEnter={() => setSelected(country.key)}
+                onFocus={() => setSelected(country.key)}
+                onClick={() => setSelected(country.key)}
               >
                 <div className="item__body">
                   <p className="item__title">{country.name}</p>
