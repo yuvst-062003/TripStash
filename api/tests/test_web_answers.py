@@ -5,9 +5,10 @@ traveller's own library outranks everything. Both survive contact with the open
 web only if a web result is labelled as what it is, every time.
 """
 
+from app.adapters.travel_wiki import FakeTravelWiki
 from app.adapters.web_search import FakeWebSearch, WebResult
-from app.models.enums import Provenance
-from app.services.web_answers import web_cards, web_disclaimer
+from app.models.enums import KnowledgeType, Provenance
+from app.services.web_answers import guide_cards, web_cards, web_disclaimer
 
 
 def _results() -> list[WebResult]:
@@ -113,3 +114,43 @@ def test_the_fake_search_produces_usable_cards_end_to_end():
     cards = web_cards(FakeWebSearch().search("Acatenango Volcano"))
     assert cards
     assert all(c["from_web"] and not c["yours"] and c["quote"] for c in cards)
+
+
+# ---------------------------------------------------------------------------
+# The free travel guide
+#
+# Preferred over a search engine because it needs no key, and because its
+# sections already carry the meaning the app's knowledge types carry - so
+# nothing has to guess what a paragraph is about.
+# ---------------------------------------------------------------------------
+
+def test_a_guide_becomes_typed_cards():
+    cards = guide_cards(FakeTravelWiki().guide("Antigua Guatemala"))
+    kinds = {c["knowledge_type"] for c in cards}
+    assert KnowledgeType.SAFETY in kinds
+    assert KnowledgeType.TRANSPORT in kinds
+    assert KnowledgeType.ACCOMMODATION in kinds
+
+
+def test_guide_cards_carry_their_attribution():
+    """CC BY-SA is free, not unconditional."""
+    for card in guide_cards(FakeTravelWiki().guide("Antigua Guatemala")):
+        assert "Wikivoyage" in card["attribution"]
+        assert card["url"].startswith("https://")
+
+
+def test_a_guide_card_is_never_presented_as_the_travellers_own():
+    for card in guide_cards(FakeTravelWiki().guide("Antigua Guatemala")):
+        assert card["from_web"] is True
+        assert card["yours"] is False
+        assert card["sourcing"] == "found"
+
+
+def test_nothing_from_a_guide_is_official_either():
+    # An encyclopedia is people writing things down, however carefully.
+    for card in guide_cards(FakeTravelWiki().guide("Antigua Guatemala")):
+        assert card["provenance"] != "official"
+
+
+def test_no_guide_means_no_cards_rather_than_an_error():
+    assert guide_cards(None) == []

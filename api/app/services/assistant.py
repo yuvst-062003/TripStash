@@ -20,8 +20,13 @@ from datetime import UTC, date, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.adapters import get_fx, get_weather, get_web_search
-from app.services.web_answers import web_cards, web_disclaimer
+from app.adapters import get_fx, get_travel_wiki, get_weather, get_web_search
+from app.services.web_answers import (
+    guide_cards,
+    guide_disclaimer,
+    web_cards,
+    web_disclaimer,
+)
 from app.models.capture import KnowledgeItem, Source, SourcePlaceEvidence
 from app.models.core import Destination, Trip
 from app.models.enums import KnowledgeType, PlaceStatus
@@ -565,11 +570,26 @@ def _answer_knowledge_type(session, trip, question, context, on, focus, intent) 
             )
         ).scalars()
     )
+    # Filtering by type alone answered "is Tbilisi safe?" with a note about
+    # Antigua, which reads as an answer and is not one. If the question names a
+    # place, only notes about that place count; if none do, the traveller has
+    # nothing saved about it, whatever else is in the trip.
+    # Only a confident place name may discard saved notes. "What did I save
+    # about safety?" is a question about the library, and guessing "safety" is
+    # a place would throw away the very notes being asked for.
+    subject = _place_subject(question)
+    if subject and items:
+        about_here = [i for i in items if _note_mentions(i, subject)]
+        if not about_here:
+            return _answer_from_the_web(question, prefer=wanted[0])
+        items = about_here
+
     if not items:
-        return Answer(
-            text=f"You have not saved any {intent} notes for this trip yet.",
-            tools_used=["knowledge:filter"],
-        )
+        # Nothing saved of this kind. The free guide has a section for exactly
+        # this - "Stay safe" is a safety note, "Get in" is transport - so the
+        # right part of it can be handed back without anything having to infer
+        # what a paragraph is about.
+        return _answer_from_the_web(question, prefer=wanted[0])
 
     disclaimers = [INFERENCE_NOTE]
     if intent == "border":
@@ -590,7 +610,24 @@ def _answer_knowledge_type(session, trip, question, context, on, focus, intent) 
     )
 
 
-def _answer_from_the_web(question: str) -> Answer:
+def _note_mentions(item: KnowledgeItem, subject: str) -> bool:
+    """Whether a saved note is about the place that was asked about.
+
+    Matched on the note's own scope first, then its words. Loose on purpose: a
+    note scoped to "Antigua" should answer a question about "Antigua
+    Guatemala", and the cost of a false match here is one irrelevant card
+    rather than a wrong answer to a safety question.
+    """
+    haystack = normalize_name(
+        " ".join(filter(None, [item.destination_scope, item.title, item.body]))
+    )
+    needle = normalize_name(subject)
+    if not needle:
+        return False
+    return any(word in haystack for word in needle.split() if len(word) > 3)
+
+
+def _answer_from_the_web(question: str, prefer: KnowledgeType | None = None) -> Answer:
     """Read the open web, when the traveller's own library has nothing.
 
     Everything that comes back is labelled as the web's rather than theirs,
@@ -609,17 +646,53 @@ def _answer_from_the_web(question: str) -> Answer:
             tools_used=["knowledge:search", "places:search"],
         )
 
+    # The free travel guide first. It needs no key, no account and no quota,
+    # and its sections already carry the meaning this app's knowledge types
+    # carry - so it is both the cheaper source and the better one. The search
+    # engine is the fallback, and only exists if somebody configured one.
+    guide = get_travel_wiki().guide(subject)
+    cards = guide_cards(guide)
+    if cards and prefer is not None:
+        # Asked about safety, lead with the safety section rather than with
+        # sightseeing. The rest still follows, because a traveller reading
+        # about one thing usually wants the others too.
+        cards.sort(key=lambda c: c.get("knowledge_type") != prefer)
+    if cards:
+        # Asked about one thing and the guide covers everything but that, say
+        # so. Leading with a section about something else, silently, reads as
+        # an answer to a question nobody asked.
+        missing = prefer is not None and not any(
+            c.get("knowledge_type") == prefer for c in cards
+        )
+        said = (
+            f"Nothing saved about {guide.title} yet. This is from a free travel guide "
+            "rather than from you."
+        )
+        if missing:
+            said = (
+                f"Nothing saved about {guide.title}, and the free guide has nothing on "
+                f"{prefer.value} there either. Here is what it does cover."
+            )
+        return Answer(
+            text=said,
+            cards=cards,
+            citations=[{"url": guide.url, "title": guide.title, "host": "en.wikivoyage.org"}],
+            disclaimers=[guide_disclaimer(guide.title)],
+            tools_used=["knowledge:search", "places:search", "guide:wikivoyage"],
+        )
+
     results = get_web_search().search(subject)
     cards = web_cards(results)
 
     if not cards:
         return Answer(
             text=(
-                f"Nothing saved about {subject}, and the web gave me nothing usable either. "
-                "Share a reel about it, or ask me something narrower."
+                f"Nothing saved about {subject}, and nothing I could read about it either. "
+                "A travel guide covers destinations rather than single businesses, so try "
+                "the town it is in - or share a reel about it and it becomes yours."
             ),
             disclaimers=["Answers come from your saved records first."],
-            tools_used=["knowledge:search", "places:search", "web:search"],
+            tools_used=["knowledge:search", "places:search", "guide:wikivoyage", "web:search"],
         )
 
     return Answer(
@@ -629,9 +702,12 @@ def _answer_from_the_web(question: str) -> Answer:
         cards=cards,
         citations=[{"url": c["url"], "title": c["title"], "host": c["host"]} for c in cards],
         disclaimers=[web_disclaimer(len(cards))],
-        tools_used=["knowledge:search", "places:search", "web:search"],
+        tools_used=["knowledge:search", "places:search", "guide:wikivoyage", "web:search"],
     )
 
+
+#: Capitalised words that are still not place names.
+_NOT_A_PLACE = {"i", "im", "id", "ive", "ill", "the", "a", "an", "is", "it"}
 
 #: Words that are never the thing being asked about.
 _NOT_A_SUBJECT = {
@@ -642,18 +718,36 @@ _NOT_A_SUBJECT = {
 }
 
 
-def _subject_of(question: str) -> str:
-    """The place a question is probably about.
+def _place_subject(question: str) -> str:
+    """A place name the question names, or nothing.
 
-    Proper nouns first, because a place name is capitalised in every language
-    this app is likely to see written in Latin script. Falling back to the
-    longest ordinary word is a guess, and a wrong guess only costs one search
-    that returns nothing useful.
+    Only capitalised words past the first count, because a place name is
+    capitalised in every language this app is likely to meet in Latin script.
+    Deliberately returns nothing rather than guessing: this answer decides
+    whether saved notes are discarded, and a guess is far too weak for that.
     """
     words = re.findall(r"[\w\u00C0-\u024F']+", question)
-    proper = [w for w in words[1:] if w[:1].isupper()]
-    if proper:
-        return " ".join(proper)
+    proper = [
+        w
+        for w in words[1:]
+        # "I" is capitalised and is not a place. Nor is a single letter of any
+        # kind, and nor is a word that only starts a sentence.
+        if w[:1].isupper() and len(w) > 1 and w.casefold() not in _NOT_A_PLACE
+    ]
+    return " ".join(proper)
+
+
+def _subject_of(question: str) -> str:
+    """The thing a question is probably about, for looking it up.
+
+    A confident place name first; otherwise the longest ordinary word, which
+    is a guess. A wrong guess here costs one lookup that returns nothing
+    useful, which is why it is allowed here and not in `_place_subject`.
+    """
+    named = _place_subject(question)
+    if named:
+        return named
+    words = re.findall(r"[\w\u00C0-\u024F']+", question)
     ordinary = [w for w in words if len(w) > 3 and w.casefold() not in _NOT_A_SUBJECT]
     return max(ordinary, key=len, default="")
 

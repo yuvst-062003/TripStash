@@ -16,7 +16,14 @@ no caller can accidentally render one as something the traveller saved.
 
 from __future__ import annotations
 
+from app.adapters.travel_wiki import (
+    ATTRIBUTION,
+    Guide,
+    knowledge_type_for,
+    sections_of_interest,
+)
 from app.adapters.web_search import WebResult, dedupe_by_host
+from app.models.enums import Provenance
 from app.services.web_grading import grade_result
 
 
@@ -63,4 +70,52 @@ def web_disclaimer(count: int) -> str:
     return (
         f"Read {pages} from the web. None of it is yours and none of it is saved - "
         "keep anything worth keeping and it joins your library."
+    )
+
+
+def guide_cards(guide: Guide | None) -> list[dict]:
+    """A free travel guide, as typed answer cards.
+
+    Preferred over a search engine because its sections already carry the
+    meaning this app's knowledge types carry: "Stay safe" is a safety note and
+    "Get in" is transport, so nothing has to infer what a paragraph is about -
+    which is the part a language model would otherwise do, and occasionally get
+    wrong.
+
+    An encyclopedia is still people writing things down, however carefully, so
+    it grades as REVIEWS at best and never as OFFICIAL. Attribution rides on
+    every card, because CC BY-SA is free and not unconditional.
+    """
+    if guide is None:
+        return []
+
+    cards: list[dict] = []
+    for section in sections_of_interest(guide.sections):
+        text = " ".join(section.text.split())
+        cards.append(
+            {
+                "type": "web",
+                "title": f"{guide.title}: {section.heading.lower()}",
+                "subtitle": "Wikivoyage",
+                "body": text,
+                "quote": text,
+                "url": guide.url,
+                "host": "en.wikivoyage.org",
+                "knowledge_type": knowledge_type_for(section.heading),
+                # Curated and edited, but still an account rather than the
+                # place itself speaking.
+                "provenance": Provenance.REVIEWS,
+                "sourcing": "found",
+                "from_web": True,
+                "yours": False,
+                "attribution": guide.attribution,
+            }
+        )
+    return cards
+
+
+def guide_disclaimer(place: str) -> str:
+    return (
+        f"Read a free travel guide to {place}. None of it is yours and none of it is saved - "
+        f"keep anything worth keeping and it joins your library. {ATTRIBUTION}."
     )

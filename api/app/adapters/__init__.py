@@ -49,6 +49,25 @@ def get_ai() -> AIAdapter:
 
 
 @lru_cache
+def get_travel_wiki():
+    """A free travel guide for anywhere. No key, no account, no quota.
+
+    The real one is the default, which is unlike every other provider here and
+    deliberate: it costs nothing, so serving a stub instead would be a worse
+    product for no reason. `fake` exists so tests need no network.
+    """
+    settings = get_settings()
+    if settings.travel_wiki_provider == "fake":
+        from app.adapters.travel_wiki import FakeTravelWiki
+
+        return FakeTravelWiki()
+
+    from app.adapters.travel_wiki import WikivoyageTravelWiki
+
+    return WikivoyageTravelWiki()
+
+
+@lru_cache
 def get_web_search():
     """`fake` is deterministic and keyless; `brave` searches the open web.
 

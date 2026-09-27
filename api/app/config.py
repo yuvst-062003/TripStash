@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # and keyless; `youtube` is the only platform that permits real search.
     video_search_provider: str = "fake"
     youtube_api_key: str | None = None
+    #: `wikivoyage` is the real one and needs no key, no account and no quota,
+    #: so it is the default: a free source beats a stub, and this one is a
+    #: travel guide rather than a search engine. `fake` is for tests.
+    travel_wiki_provider: str = "wikivoyage"
     #: `fake` is deterministic and keyless; `brave` searches the open web.
     #: What comes back is graded by app.services.web_grading before it is
     #: allowed to influence anything - search never earns the top of the ladder.

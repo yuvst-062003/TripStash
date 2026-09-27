@@ -25,6 +25,9 @@ os.environ["TRIPSTASH_SECRET_KEY"] = "test-secret-key-not-for-production"
 os.environ["TRIPSTASH_WORKER_INLINE"] = "true"
 # The suite never reaches the network; link reading has its own stubbed tests.
 os.environ["TRIPSTASH_LINK_FETCH_ENABLED"] = "false"
+# The real travel guide is free and keyless, so it is the default in the app.
+# Tests use the fake: a suite that reaches Wikivoyage is slow, flaky, and rude.
+os.environ["TRIPSTASH_TRAVEL_WIKI_PROVIDER"] = "fake"
 
 from fastapi.testclient import TestClient  # noqa: E402
 

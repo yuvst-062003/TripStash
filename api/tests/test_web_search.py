@@ -105,7 +105,7 @@ def test_the_real_driver_reads_the_shape_the_provider_returns(monkeypatch):
 
     captured: dict[str, object] = {}
 
-    def fake_open(request, timeout=0):  # noqa: ANN001
+    def fake_open(request, timeout=0, **_):  # noqa: ANN001
         captured["url"] = request.full_url
         captured["headers"] = dict(request.headers)
 
@@ -136,7 +136,7 @@ def test_the_real_driver_reads_the_shape_the_provider_returns(monkeypatch):
 def test_a_provider_that_fails_returns_nothing_rather_than_raising(monkeypatch):
     """A search that cannot run must not take the conversation down with it."""
 
-    def boom(request, timeout=0):  # noqa: ANN001
+    def boom(request, timeout=0, **_):  # noqa: ANN001
         raise OSError("network is down")
 
     monkeypatch.setattr("urllib.request.urlopen", boom)
@@ -144,7 +144,7 @@ def test_a_provider_that_fails_returns_nothing_rather_than_raising(monkeypatch):
 
 
 def test_a_malformed_response_returns_nothing_rather_than_raising(monkeypatch):
-    def garbage(request, timeout=0):  # noqa: ANN001
+    def garbage(request, timeout=0, **_):  # noqa: ANN001
         class _Response:
             def read(self) -> bytes:
                 return b"not json at all"

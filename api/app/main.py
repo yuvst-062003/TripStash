@@ -70,6 +70,7 @@ def health() -> dict:
         "version": __version__,
         "providers": {
             "ai": settings.ai_provider,
+            "travel_guide": settings.travel_wiki_provider,
             "web_search": settings.web_search_provider,
             "places": settings.places_provider,
             "weather": settings.weather_provider,

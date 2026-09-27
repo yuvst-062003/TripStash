@@ -17,11 +17,11 @@ a reel.
 
 from __future__ import annotations
 
-import json
 import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 from urllib.parse import urlparse
+
+from app.adapters._http import get_json
 
 #: Long enough for a slow provider, short enough that a question does not hang.
 TIMEOUT_SECONDS = 8.0
@@ -169,7 +169,9 @@ class BraveWebSearch:
             return []
 
         url = f"{self.endpoint}?{urllib.parse.urlencode({'q': subject, 'count': max(1, limit)})}"
-        request = urllib.request.Request(
+        # A failed search must not take the conversation down with it: this
+        # returns nothing and the assistant answers from the library, saying so.
+        payload = get_json(
             url,
             headers={
                 "Accept": "application/json",
@@ -177,14 +179,9 @@ class BraveWebSearch:
                 # way would log it.
                 "X-Subscription-Token": self._api_key,
             },
+            timeout=self._timeout,
         )
-
-        try:
-            with urllib.request.urlopen(request, timeout=self._timeout) as response:
-                payload = json.loads(response.read())
-        except Exception:
-            # A failed search must not take the conversation down with it. The
-            # assistant answers from the library instead, and says so.
+        if not payload:
             return []
 
         raw = (payload.get("web") or {}).get("results") or []
