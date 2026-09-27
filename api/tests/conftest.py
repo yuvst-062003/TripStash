@@ -12,6 +12,13 @@ from pathlib import Path
 
 import pytest
 
+
+# Finder/sync duplicates ("test_cities 2.py") are byte-identical copies that
+# pytest would otherwise collect, reporting 274 tests where there are 169 and
+# hiding a real failure behind a doubled pass count.
+collect_ignore_glob = ["* 2.py"]
+
+
 _TMP = Path(tempfile.mkdtemp(prefix="tripstash-tests-"))
 os.environ["TRIPSTASH_DATABASE_URL"] = f"sqlite+pysqlite:///{_TMP / 'test.db'}"
 os.environ["TRIPSTASH_STORAGE_DIR"] = str(_TMP / "storage")
