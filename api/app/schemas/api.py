@@ -420,3 +420,30 @@ class ReelClip(ApiModel):
     quote: str | None
     confidence: float
     saved_at: datetime | None
+
+
+# ---------------------------------------------------------- country and picks
+
+
+class CountrySummary(ApiModel):
+    """One country the traveller has saved something in."""
+
+    key: str
+    name: str
+    place_count: int
+    video_count: int
+    playable_count: int
+
+
+class ActivityOption(ApiModel):
+    slug: str
+    label: str
+
+
+class ActivityPicksResponse(ApiModel):
+    available: list[ActivityOption]
+    picked: list[str]
+
+
+class ActivityPicksRequest(ApiModel):
+    slugs: list[str] = Field(default_factory=list, max_length=40)

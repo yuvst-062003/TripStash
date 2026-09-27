@@ -16,7 +16,17 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.config import get_settings
 from app.db import init_db
-from app.routers import account, assistant, auth, capture, places, planner, reels, trips
+from app.routers import (
+    account,
+    activities,
+    assistant,
+    auth,
+    capture,
+    places,
+    planner,
+    reels,
+    trips,
+)
 from app.services.extraction import CaptureError
 from app.web import mount_web
 
@@ -43,7 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for router in (auth, trips, capture, places, reels, assistant, planner, account):
+for router in (auth, trips, capture, places, reels, assistant, planner, account, activities):
     app.include_router(router.router, prefix=API_PREFIX)
 
 
