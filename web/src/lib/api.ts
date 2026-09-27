@@ -9,7 +9,10 @@ import type {
   AskResponse,
   Booking,
   Candidate,
+  CityBreakdown,
+  CityPlace,
   CountrySummary,
+  GlobeCountry,
   HomePayload,
   ItineraryRow,
   KnowledgeItem,
@@ -200,6 +203,16 @@ export const api = {
 
   // where a library clusters, before any one place is opened
   countries: () => get<CountrySummary[]>('/api/v1/reels/countries'),
+
+  // the globe: every country the trip touches, placed
+  globeCountries: () => get<GlobeCountry[]>('/api/v1/countries'),
+  cities: (countryKey: string) =>
+    get<CityBreakdown[]>(`/api/v1/countries/${encodeURIComponent(countryKey)}/cities`),
+  cityPlaces: (countryKey: string, cityKey: string, query?: Record<string, unknown>) =>
+    get<CityPlace[]>(
+      `/api/v1/countries/${encodeURIComponent(countryKey)}/cities/${encodeURIComponent(cityKey)}/places`,
+      query,
+    ),
 
   // what this trip is about. Picks filter; they never score.
   activities: () => get<ActivityPicks>('/api/v1/activities'),

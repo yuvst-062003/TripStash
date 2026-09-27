@@ -465,3 +465,49 @@ export interface ActivityPicks {
   available: ActivityOption[]
   picked: string[]
 }
+
+/** A pressable country on the globe. */
+export interface GlobeCountry {
+  key: string
+  name: string
+  lat: number
+  lon: number
+  in_route: boolean
+  stop_count: number
+  place_count: number
+  video_count: number
+  playable_count: number
+}
+
+/** One city of a country, explained in whoever's words we actually have. */
+export interface CityBreakdown {
+  key: string
+  name: string
+  lat: number | null
+  lon: number | null
+  in_route: boolean
+  destination_id: string | null
+  explanation: string
+  /** "you" | "sources" | "none" — never an unattributed sentence. */
+  explanation_source: string
+  place_count: number
+  video_count: number
+  playable_count: number
+  kinds: string[]
+}
+
+/** One thing to do in a city: what it is, and what you do there. */
+export interface CityPlace {
+  trip_place_id: string
+  place_id: string
+  name: string
+  kind: string
+  activities: string[]
+  status: string
+  lat: number | null
+  lon: number | null
+  video_count: number
+  playable_count: number
+  found_count: number
+  quote: string | null
+}

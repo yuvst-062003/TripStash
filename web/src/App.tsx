@@ -27,6 +27,8 @@ import Place from './pages/Place'
 import Activities from './pages/Activities'
 import Countries from './pages/Countries'
 import CountryView from './pages/CountryView'
+import CityView from './pages/CityView'
+import GlobeScreen from './pages/GlobeScreen'
 import Clips from './pages/Clips'
 import ClipFeed from './pages/ClipFeed'
 import ShareTarget from './pages/ShareTarget'
@@ -290,6 +292,8 @@ export default function App() {
             <Route path="/activities" element={<Page dir={dir.current}><Activities /></Page>} />
             <Route path="/countries" element={<Page dir={dir.current}><Countries /></Page>} />
             <Route path="/countries/:key" element={<Page dir={dir.current}><CountryView /></Page>} />
+            <Route path="/countries/:key/cities/:city" element={<Page dir={dir.current}><CityView /></Page>} />
+            <Route path="/globe" element={<Page dir={dir.current}><GlobeScreen /></Page>} />
             <Route path="/clips" element={<Page dir={dir.current}><Clips /></Page>} />
             {/* The feed takes the whole screen, tab bar and all. */}
             <Route path="/clips/feed" element={<Page dir={dir.current}><ClipFeed /></Page>} />
