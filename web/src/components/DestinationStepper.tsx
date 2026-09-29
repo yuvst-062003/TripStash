@@ -49,9 +49,9 @@ export default function DestinationStepper({
   const progress = ((clamped + 1) / destinations.length) * 100
 
   return (
-    <div className="stepper" dir={dir} data-testid="stepper">
-      <div className="stepper__track">
-        <label className="stepper__bar">
+    <div className="routebar" dir={dir} data-testid="routebar">
+      <div className="routebar__track">
+        <label className="routebar__bar">
           <span className="sr-only">
             {label(clamped + 1)} of {destinations.length}: {here.name}
           </span>
@@ -64,15 +64,15 @@ export default function DestinationStepper({
             onChange={(e) => onGo(Number(e.target.value))}
             data-testid="stepper-range"
           />
-          <span className="stepper__fill" style={{ width: `${progress}%` }} aria-hidden="true" />
+          <span className="routebar__fill" style={{ width: `${progress}%` }} aria-hidden="true" />
         </label>
-        <span className="stepper__badge t-field">{label(clamped + 1)}</span>
+        <span className="routebar__badge t-field">{label(clamped + 1)}</span>
       </div>
 
-      <div className="stepper__row">
+      <div className="routebar__row">
         <button
           type="button"
-          className="stepper__add"
+          className="routebar__add"
           onClick={() => onInsert(clamped)}
           aria-label={`Add a destination before ${here.name}`}
           data-testid="stepper-add-before"
@@ -80,28 +80,28 @@ export default function DestinationStepper({
           <Plus size={20} />
         </button>
 
-        <span className="stepper__dashes" aria-hidden="true" />
+        <span className="routebar__dashes" aria-hidden="true" />
 
         <button
           type="button"
-          className="stepper__card"
+          className="routebar__card"
           onClick={() => onOpen(here)}
           data-testid="stepper-card"
         >
-          <span className="stepper__badge stepper__badge--card t-field">
+          <span className="routebar__badge routebar__badge--card t-field">
             {label(clamped + 1)}
           </span>
-          <span className="stepper__name">{here.name}</span>
-          <span className="stepper__go" aria-hidden="true">
+          <span className="routebar__name">{here.name}</span>
+          <span className="routebar__go" aria-hidden="true">
             <ChevronRight size={18} />
           </span>
         </button>
 
-        <span className="stepper__dashes" aria-hidden="true" />
+        <span className="routebar__dashes" aria-hidden="true" />
 
         <button
           type="button"
-          className="stepper__add"
+          className="routebar__add"
           onClick={() => onInsert(clamped + 1)}
           aria-label={`Add a destination after ${here.name}`}
           data-testid="stepper-add-after"
