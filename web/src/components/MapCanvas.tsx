@@ -14,9 +14,10 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { CameraTarget } from '../lib/cameraTarget'
 import { flightFor, prefersReducedMotion, safePadding } from '../lib/flight'
+import { SKY, buildStyle } from '../lib/mapStyle'
 
-/** Free vector tiles, no key, no request limit, no billing account. */
-const STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+// The style is built rather than fetched: a published one knows nothing about
+// a route, country fills or a starfield. See lib/mapStyle.ts.
 
 interface Props {
   target: CameraTarget
@@ -57,7 +58,7 @@ export default function MapCanvas({ target, going, bottomInset = 0, onReady }: P
     try {
       instance = new maplibregl.Map({
         container: host.current,
-        style: STYLE,
+        style: buildStyle(),
         center: [0, 20],
         zoom: 1,
         attributionControl: { compact: true },
@@ -74,6 +75,14 @@ export default function MapCanvas({ target, going, bottomInset = 0, onReady }: P
       // The projection that makes one camera work from space to a street: it
       // eases from a sphere toward Mercator as you go in, on one tile source.
       instance.setProjection({ type: 'globe' })
+
+      // Atmosphere at the limb and stars behind it, both of which only mean
+      // anything while the world still has an edge. Both fade as you descend.
+      try {
+        instance.setSky(SKY as never)
+      } catch {
+        // An older renderer without a sky. The map is still a map.
+      }
       ready.current?.(instance)
       const waiting = pending.current
       if (waiting) {
@@ -121,10 +130,16 @@ export default function MapCanvas({ target, going, bottomInset = 0, onReady }: P
 
   useEffect(() => {
     const instance = map.current
-    if (!instance || !instance.isStyleLoaded()) {
+    if (!instance) {
+      // No map yet. Hold the request for the load handler.
       pending.current = { target, going }
       return
     }
+    // Deliberately NOT gated on isStyleLoaded(): that returns false while
+    // tiles are still arriving, and the satellite source keeps it false for
+    // seconds. Gating here parked the second camera move of every session -
+    // the one that flies to where the traveller actually is - and nothing ever
+    // drained it, so the map sat over the Atlantic.
     fly(instance, target, going, bottomInset)
   }, [target, going, bottomInset])
 

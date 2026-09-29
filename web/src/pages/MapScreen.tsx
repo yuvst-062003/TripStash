@@ -16,6 +16,8 @@ import type maplibregl from 'maplibre-gl'
 import { useLocation, useNavigate } from 'react-router-dom'
 import MapCanvas from '../components/MapCanvas'
 import MapPins from '../components/MapPins'
+import RouteLayer from '../components/RouteLayer'
+import DestinationStepper from '../components/DestinationStepper'
 import ScopeTrail from '../components/ScopeTrail'
 import Evidence from '../components/Evidence'
 import { ArrowLeft, Plus } from '../components/icons'
@@ -26,6 +28,9 @@ import { targetFor } from '../lib/cameraTarget'
 import { prefersReducedMotion, settleMs } from '../lib/flight'
 import { useEdgeSwipe } from '../lib/useEdgeSwipe'
 import { crumbsOf, depthOf, parentOf, parseScope, scopePath, type Scope } from '../lib/scope'
+
+/** How far out the world level sits: a globe, not a region. */
+const GLOBE_ZOOM = 2
 import { ErrorNote, SkeletonRows } from '../components/ui'
 import type { CityBreakdown, CityPlace, GlobeCountry } from '../lib/types'
 
@@ -45,6 +50,9 @@ export default function MapScreen() {
   }, [scope])
 
   const [map, setMap] = useState<maplibregl.Map | null>(null)
+  // Which stop the stepper is showing. Only meaningful at the world level,
+  // where the whole route is visible at once.
+  const [stepAt, setStepAt] = useState(0)
   const [settled, setSettled] = useState(false)
 
   // How much of the map the page over it hides. Measured rather than guessed,
@@ -79,21 +87,50 @@ export default function MapScreen() {
     [countryKey, cityKey],
   )
 
+  // The trip in travelling order: the countries the route crosses, and the
+  // stops the line runs through. Only countries actually on the route are
+  // drawn, so the globe shows this trip rather than the world.
+  const onRoute = useMemo(
+    () => (countries.data ?? []).filter((c) => c.in_route),
+    [countries.data],
+  )
+  const routeStops = useMemo(
+    () => onRoute.map((c) => ({ name: c.name, lat: c.lat, lon: c.lon })),
+    [onRoute],
+  )
+
   const country = countries.data?.find((c) => c.key === countryKey)
   const city = cities.data?.find((c) => c.key === cityKey)
   const place = places.data?.find(
     (p) => scope.level === 'place' && p.trip_place_id === scope.tripPlaceId,
   )
 
+  // At the world level the stepper drives the camera: scrubbing to a stop
+  // flies to it, which is what makes the bar feel like moving along the route
+  // rather than like a setting.
+  // At the world level the route IS the reading: the stepper replaces the
+  // declaration sheet rather than sitting on top of it.
+  const showStepper = scope.level === 'world' && onRoute.length > 0
+  const stepped = showStepper ? onRoute[stepAt] : undefined
+
   const target = useMemo(
     () =>
-      targetFor(scope, {
+      stepped
+        ? {
+            kind: 'point' as const,
+            center: [stepped.lon, stepped.lat] as [number, number],
+            // Far enough out that the planet still reads as a planet. The
+            // stepper turns the globe to face a stop; it does not dive at it,
+            // because the whole point of this view is seeing the trip WHOLE.
+            zoom: GLOBE_ZOOM,
+          }
+        : targetFor(scope, {
         countryName: country?.name,
         city,
         place,
-        countryPoints: (countries.data ?? []).map((c) => ({ lat: c.lat, lon: c.lon })),
-      }),
-    [scope, country?.name, city, place, countries.data],
+            countryPoints: (countries.data ?? []).map((c) => ({ lat: c.lat, lon: c.lon })),
+          }),
+    [scope, country?.name, city, place, countries.data, stepped],
   )
 
   // Pins wait for the camera. The delay is read from the flight's own length so
@@ -139,18 +176,34 @@ export default function MapScreen() {
   const here = crumbs[crumbs.length - 1].label
 
   return (
-    <div className="screen screen--map" data-testid="map-screen" {...swipe}>
+    <div
+      className={`screen screen--map${scope.level === 'world' ? ' screen--route' : ''}`}
+      data-testid="map-screen"
+      {...swipe}
+    >
       <MapCanvas target={target} going={going} bottomInset={hidden} onReady={setMap} />
       <MapPins
         map={map}
         scope={scope}
-        settled={settled}
+        settled={settled && !showStepper}
         data={{
           countries: countries.data ?? [],
           cities: cities.data ?? [],
           places: places.data ?? [],
         }}
         onPress={onPressPin}
+      />
+
+      <RouteLayer
+        map={map}
+        countries={onRoute.map((c) => c.name)}
+        stops={routeStops}
+        here={country?.name}
+        hereIndex={onRoute.findIndex((c) => c.key === countryKey)}
+        onPressCountry={(name) => {
+          const found = (countries.data ?? []).find((c) => c.name === name)
+          if (found) go({ level: 'country', countryKey: found.key })
+        }}
       />
 
       <ScopeTrail crumbs={crumbs} code={codeFor(scope, country)} onGo={go} />
@@ -179,7 +232,28 @@ export default function MapScreen() {
         </button>
       )}
 
-      <section className="mapsheet" data-testid="map-sheet" ref={sheet}>
+      {showStepper ? (
+        <DestinationStepper
+          destinations={onRoute.map((c) => ({
+            key: c.key,
+            name: c.name,
+            lat: c.lat,
+            lon: c.lon,
+          }))}
+          index={Math.max(0, stepAt)}
+          onGo={setStepAt}
+          onInsert={() => navigate('/explore')}
+          onOpen={(d) => go({ level: 'country', countryKey: d.key })}
+          label={(n) => `\u05d9\u05e2\u05d3 ${n}`}
+        />
+      ) : null}
+
+      <section
+        className="mapsheet"
+        data-testid="map-sheet"
+        ref={sheet}
+        hidden={showStepper}
+      >
         {!countries.data ? (
           <SkeletonRows />
         ) : (
