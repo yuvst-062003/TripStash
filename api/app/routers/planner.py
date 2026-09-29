@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters import get_fx, get_weather
 from app.db import get_session
-from app.deps import current_trip, owned_or_404
+from app.deps import current_trip, owned_or_404, traveller_date
 from app.models.capture import ExtractionCandidate, Source
 from app.models.core import Destination, Trip
 from app.models.enums import CandidateStatus, PlaceStatus, SourceStatus, TripPhase
@@ -29,9 +29,13 @@ def home(
     lat: float | None = Query(default=None, ge=-90, le=90),
     lon: float | None = Query(default=None, ge=-180, le=180),
     on: date | None = Query(default=None),
+    today_here: date = Depends(traveller_date),
 ) -> dict:
     """A contextual dashboard that links elsewhere rather than duplicating it."""
-    today = on or datetime.now(UTC).date()
+    # An explicit ?on= wins; otherwise the traveller's own date, not the
+    # server's. Counting days from UTC told someone in Israel that a day had
+    # passed when it had not.
+    today = on or today_here
     phase = trip.phase(today)
 
     current_destination = session.execute(

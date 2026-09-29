@@ -31,6 +31,22 @@ import type {
 
 const TOKEN_KEY = 'tripstash.token'
 
+/**
+ * The traveller's own timezone, as an IANA name.
+ *
+ * The browser knows this and hands it over for nothing. A named zone rather
+ * than an offset because a zone knows about daylight saving: Israel is UTC+3
+ * in September and UTC+2 in December, so an offset would start lying twice a
+ * year.
+ */
+function travellerZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null
+  } catch {
+    return null
+  }
+}
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -89,6 +105,11 @@ async function request<T>(
   const accessToken = token.get()
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
+  // What day it is where the traveller is. Without this the server counts
+  // days in UTC, which is a day out for anyone east of it after midnight -
+  // "69 days to go" reading 70 the moment the clock rolls over.
+  const zone = travellerZone()
+  if (zone) headers.set('X-TripStash-Timezone', zone)
 
   const response = await fetch(url.toString(), { ...init, headers })
   const fromCache = response.headers.get('x-tripstash-offline') === 'true'

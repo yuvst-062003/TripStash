@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.deps import current_trip, current_user
+from app.deps import current_trip, current_user, traveller_date
 from app.models.core import Destination, Trip, User
 from app.schemas.api import (
     DestinationCreate,
@@ -22,7 +22,7 @@ from app.schemas.api import (
 router = APIRouter(prefix="/trips", tags=["trip"])
 
 
-def serialise_trip(trip: Trip) -> TripResponse:
+def serialise_trip(trip: Trip, today: date) -> TripResponse:
     return TripResponse(
         id=trip.id,
         name=trip.name,
@@ -31,7 +31,7 @@ def serialise_trip(trip: Trip) -> TripResponse:
         base_currency=trip.base_currency,
         total_budget=trip.total_budget,
         interests=[i for i in (trip.interests or "").split(",") if i],
-        phase=str(trip.phase(datetime.now(UTC).date())),
+        phase=str(trip.phase(today)),
         destinations=[DestinationResponse.model_validate(d) for d in trip.destinations],
     )
 
@@ -41,6 +41,7 @@ def create_trip(
     body: TripCreate,
     session: Session = Depends(get_session),
     user: User = Depends(current_user),
+    today_here: date = Depends(traveller_date),
 ) -> TripResponse:
     if body.start_date and body.end_date and body.end_date < body.start_date:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "End date precedes start date.")
@@ -62,12 +63,15 @@ def create_trip(
     )
     session.add(trip)
     session.flush()
-    return serialise_trip(trip)
+    return serialise_trip(trip, today_here)
 
 
 @router.get("/current", response_model=TripResponse)
-def get_current(trip: Trip = Depends(current_trip)) -> TripResponse:
-    return serialise_trip(trip)
+def get_current(
+    trip: Trip = Depends(current_trip),
+    today_here: date = Depends(traveller_date),
+) -> TripResponse:
+    return serialise_trip(trip, today_here)
 
 
 @router.post(

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from datetime import date
+
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +20,8 @@ CREDENTIALS_ERROR = HTTPException(
     headers={"WWW-Authenticate": "Bearer"},
 )
 
+
+from app.services.clock import traveller_today
 
 def current_user(
     session: Session = Depends(get_session),
@@ -70,3 +74,16 @@ def audit(
             at=datetime.now(UTC),
         )
     )
+
+
+def traveller_date(
+    x_tripstash_timezone: str | None = Header(default=None),
+) -> date:
+    """What day it is where the traveller is, not where the server is.
+
+    Read from a header rather than a query parameter so every endpoint gets it
+    without changing its signature, and so a client sets it once rather than
+    remembering it per call. A client that sends nothing gets UTC, which is
+    what the whole app used before this existed.
+    """
+    return traveller_today(x_tripstash_timezone)
