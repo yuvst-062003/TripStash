@@ -11,7 +11,7 @@
  * every country is also a row in the page below: the canvas is pixels, and
  * pixels cannot be reached by a keyboard or read aloud.
  */
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type maplibregl from 'maplibre-gl'
 import { COLOURS } from '../lib/mapStyle'
 import { shapesFor } from '../lib/countryShapes'
@@ -42,6 +42,28 @@ export default function RouteLayer({
   hereIndex,
   onPressCountry,
 }: Props) {
+  // Bumped once the style is up, to run the drawing below again.
+  const [styleReady, setStyleReady] = useState(0)
+
+  useEffect(() => {
+    if (!map || map.isStyleLoaded()) return
+
+    // The trip almost always arrives before the imagery does, and a layer
+    // cannot be added to a style that has not loaded. The effect below would
+    // then return having drawn nothing - and never run again, because its
+    // dependencies do not change once the data has landed. The globe came up
+    // bare: no countries, no route, no stops, and no error either.
+    const ready = () => {
+      if (!map.isStyleLoaded()) return
+      map.off('styledata', ready)
+      setStyleReady((n) => n + 1)
+    }
+    map.on('styledata', ready)
+    return () => {
+      map.off('styledata', ready)
+    }
+  }, [map])
+
   useEffect(() => {
     if (!map || !map.isStyleLoaded()) return
 
@@ -203,7 +225,7 @@ export default function RouteLayer({
       map.off('mouseenter', `${COUNTRIES}-fill`, enter)
       map.off('mouseleave', `${COUNTRIES}-fill`, leave)
     }
-  }, [map, countries, stops, here, hereIndex, onPressCountry])
+  }, [map, countries, stops, here, hereIndex, onPressCountry, styleReady])
 
   return null
 }

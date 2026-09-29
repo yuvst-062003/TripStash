@@ -149,12 +149,18 @@ def globe_countries(
     stops: dict[str, int] = {}
     coords: dict[str, list[tuple[float, float]]] = {}
     place_coords: dict[str, list[tuple[float, float]]] = {}
+    # Where each country first appears along the route. The globe draws the
+    # trip as a line through this list, so the order is not presentation: a
+    # list sorted by name draws a line that visits the countries in
+    # alphabetical order, which on a map of the Americas is a zigzag.
+    first_stop: dict[str, int] = {}
 
-    for destination in destinations:
+    for index, destination in enumerate(destinations):
         key = normalise_country(destination.country)
         if not key:
             continue
         names.setdefault(key, (destination.country or "").strip())
+        first_stop.setdefault(key, index)
         stops[key] = stops.get(key, 0) + 1
         if destination.lat is not None and destination.lon is not None:
             coords.setdefault(key, []).append((destination.lat, destination.lon))
@@ -197,6 +203,15 @@ def globe_countries(
             )
         )
 
-    # The route first, because those are the countries already decided on.
-    out.sort(key=lambda c: (not c.in_route, -c.video_count, c.name.casefold()))
+    # The route first, in travelling order, because that is the trip. Only the
+    # countries that are not on it need a rule to arrange them, and there the
+    # one with the most to watch is the one worth offering first.
+    out.sort(
+        key=lambda c: (
+            not c.in_route,
+            first_stop.get(c.key, 0) if c.in_route else 0,
+            -c.video_count,
+            c.name.casefold(),
+        )
+    )
     return out

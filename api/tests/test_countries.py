@@ -283,3 +283,48 @@ def test_found_is_optional_so_existing_callers_keep_working():
     # Callers that have no notion of a found tier must not have to invent one.
     (tally,) = _tally([_row("p1", "Guatemala")])
     assert tally.found_count == 0
+
+
+def test_the_globe_lists_route_countries_in_travelling_order(client, auth, trip):
+    """The globe draws the trip as a line through this list.
+
+    Sorted by name, the line visits the countries alphabetically, which across
+    the Americas is a zigzag: Brazil, then Colombia, then Costa Rica, then
+    El Salvador, then back up to Mexico.
+    """
+    for name, country, lat, lon in [
+        ("Puerto Escondido", "Mexico", 15.8720, -97.0767),
+        ("Santa Ana", "El Salvador", 13.9942, -89.5592),
+        ("Cartagena", "Colombia", 10.3910, -75.4794),
+        ("Rio de Janeiro", "Brazil", -22.9068, -43.1729),
+    ]:
+        response = client.post(
+            "/api/v1/trips/current/destinations",
+            headers=auth,
+            json={"name": name, "country": country, "lat": lat, "lon": lon},
+        )
+        assert response.status_code == 201, response.text
+
+    rows = client.get("/api/v1/countries", headers=auth).json()
+    route = [row["name"] for row in rows if row["in_route"]]
+
+    # Guatemala is the fixture's own stop, added before any of these.
+    assert route == ["Guatemala", "Mexico", "El Salvador", "Colombia", "Brazil"]
+
+
+def test_a_country_off_the_route_still_sorts_after_every_country_on_it(client, auth, trip):
+    """Travelling order applies to the trip. Everything else needs a rule."""
+    client.post(
+        "/api/v1/trips/current/destinations",
+        headers=auth,
+        json={"name": "Rio de Janeiro", "country": "Brazil", "lat": -22.9068, "lon": -43.1729},
+    )
+    _capture_and_approve(client, auth)
+
+    rows = client.get("/api/v1/countries", headers=auth).json()
+    on_route = [i for i, row in enumerate(rows) if row["in_route"]]
+    off_route = [i for i, row in enumerate(rows) if not row["in_route"]]
+
+    assert on_route, "the trip has countries"
+    if off_route:
+        assert max(on_route) < min(off_route)
