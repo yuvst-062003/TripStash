@@ -2419,3 +2419,52 @@ textarea.review__edit:focus { border-color: var(--ink); background: transparent;
    space behind it, and space is not a light-mode decision - the sign-in screen
    already makes the same call for the same reason. */
 .screen--route .mapsheet[hidden] { display: none; }
+
+/* ---------------------------------------------------------------------------
+   Pins on the dark map
+
+   The white boxed labels were built for a pale paper map. On satellite imagery
+   they read as stickers, and three of them within one state piled on top of
+   each other until the middle one was unreadable.
+
+   The reference does it with plain text and a halo, which is what a map label
+   has always been: the dot says where, the word says what, and nothing draws a
+   container around either.
+--------------------------------------------------------------------------- */
+
+.screen--map .mappin__label {
+  border: 0;
+  background: transparent;
+  padding: 2px 4px;
+  color: #ffffff;
+  text-shadow:
+    0 0 3px rgba(4, 13, 26, .95),
+    0 1px 2px rgba(4, 13, 26, .9),
+    0 0 8px rgba(4, 13, 26, .7);
+}
+.screen--map .mappin--here .mappin__label {
+  background: transparent;
+  color: var(--coral);
+  font-weight: 800;
+}
+.screen--map .mappin__found { color: #ffd68a; }
+.screen--map .mappin__stem { background: rgba(255, 255, 255, .75); height: 9px; }
+.screen--map .mappin__dot {
+  background: #ffffff;
+  border: 2px solid rgba(4, 13, 26, .8);
+  box-shadow: 0 0 6px rgba(4, 13, 26, .9);
+}
+.screen--map .mappin--here .mappin__dot {
+  background: var(--coral);
+  border-color: #ffffff;
+}
+
+/* The trail sat straight on top of the map's own labels - "World / Mexico"
+   over "Vancouver" - because both are white text on imagery. A gradient
+   behind it separates the app's chrome from the map without a hard edge. */
+.screen--map .trail {
+  padding-bottom: var(--s-3);
+  background: linear-gradient(to bottom, rgba(4, 13, 26, .78) 40%, rgba(4, 13, 26, 0));
+}
+.screen--map .trail__link { background: transparent; color: rgba(255, 255, 255, .82); }
+.screen--map .trail__sep { color: rgba(255, 255, 255, .35); }

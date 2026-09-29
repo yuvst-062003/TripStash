@@ -24,13 +24,46 @@ import { ArrowLeft, Plus } from '../components/icons'
 import { api } from '../lib/api'
 import { useApp } from '../lib/context'
 import { useAsync } from '../lib/hooks'
-import { targetFor } from '../lib/cameraTarget'
+import { targetFor, type CameraTarget } from '../lib/cameraTarget'
 import { prefersReducedMotion, settleMs } from '../lib/flight'
 import { useEdgeSwipe } from '../lib/useEdgeSwipe'
 import { crumbsOf, depthOf, parentOf, parseScope, scopePath, type Scope } from '../lib/scope'
 
-/** How far out the world level sits: a globe, not a region. */
-const GLOBE_ZOOM = 2
+/** How far out a single-stop trip sits, with nothing to frame against. */
+const LONE_STOP_ZOOM = 2.4
+
+/**
+ * A camera that holds the entire route.
+ *
+ * Padding is generous because a globe curves away at its edges: a box that
+ * exactly fits the stops on a flat map pushes the outermost ones onto the
+ * limb, where they are foreshortened into the horizon and the line between
+ * them disappears over the edge.
+ */
+function routeFrame(stops: { lat: number | null; lon: number | null }[]): CameraTarget {
+  const placed = stops.filter(
+    (s): s is { lat: number; lon: number } => s.lat !== null && s.lon !== null,
+  )
+  if (placed.length === 0) return { kind: 'point', center: [0, 20], zoom: 1 }
+  if (placed.length === 1) {
+    return { kind: 'point', center: [placed[0].lon, placed[0].lat], zoom: LONE_STOP_ZOOM }
+  }
+
+  const lats = placed.map((p) => p.lat)
+  const lons = placed.map((p) => p.lon)
+  // A quarter of the trip's own span on each side, so the route never touches
+  // the edge of the visible hemisphere.
+  const padLat = Math.max(6, (Math.max(...lats) - Math.min(...lats)) * 0.25)
+  const padLon = Math.max(6, (Math.max(...lons) - Math.min(...lons)) * 0.25)
+
+  return {
+    kind: 'bounds',
+    bounds: [
+      [Math.min(...lons) - padLon, Math.min(...lats) - padLat],
+      [Math.max(...lons) + padLon, Math.max(...lats) + padLat],
+    ],
+  }
+}
 import { ErrorNote, SkeletonRows } from '../components/ui'
 import type { CityBreakdown, CityPlace, GlobeCountry } from '../lib/types'
 
@@ -111,26 +144,28 @@ export default function MapScreen() {
   // At the world level the route IS the reading: the stepper replaces the
   // declaration sheet rather than sitting on top of it.
   const showStepper = scope.level === 'world' && onRoute.length > 0
-  const stepped = showStepper ? onRoute[stepAt] : undefined
 
   const target = useMemo(
     () =>
-      stepped
-        ? {
-            kind: 'point' as const,
-            center: [stepped.lon, stepped.lat] as [number, number],
-            // Far enough out that the planet still reads as a planet. The
-            // stepper turns the globe to face a stop; it does not dive at it,
-            // because the whole point of this view is seeing the trip WHOLE.
-            zoom: GLOBE_ZOOM,
-          }
+      showStepper
+        ? // The WHOLE route, framed.
+          //
+          // Centring on one stop put the far end of the trip off the corner of
+          // the screen, so the line ran out of the frame instead of lying on
+          // the planet - which is what made it read as a scratch across the
+          // image rather than a path across a world.
+          //
+          // The stepper marks which stop you are on; it does not drag the
+          // camera to it, because the reason to be this far out is to see the
+          // trip whole.
+          routeFrame(routeStops)
         : targetFor(scope, {
         countryName: country?.name,
         city,
         place,
             countryPoints: (countries.data ?? []).map((c) => ({ lat: c.lat, lon: c.lon })),
           }),
-    [scope, country?.name, city, place, countries.data, stepped],
+    [scope, country?.name, city, place, countries.data, showStepper, routeStops],
   )
 
   // Pins wait for the camera. The delay is read from the flight's own length so

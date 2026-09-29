@@ -117,22 +117,62 @@ export function buildStyle(): StyleSpecification {
           'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.4, 16, 4],
         },
       },
+      /*
+       * Labels, rationed by zoom.
+       *
+       * The first version showed every place the vector tiles carry from zoom
+       * 3, which put Dallas, Memphis and Chihuahua on a map of somebody's trip
+       * through Central America, three of them stacked on each other. A label
+       * is only worth its pixels if the traveller would look for it.
+       *
+       * So: nothing at globe zoom but the countries themselves, which are
+       * drawn from the route rather than the tiles. Cities appear when a
+       * country fills the screen, and only the ones a country is known for.
+       * Everything below that arrives with the streets.
+       */
       {
-        id: 'place-labels',
+        id: 'city-labels',
         type: 'symbol',
         source: 'streets',
         'source-layer': 'place',
-        minzoom: 3,
+        minzoom: 5,
+        filter: ['all', ['==', ['get', 'class'], 'city'], ['<=', ['get', 'rank'], 8]],
         layout: {
           'text-field': ['coalesce', ['get', 'name:latin'], ['get', 'name']],
           'text-font': ['Noto Sans Regular'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 3, 11, 10, 15],
-          'text-max-width': 8,
+          'text-size': ['interpolate', ['linear'], ['zoom'], 5, 11, 10, 14],
+          'text-max-width': 9,
+          'text-padding': 8,
+          // Anything that will not fit is dropped rather than shoved sideways
+          // on top of its neighbour, which is what produced the pile.
+          'text-allow-overlap': false,
+          'text-optional': true,
         },
         paint: {
           'text-color': COLOURS.label,
           'text-halo-color': COLOURS.labelHalo,
-          'text-halo-width': 1.4,
+          'text-halo-width': 1.5,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 5, 0, 6.5, 0.92],
+        },
+      },
+      {
+        id: 'town-labels',
+        type: 'symbol',
+        source: 'streets',
+        'source-layer': 'place',
+        minzoom: 9,
+        filter: ['in', ['get', 'class'], ['literal', ['town', 'village', 'suburb']]],
+        layout: {
+          'text-field': ['coalesce', ['get', 'name:latin'], ['get', 'name']],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 12,
+          'text-padding': 6,
+          'text-optional': true,
+        },
+        paint: {
+          'text-color': 'rgba(255,255,255,0.82)',
+          'text-halo-color': COLOURS.labelHalo,
+          'text-halo-width': 1.2,
         },
       },
     ],

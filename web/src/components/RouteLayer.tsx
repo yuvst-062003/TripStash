@@ -84,6 +84,47 @@ export default function RouteLayer({
       })
     }
 
+    if (!map.getLayer(`${COUNTRIES}-label`)) {
+      // The country's name, set on the country. Plain white text with a halo
+      // and no box: a box is a second shape competing with the border that is
+      // already there, and the reference has none.
+      //
+      // MapLibre places a polygon's label at its pole of inaccessibility - the
+      // point furthest from any edge - so the name lands in the widest part of
+      // the country rather than on its coastline.
+      map.addLayer({
+        id: `${COUNTRIES}-label`,
+        type: 'symbol',
+        source: COUNTRIES,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 1, 13, 4, 17, 7, 20],
+          'text-transform': 'none',
+          'text-padding': 10,
+          // Lifted clear of the country's centre, because that is exactly
+          // where the route runs: a small country like Guatemala had its name
+          // sitting on the line and on its own stop dot at the same time.
+          'text-offset': [0, -1.1],
+          'text-anchor': 'bottom',
+          'text-allow-overlap': false,
+          // A bigger country wins the space when two names compete, which is
+          // also the one whose name is harder to guess from its shape.
+          'symbol-sort-key': ['*', -1, ['coalesce', ['get', 'area'], 0]],
+          // Fades out once the country fills the screen: at that point its
+          // name is in the trail at the top and on the page below, and a third
+          // copy across the middle of the map is just in the way.
+          'text-optional': true,
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': 'rgba(4, 13, 26, 0.9)',
+          'text-halo-width': 1.8,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 1, 0.95, 6, 0.9, 8, 0],
+        },
+      })
+    }
+
     if (!map.getLayer(`${ROUTE}-glow`)) {
       // Two lines: a wide soft one under a tight bright one, which is what
       // makes the route read as lit rather than merely coloured.
@@ -94,9 +135,11 @@ export default function RouteLayer({
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
           'line-color': COLOURS.route,
-          'line-width': ['interpolate', ['linear'], ['zoom'], 0, 7, 6, 14],
-          'line-blur': 6,
-          'line-opacity': 0.35,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 0, 4, 3, 7, 8, 12],
+          'line-blur': 4,
+          // Low enough to read as light around the line rather than as a
+          // second, fatter line. The first pass was a scratch across the globe.
+          'line-opacity': 0.22,
         },
       })
       map.addLayer({
@@ -106,21 +149,34 @@ export default function RouteLayer({
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
           'line-color': COLOURS.route,
-          'line-width': ['interpolate', ['linear'], ['zoom'], 0, 2.5, 6, 4.5],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 0, 1.4, 3, 2.2, 8, 3.4],
         },
       })
     }
 
     if (!map.getLayer(STOPS)) {
+      // Drawn above the labels on purpose: a stop is the one thing on this
+      // screen that must never be obscured, because it is the trip itself.
       map.addLayer({
         id: STOPS,
         type: 'circle',
         source: STOPS,
         paint: {
-          'circle-radius': ['case', ['get', 'here'], 8, 5.5],
+          // Small on purpose. Six stops within one isthmus merged into a single
+          // blob at the first size, which said "somewhere around here" when the
+          // whole point of a dot is to say exactly where.
+          'circle-radius': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            1,
+            ['case', ['get', 'here'], 5, 3],
+            5,
+            ['case', ['get', 'here'], 7, 4.5],
+          ],
           'circle-color': '#ffffff',
           'circle-stroke-color': COLOURS.route,
-          'circle-stroke-width': ['case', ['get', 'here'], 3, 2],
+          'circle-stroke-width': ['case', ['get', 'here'], 2.5, 1.5],
         },
       })
     }
