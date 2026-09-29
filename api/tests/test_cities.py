@@ -130,3 +130,40 @@ def test_a_city_reports_what_was_found_so_the_map_can_draw_the_difference(client
     for city in cities:
         assert "found_count" in city
         assert city["found_count"] <= city["video_count"]
+
+
+def test_a_countrys_cities_read_in_travelling_order(client, auth, trip):
+    """A country's stops are a sequence, not an index.
+
+    Listed by name, Mexico tells the traveller to go to Oaxaca before Puerto
+    Escondido - which is the opposite of the plan.
+    """
+    ids = {}
+    for name, lat, lon in [
+        ("Puerto Escondido", 15.8720, -97.0767),
+        ("Mexico City", 19.4326, -99.1332),
+        ("Oaxaca", 17.0732, -96.7266),
+    ]:
+        response = client.post(
+            "/api/v1/trips/current/destinations",
+            headers=auth,
+            json={"name": name, "country": "Mexico", "lat": lat, "lon": lon},
+        )
+        assert response.status_code == 201, response.text
+        ids[name] = response.json()["id"]
+
+    antigua = next(
+        d["id"]
+        for d in client.get("/api/v1/trips/current", headers=auth).json()["destinations"]
+        if d["name"] == "Antigua"
+    )
+    client.put(
+        "/api/v1/trips/current/destinations/order",
+        headers=auth,
+        json={
+            "ids": [ids["Mexico City"], ids["Oaxaca"], ids["Puerto Escondido"], antigua],
+        },
+    )
+
+    cities = client.get("/api/v1/countries/mexico/cities", headers=auth).json()
+    assert [c["name"] for c in cities] == ["Mexico City", "Oaxaca", "Puerto Escondido"]

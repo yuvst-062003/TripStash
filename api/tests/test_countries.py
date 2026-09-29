@@ -328,3 +328,48 @@ def test_a_country_off_the_route_still_sorts_after_every_country_on_it(client, a
     assert on_route, "the trip has countries"
     if off_route:
         assert max(on_route) < min(off_route)
+
+
+def test_the_globe_follows_the_route_and_not_the_order_things_were_added(client, auth, trip):
+    """The real case: a revised plan adds a country in the middle.
+
+    El Salvador is written to the database last and travelled third. Unordered,
+    the database hands the countries back in the order they were written, and
+    the line on the globe jumps to the end of the trip and back.
+    """
+    added = {}
+    for name, country, lat, lon in [
+        ("Rio de Janeiro", "Brazil", -22.9068, -43.1729),
+        ("Puerto Escondido", "Mexico", 15.8720, -97.0767),
+        ("Santa Ana", "El Salvador", 13.9942, -89.5592),
+    ]:
+        response = client.post(
+            "/api/v1/trips/current/destinations",
+            headers=auth,
+            json={"name": name, "country": country, "lat": lat, "lon": lon},
+        )
+        added[name] = response.json()["id"]
+
+    antigua = next(
+        d["id"]
+        for d in client.get("/api/v1/trips/current", headers=auth).json()["destinations"]
+        if d["name"] == "Antigua"
+    )
+    ordered = client.put(
+        "/api/v1/trips/current/destinations/order",
+        headers=auth,
+        json={
+            "ids": [
+                added["Puerto Escondido"],
+                antigua,
+                added["Santa Ana"],
+                added["Rio de Janeiro"],
+            ]
+        },
+    )
+    assert ordered.status_code == 200, ordered.text
+
+    rows = client.get("/api/v1/countries", headers=auth).json()
+    route = [row["name"] for row in rows if row["in_route"]]
+
+    assert route == ["Mexico", "Guatemala", "El Salvador", "Brazil"]

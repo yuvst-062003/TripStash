@@ -77,13 +77,18 @@ def cities_in_country(
     coords: dict[str, list[tuple[float, float]]] = {}
     place_ids: dict[str, set[str]] = {}
     kinds: dict[str, set[str]] = {}
+    # Where each stop falls along the trip. `destinations` arrives in
+    # travelling order; a country's stops read as a sequence, so listing them
+    # by name would tell the traveller to go to Oaxaca before Puerto Escondido.
+    order: dict[str, int] = {}
 
-    for destination in destinations:
+    for index, destination in enumerate(destinations):
         if normalise_country(destination.country) != wanted:
             continue
         key = normalise_city(destination.name)
         if not key:
             continue
+        order.setdefault(key, index)
         note = (destination.notes or "").strip()
         cities[key] = CityBreakdown(
             key=key,
@@ -145,7 +150,15 @@ def cities_in_country(
     # A city with no coordinates cannot be drawn, and a map that silently drops
     # a stop is worse than one that never offered it.
     placed = [city for city in cities.values() if city.lat is not None and city.lon is not None]
-    placed.sort(key=lambda c: (not c.in_route, -c.video_count, c.name.casefold()))
+    # The stops in travelling order; everything else by what there is to watch.
+    placed.sort(
+        key=lambda c: (
+            not c.in_route,
+            order.get(c.key, 0) if c.in_route else 0,
+            -c.video_count,
+            c.name.casefold(),
+        )
+    )
     return placed
 
 

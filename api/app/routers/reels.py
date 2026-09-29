@@ -67,8 +67,14 @@ def _rows(session: Session, trip: Trip, *, include_archived: bool = False):
 
 
 def _destinations(session: Session, trip: Trip) -> dict[str, Destination]:
+    # In travelling order, because the globe draws the trip as a line through
+    # them. Unordered, the database returns them as they were written, so a
+    # country added late sits at the end of the route however early it is
+    # actually visited.
     rows = session.execute(
-        select(Destination).where(Destination.trip_id == trip.id)
+        select(Destination)
+        .where(Destination.trip_id == trip.id)
+        .order_by(Destination.position)
     ).scalars()
     return {destination.id: destination for destination in rows}
 
