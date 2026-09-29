@@ -161,8 +161,17 @@ export const api = {
   // trip
   currentTrip: () => get<Trip>('/api/v1/trips/current'),
   createTrip: (body: Record<string, unknown>) => post<Trip>('/api/v1/trips', body),
+  // A revised plan moves the departure, and every stop's dates hang off it.
+  updateTrip: (body: Record<string, unknown>) => patch<Trip>('/api/v1/trips/current', body),
   addDestination: (body: Record<string, unknown>) =>
     post<unknown>('/api/v1/trips/current/destinations', body),
+  // The whole route, because a route is an order rather than a set of numbers.
+  reorderDestinations: (ids: string[]) =>
+    request<unknown[]>('/api/v1/trips/current/destinations/order', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }),
   createKnowledge: (body: Record<string, unknown>) => post<{ id: string }>('/api/v1/knowledge', body),
   recommend: (q: string) => get<Recommendation>('/api/v1/recommend', { q }),
   updateDestination: (id: string, body: Record<string, unknown>) =>

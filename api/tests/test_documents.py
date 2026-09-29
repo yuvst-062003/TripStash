@@ -1,8 +1,9 @@
 """Reading a plan out of a document.
 
-A trip plan is very often a Word file or a PDF someone was sent. Both are text
-the app can already understand; they just arrive wrapped. Word needs no
-dependency at all - a .docx is a zip with XML inside - and PDF sits behind an
+A trip plan is very often a Word file, a PDF someone was sent, or a page saved
+out of a browser. All three are text the app can already understand; they just
+arrive wrapped. Word and HTML need no dependency at all - a .docx is a zip with
+XML inside, and a page is text with markup around it - and PDF sits behind an
 optional extra so the app still starts without it and says so plainly.
 """
 
@@ -15,6 +16,7 @@ import pytest
 
 from app.services.documents import (
     DOCX_MEDIA_TYPE,
+    HTML_MEDIA_TYPE,
     PDF_MEDIA_TYPE,
     is_document,
     read_document,
@@ -154,3 +156,105 @@ def test_an_unreadable_document_is_kept_and_says_why(client, auth, trip):
     # Kept, not rejected - and honest about what happened.
     assert source["failure_reason"]
     assert "Word" in source["failure_reason"]
+
+
+# ------------------------------------------------------------------- web pages
+
+
+PLAN_PAGE = """<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>The big trip</title>
+  <style>:root{--bg:#f5f2e9}body{margin:0;font:16px/1.8 system-ui}</style>
+</head>
+<body>
+  <h1>Mexico &amp; Guatemala</h1>
+  <p>Puerto Escondido for 7&ndash;8 nights, then San Crist&oacute;bal.</p>
+  <ul><li>Acatenango overnight</li><li>Lake Atitl&aacute;n</li></ul>
+  <script>document.title = 'not the plan'</script>
+</body></html>
+"""
+
+
+def _page_upload(markup: str = PLAN_PAGE) -> tuple[str, bytes, str]:
+    return ("plan.html", markup.encode("utf-8"), HTML_MEDIA_TYPE)
+
+
+def test_a_page_gives_up_its_words_and_not_its_machinery():
+    read = read_document(PLAN_PAGE.encode("utf-8"), HTML_MEDIA_TYPE)
+
+    assert read.engine == "html"
+    assert "Puerto Escondido" in read.text
+    assert "Acatenango overnight" in read.text
+    # The stylesheet and the script are the page's machinery. Kept, they would
+    # be most of the "plan".
+    assert "--bg" not in read.text
+    assert "font" not in read.text
+    assert "not the plan" not in read.text
+
+
+def test_a_page_keeps_its_lines_apart():
+    read = read_document(PLAN_PAGE.encode("utf-8"), HTML_MEDIA_TYPE)
+
+    # Two list items must not become one line: a plan read as one paragraph is
+    # a plan nothing downstream can divide up again.
+    assert "Acatenango overnight\nLake Atitlán" in read.text
+
+
+def test_a_page_decodes_its_entities():
+    read = read_document(PLAN_PAGE.encode("utf-8"), HTML_MEDIA_TYPE)
+
+    assert "Mexico & Guatemala" in read.text
+    assert "San Cristóbal" in read.text
+    assert "&amp;" not in read.text
+
+
+def test_escaped_markup_in_a_page_stays_escaped():
+    """Tags come off before entities are decoded, never the other way round."""
+    read = read_document(
+        b"<p>Write &lt;script&gt;alert(1)&lt;/script&gt; in the plan</p>", HTML_MEDIA_TYPE
+    )
+
+    # The words survive as words; nothing became a tag on the way out.
+    assert "alert(1)" in read.text
+    assert "<script>" in read.text  # as text, which is all it can be now
+
+
+def test_a_page_with_no_words_is_kept_and_says_why():
+    read = read_document(b"<html><head><style>body{color:red}</style></head></html>", HTML_MEDIA_TYPE)
+
+    assert read.text == ""
+    assert read.failure_reason
+    assert "PDF" in read.failure_reason
+
+
+def test_uploading_a_plan_page_produces_reviewable_candidates(client, auth, trip):
+    response = client.post("/api/v1/sources/upload", headers=auth, files={"files": _page_upload()})
+
+    assert response.status_code == 201, response.text
+    source = response.json()[0]
+    assert source["failure_reason"] is None
+    assert source["kind"] == "article"
+
+    inbox = client.get("/api/v1/inbox", headers=auth).json()
+    titles = " ".join(c["title"] for c in inbox)
+    assert "Acatenango" in titles or "Atitlán" in titles
+
+
+def test_a_stored_page_is_never_served_back_as_a_page(client, auth, trip):
+    """Uploaded markup is text to read. Served as markup from the API's own
+    origin, it would run its script against the host holding every trip."""
+    response = client.post(
+        "/api/v1/sources/upload",
+        headers=auth,
+        files={"files": ("plan.html", b"<p>hi<script>alert(1)</script></p>", HTML_MEDIA_TYPE)},
+    )
+    assert response.status_code == 201, response.text
+    file_url = response.json()[0]["file_url"]
+    assert file_url, "a stored page should be retrievable"
+
+    served = client.get(file_url.replace("http://testserver", ""))
+    assert served.status_code == 200, served.text
+    assert served.headers["content-type"].startswith("text/plain")
+    assert served.headers["x-content-type-options"] == "nosniff"

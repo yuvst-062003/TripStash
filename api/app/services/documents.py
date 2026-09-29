@@ -1,4 +1,4 @@
-"""Reading a plan out of a Word file or a PDF.
+"""Reading a plan out of a Word file, a PDF, or a web page.
 
 A trip plan very often arrives as a document rather than a message: a .docx
 someone typed, a PDF a friend sent. Both are text the extraction pipeline
@@ -9,6 +9,12 @@ Word needs no dependency: a .docx is a zip with XML inside, and the standard
 library opens both. PDF sits behind the optional `docs` extra, the same way
 speech sits behind `asr`, so the app still starts without it and says what to
 install rather than blaming the file.
+
+HTML is here because it is what this app hands back: a plan exported from a
+conversation, or saved from a browser, arrives as one self-contained page. It
+needs no dependency either, but it does need the page's machinery thrown away
+first - a stylesheet and a script are not the plan, and a reader that keeps
+them returns several hundred lines of CSS where the first sentence should be.
 """
 
 from __future__ import annotations
@@ -16,17 +22,29 @@ from __future__ import annotations
 import re
 import zipfile
 from dataclasses import dataclass
+from html import unescape
 from io import BytesIO
 
 DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 PDF_MEDIA_TYPE = "application/pdf"
+HTML_MEDIA_TYPE = "text/html"
 
-DOCUMENT_MEDIA_TYPES = frozenset({DOCX_MEDIA_TYPE, PDF_MEDIA_TYPE})
+DOCUMENT_MEDIA_TYPES = frozenset({DOCX_MEDIA_TYPE, PDF_MEDIA_TYPE, HTML_MEDIA_TYPE})
 
 # The part of a .docx that holds the body. Everything else is styling.
 _DOCX_BODY = "word/document.xml"
 _TAG = re.compile(r"<[^>]+>")
 _BLANK_LINES = re.compile(r"\n{3,}")
+
+# A page's machinery, removed with its contents rather than just its tags.
+_SCRIPT_OR_STYLE = re.compile(r"<(script|style)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
+# Where a line ends in a page. Without this the whole plan runs together, and a
+# plan read as one paragraph is a plan nothing downstream can divide up again.
+_LINE_BREAK = re.compile(
+    r"</(?:p|div|li|ul|ol|h[1-6]|section|article|header|footer|tr|td|th|blockquote|label|nav"
+    r"|span|title|option|figcaption|dt|dd|pre|main|aside|button)\s*>|<br\s*/?>",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +72,8 @@ def read_document(data: bytes, media_type: str | None) -> DocumentText:
         return _read_docx(data)
     if media_type == PDF_MEDIA_TYPE:
         return _read_pdf(data)
+    if media_type == HTML_MEDIA_TYPE:
+        return _read_html(data)
     return DocumentText(
         text="",
         engine="none",
@@ -128,3 +148,31 @@ def _read_pdf(data: bytes) -> DocumentText:
             ),
         )
     return DocumentText(text=text, engine="pdf")
+
+
+def _read_html(data: bytes) -> DocumentText:
+    """The words out of a web page.
+
+    No parser, for the same reason .docx needs no library: a page is text with
+    markup around it, and the markup here only has to be removed rather than
+    understood. What does need care is the order of operations - tags come off
+    before entities are decoded, so an `&lt;script&gt;` written as text in the
+    plan cannot turn itself back into a tag on the way out.
+    """
+    # A page declares its own encoding, but the declaration is inside the bytes
+    # being decoded. UTF-8 is what browsers and this app both write, and
+    # `ignore` means a stray byte costs one character rather than the file.
+    markup = data.decode("utf-8", "ignore")
+    markup = _SCRIPT_OR_STYLE.sub("\n", markup)
+    markup = _LINE_BREAK.sub("\n", markup)
+    text = _tidy(unescape(_TAG.sub("", markup)))
+    if not text:
+        return DocumentText(
+            text="",
+            engine="html",
+            failure_reason=(
+                "That page has no readable text in it. If it is a page that builds itself "
+                "with script, save it as a PDF and try that instead."
+            ),
+        )
+    return DocumentText(text=text, engine="html")

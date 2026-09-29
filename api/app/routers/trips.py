@@ -13,10 +13,12 @@ from app.deps import current_trip, current_user, traveller_date
 from app.models.core import Destination, Trip, User
 from app.schemas.api import (
     DestinationCreate,
+    DestinationOrder,
     DestinationResponse,
     DestinationUpdate,
     TripCreate,
     TripResponse,
+    TripUpdate,
 )
 
 router = APIRouter(prefix="/trips", tags=["trip"])
@@ -72,6 +74,70 @@ def get_current(
     today_here: date = Depends(traveller_date),
 ) -> TripResponse:
     return serialise_trip(trip, today_here)
+
+
+@router.patch("/current", response_model=TripResponse)
+def update_trip(
+    body: TripUpdate,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+    today_here: date = Depends(traveller_date),
+) -> TripResponse:
+    """Change the trip itself: its name, its dates, its budget, its interests.
+
+    Until now a trip's dates could only be set when it was created, which made
+    a revised plan unimportable: the one thing a new version of a plan almost
+    always changes is when it leaves.
+    """
+    changes = body.model_dump(exclude_unset=True)
+
+    # Checked against what the trip would become, not against what was sent, so
+    # moving only the start date cannot silently invert a trip.
+    start = changes.get("start_date", trip.start_date)
+    end = changes.get("end_date", trip.end_date)
+    if start and end and end < start:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "End date precedes start date.")
+
+    if "interests" in changes:
+        interests = changes.pop("interests") or []
+        trip.interests = ",".join(interests) or None
+    for field, value in changes.items():
+        setattr(trip, field, value)
+    session.flush()
+    return serialise_trip(trip, today_here)
+
+
+@router.put("/current/destinations/order", response_model=list[DestinationResponse])
+def reorder_destinations(
+    body: DestinationOrder,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> list[Destination]:
+    """Put the route in the given order.
+
+    Every stop has to be named, because a partial order is not an order: if a
+    caller could send three of twenty stops, the other seventeen would have to
+    be arranged by a rule nobody asked for. Naming them all also makes the
+    request idempotent and its intent readable in a log.
+    """
+    by_id = {d.id: d for d in trip.destinations}
+    wanted = body.ids
+
+    if len(set(wanted)) != len(wanted):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "A stop is listed twice.")
+    if set(wanted) != set(by_id):
+        missing = len(set(by_id) - set(wanted))
+        unknown = len(set(wanted) - set(by_id))
+        detail = (
+            f"The order must list every stop on this trip exactly once: "
+            f"{missing} missing, {unknown} not on this trip."
+        )
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail)
+
+    for position, destination_id in enumerate(wanted):
+        by_id[destination_id].position = position
+    session.flush()
+    return [by_id[destination_id] for destination_id in wanted]
 
 
 @router.post(

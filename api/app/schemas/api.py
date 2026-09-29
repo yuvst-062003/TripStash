@@ -60,6 +60,33 @@ class TripCreate(ApiModel):
     interests: list[str] = Field(default_factory=list)
 
 
+class TripUpdate(ApiModel):
+    """What a plan can change about the trip itself.
+
+    Dates move: a plan that arrives later than the one it replaces almost
+    always moves the departure, and every stop's dates hang off it. Currency
+    is not here because expenses are already recorded against it.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    start_date: date | None = None
+    end_date: date | None = None
+    total_budget: float | None = Field(default=None, ge=0, le=1_000_000_000)
+    interests: list[str] | None = None
+
+
+class DestinationOrder(ApiModel):
+    """The route, re-stated in travelling order.
+
+    The whole list rather than one stop's position, because a route is an
+    order, not a set of numbers: moving one stop moves the others, and sending
+    them one at a time leaves the trip briefly holding two stops that both
+    claim to be third.
+    """
+
+    ids: list[str] = Field(min_length=1)
+
+
 class DestinationCreate(ApiModel):
     name: str = Field(min_length=1, max_length=160)
     country: str | None = None

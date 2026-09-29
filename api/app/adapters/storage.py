@@ -27,6 +27,9 @@ ALLOWED_MEDIA_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "text/plain",
     "text/vtt",
+    # A plan exported from a conversation, or a page saved from a browser.
+    # Stored, but never served back as markup - see `_served_media_type`.
+    "text/html",
 }
 
 

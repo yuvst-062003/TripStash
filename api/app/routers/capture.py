@@ -425,11 +425,21 @@ def ignore(
 # ----------------------------------------------------------------- files
 
 
+# A page is accepted and stored, but it is never handed back as a page. Served
+# as markup from the API's own origin, an uploaded file would run its script
+# there - against the host that holds every traveller's trip. It is text to
+# read, so it goes back as text, and `nosniff` below stops a browser deciding
+# otherwise.
+_SERVED_AS_TEXT = {"text/html"}
+
+
 # Keys are generated internally from the uploaded filename, so the extension
 # is the only type hint the signed URL carries. Anything unrecognised is served
 # as an opaque download rather than guessed at.
 def _served_media_type(key: str) -> str:
     guessed, _ = mimetypes.guess_type(key)
+    if guessed in _SERVED_AS_TEXT:
+        return "text/plain; charset=utf-8"
     return guessed if guessed in ALLOWED_MEDIA_TYPES else "application/octet-stream"
 
 
@@ -479,7 +489,13 @@ def get_file(
     except (FileNotFoundError, OSError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found.") from exc
 
-    headers = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=600"}
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, max-age=600",
+        # Never let the browser sniff a stored file back into something that
+        # runs. The declared type is the only type.
+        "X-Content-Type-Options": "nosniff",
+    }
     if requested is None:
         return Response(content=data, media_type=_served_media_type(key), headers=headers)
     start, end = requested
