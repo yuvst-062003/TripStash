@@ -332,7 +332,13 @@ function PlanSection() {
                   parts={[
                     destination.is_current && 'Here now',
                     destination.country,
-                    destination.arrive_on ? fmtDay(destination.arrive_on) : 'No date yet',
+                    // A stop with no dates is either one whose dates are not
+                    // settled yet or one deliberately left off the route. Its
+                    // note is what tells them apart, so an undated stop shows
+                    // its own words before the app's guess about it.
+                    destination.arrive_on
+                      ? fmtDay(destination.arrive_on)
+                      : destination.notes?.trim() || 'No date yet',
                   ]}
                 />
               </div>
