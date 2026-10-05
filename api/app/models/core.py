@@ -68,6 +68,12 @@ class Destination(IdMixin, TimestampMixin, Base):
     lat: Mapped[float | None] = mapped_column(Float)
     lon: Mapped[float | None] = mapped_column(Float)
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # How long you are staying. This is the stored truth of the itinerary:
+    # `services/itinerary.py` derives the dates below from the trip's start
+    # date plus every night booked before this stop. None means undecided,
+    # which spec 7.1 requires to be representable.
+    nights: Mapped[int | None] = mapped_column(Integer)
+    # Derived from `nights`. Written only by `itinerary.reschedule`.
     arrive_on: Mapped[date | None] = mapped_column(Date)
     depart_on: Mapped[date | None] = mapped_column(Date)
     is_current: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

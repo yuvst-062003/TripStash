@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -40,6 +40,26 @@ def _sqlite_pragmas(dbapi_connection, _record):  # pragma: no cover - driver hoo
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
 
 
+# Columns added after a database was first created. `create_all` will not add a
+# column to a table that already exists, and there is no Alembic yet (see
+# docs/data-model.md), so each additive column is reconciled explicitly. The
+# list is deliberately short and append-only; anything that is not a nullable
+# add belongs in a real migration.
+_ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (("destination", "nights", "INTEGER"),)
+
+
+def _reconcile_additive_columns() -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    for table, column, column_type in _ADDITIVE_COLUMNS:
+        if table not in tables:
+            continue
+        if column in {c["name"] for c in inspector.get_columns(table)}:
+            continue
+        with engine.begin() as conn:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
+
+
 def init_db() -> None:
     """Create the schema and, on Postgres, the PostGIS extension and index.
 
@@ -62,6 +82,8 @@ def init_db() -> None:
                     "USING GIST ((ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography))"
                 )
             )
+
+    _reconcile_additive_columns()
 
 
 def get_session() -> Iterator[Session]:

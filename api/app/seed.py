@@ -22,6 +22,7 @@ from app.services.extraction import (
     create_source,
     process_source,
 )
+from app.services.itinerary import reschedule
 from app.services.security import hash_password
 
 DEMO_EMAIL = "traveller@example.com"
@@ -96,7 +97,7 @@ def seed() -> None:
             user_id=user.id,
             name="Central America, four months",
             start_date=today - timedelta(days=21),
-            end_date=today + timedelta(days=95),
+            # end_date is derived from the nights below, not typed.
             base_currency="USD",
             total_budget=7200,
             interests="hiking,food,diving",
@@ -104,12 +105,15 @@ def seed() -> None:
         session.add(trip)
         session.flush()
 
-        for position, (name, country, lat, lon, current) in enumerate(
+        # Nights are the stored truth of the route; the dates come from them.
+        # These add up to 42, so a trip that started three weeks ago is still
+        # running today, which is the state the demo is meant to show.
+        for position, (name, country, lat, lon, nights, current) in enumerate(
             [
-                ("Antigua", "Guatemala", 14.5586, -90.7295, True),
-                ("Lake Atitlán", "Guatemala", 14.6907, -91.2025, False),
-                ("Lanquín", "Guatemala", 15.5750, -89.9800, False),
-                ("Flores", "Guatemala", 16.9280, -89.8920, False),
+                ("Antigua", "Guatemala", 14.5586, -90.7295, 12, True),
+                ("Lake Atitlán", "Guatemala", 14.6907, -91.2025, 9, False),
+                ("Lanquín", "Guatemala", 15.5750, -89.9800, 7, False),
+                ("Flores", "Guatemala", 16.9280, -89.8920, 14, False),
             ]
         ):
             session.add(
@@ -119,10 +123,15 @@ def seed() -> None:
                     country=country,
                     lat=lat,
                     lon=lon,
+                    nights=nights,
                     position=position,
                     is_current=current,
                 )
             )
+        session.flush()
+        # Derive arrive/depart and the trip's end from those nights, rather
+        # than leaving a typed end date that the route would contradict.
+        reschedule(trip)
         session.flush()
 
         approved = 0

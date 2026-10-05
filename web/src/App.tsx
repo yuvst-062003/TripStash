@@ -8,6 +8,7 @@ import SaveSheet from './components/SaveSheet'
 import Login from './pages/Login'
 import NewTrip from './pages/NewTrip'
 import Home from './pages/Home'
+import TripHome from './pages/TripHome'
 import MapScreen from './pages/MapScreen'
 import Saved from './pages/Saved'
 import Clips from './pages/Clips'
@@ -18,21 +19,23 @@ import ShareTarget from './pages/ShareTarget'
 import { Note, SkeletonRows } from './components/ui'
 import {
   Bookmark,
+  Compass,
   Film,
   Globe,
-  Home as HomeIcon,
   type IconComponent,
   Luggage,
-  MapIcon,
   Plus,
 } from './components/icons'
 
+// Four top-level areas, and Save is not one of them: a tab bar navigates
+// between areas of an app, and an action belongs somewhere else. Four also
+// keeps the pill clear of the overflow "More" item that makes the trailing
+// tab harder to reach.
 const TABS: { to: string; label: string; Icon: IconComponent }[] = [
-  { to: '/', label: 'Home', Icon: HomeIcon },
-  { to: '/map', label: 'Map', Icon: MapIcon },
-  { to: '/saved', label: 'Saved', Icon: Bookmark },
+  { to: '/', label: 'Trip', Icon: Luggage },
   { to: '/clips', label: 'Clips', Icon: Film },
-  { to: '/trip', label: 'Trip', Icon: Luggage },
+  { to: '/saved', label: 'Saved', Icon: Bookmark },
+  { to: '/explore', label: 'Explore', Icon: Compass },
 ]
 
 export default function App() {
@@ -118,8 +121,13 @@ export default function App() {
         )}
 
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/map" element={<MapScreen />} />
+          {/* Home is the trip. Opening the app lands on the route. */}
+          <Route path="/" element={<TripHome />} />
+          {/* Explore becomes the zoomed-out map in phase 2; until then it is
+              the real map of saved places rather than an empty promise. */}
+          <Route path="/explore" element={<MapScreen />} />
+          <Route path="/map" element={<Navigate to="/explore" replace />} />
+          <Route path="/today" element={<Home />} />
           <Route path="/saved" element={<Saved />} />
           <Route path="/clips" element={<Clips />} />
           {/* The feed takes the whole screen, tab bar and all. */}
@@ -131,27 +139,34 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
 
-        {/* Save is the one action worth floating; Ask lives in each screen's
-            top bar, where the context it inherits is visible. */}
+        {/* The control layer: navigation in the pill, the one global action
+            beside it. Ask lives in each screen, where the context it would
+            inherit is visible. */}
         {!immersive && (
-          <button className="fab" onClick={() => setSaveOpen('link')}>
-            <Plus size={18} strokeWidth={2.4} />
-            Save
-          </button>
+          <div className="navdock">
+            <nav className="tabbar" aria-label="Main">
+              {TABS.map(({ to, label, Icon }) => (
+                <NavLink key={to} to={to} end={to === '/'} className="tabbar__item">
+                  {({ isActive }) => (
+                    <>
+                      <Icon size={21} strokeWidth={isActive ? 2.4 : 1.8} />
+                      {label}
+                      {/* Weight and a dot, not colour alone. */}
+                      {isActive && <span className="tabbar__dot" aria-hidden="true" />}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+            <button
+              className="savecircle"
+              onClick={() => setSaveOpen('link')}
+              aria-label="Save a link"
+            >
+              <Plus size={24} strokeWidth={2.4} />
+            </button>
+          </div>
         )}
-
-        <nav className="tabbar" aria-label="Main" hidden={immersive}>
-          {TABS.map(({ to, label, Icon }) => (
-            <NavLink key={to} to={to} end={to === '/'} className="tabbar__item">
-              {({ isActive }) => (
-                <>
-                  <Icon size={21} strokeWidth={isActive ? 2.3 : 1.8} />
-                  {label}
-                </>
-              )}
-            </NavLink>
-          ))}
-        </nav>
 
         {askSeed && <AskSheet seed={askSeed} onClose={() => setAskSeed(null)} />}
         {saveOpen && (

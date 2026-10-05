@@ -65,9 +65,21 @@ class DestinationCreate(ApiModel):
     country: str | None = None
     lat: float | None = Field(default=None, ge=-90, le=90)
     lon: float | None = Field(default=None, ge=-180, le=180)
+    nights: int | None = Field(default=None, ge=0, le=365)
     arrive_on: date | None = None
     depart_on: date | None = None
     is_current: bool = False
+    notes: str | None = None
+    # The `+` between two stops sends the position it sits after; omitted, the
+    # stop is appended to the end of the route.
+    after_position: int | None = Field(default=None, ge=0)
+
+
+class DestinationUpdate(ApiModel):
+    """Only what the planner can change. Dates are derived, never sent."""
+
+    nights: int | None = Field(default=None, ge=0, le=365)
+    name: str | None = Field(default=None, min_length=1, max_length=160)
     notes: str | None = None
 
 
@@ -78,10 +90,39 @@ class DestinationResponse(ApiModel):
     lat: float | None
     lon: float | None
     position: int
+    nights: int | None
     arrive_on: date | None
     depart_on: date | None
     is_current: bool
     notes: str | None
+
+
+class TransportLegResponse(ApiModel):
+    """The gap between two stops. Shown labelled `estimate`, always."""
+
+    from_destination_id: str
+    to_destination_id: str
+    distance_km: float | None
+    duration_minutes: int | None
+
+
+class RouteStopResponse(ApiModel):
+    destination: DestinationResponse
+    arrive_on: date | None
+    depart_on: date | None
+    nights: int | None
+    leg_in: TransportLegResponse | None
+
+
+class RouteResponse(ApiModel):
+    """The itinerary as the planner reads it: order, nights, derived dates."""
+
+    trip_id: str
+    start_date: date | None
+    end_date: date | None
+    has_end_date: bool
+    total_nights: int
+    stops: list[RouteStopResponse]
 
 
 class TripResponse(ApiModel):

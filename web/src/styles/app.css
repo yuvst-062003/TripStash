@@ -314,27 +314,56 @@ a { color: inherit; text-decoration: none; }
 .divider { height: 1px; background: var(--line); border: 0; margin: 0; }
 
 /* ---------------------------------------------------------------------------
-   Bottom navigation
+   The control layer: a floating tab bar, and Save beside it.
+
+   Apple's guidance is explicit that a tab bar navigates between an app's
+   top-level areas and is not where actions live — a toolbar's job. So Save is
+   its own circle next to the pill rather than a fifth tab. It is also the one
+   place the design departs from Polarsteps, which floats an add button above
+   its tab bar: TripStash already floats Save there, and two round buttons side
+   by side is noise, so the route's own `+` lives between the stops instead.
+
+   The glass is the "regular" variant, not "clear" — these carry text labels,
+   and clear is reserved for controls over rich photography or video.
 --------------------------------------------------------------------------- */
 
-.tabbar {
+.navdock {
   position: fixed;
   inset: auto 0 0;
   z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--gutter) calc(var(--s-3) + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+.navdock > * { pointer-events: auto; }
+
+.tabbar {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(16px);
-  border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom);
+  flex: 0 1 auto;
+  min-width: 0;
+  border-radius: var(--r-pill);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--elev-float);
+  overflow: hidden;
 }
 .tabbar__item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
-  padding: 7px 0 8px;
+  /* Looks like a 48px pill; keeps the 44px hit target iOS asks for. */
+  min-height: var(--tap);
+  min-width: 62px;
+  padding: 6px 10px;
   color: var(--ink-3);
   font: var(--text-xs);
   text-transform: none;
@@ -342,14 +371,37 @@ a { color: inherit; text-decoration: none; }
   transition: color var(--dur) var(--ease);
 }
 .tabbar__item[aria-current='page'] { color: var(--ink); }
+/* Never colour alone: the active tab also gets a weightier symbol and a dot. */
+.tabbar__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 
-/* ---------------------------------------------------------------------------
-   Floating actions — one, not a stack.
---------------------------------------------------------------------------- */
+/* Save: the app's one global action, and the only tinted control down here. */
+.savecircle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--elev-float);
+  cursor: pointer;
+  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.savecircle:hover { background: var(--accent-hover); }
+.savecircle:active { transform: scale(0.94); }
 
+/* Kept for the screens that still float a labelled action of their own. */
 .fab {
   position: fixed;
-  right: var(--s-4);
+  right: var(--gutter);
   bottom: var(--fab-bottom, calc(var(--nav-h) + var(--s-3)));
   z-index: 45;
   display: inline-flex;
@@ -774,3 +826,450 @@ textarea.input { min-height: 76px; resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
   .feed__track { scroll-behavior: auto; }
 }
+
+/* ---------------------------------------------------------------------------
+   The trip: home is the route, with the itinerary in a sheet under it.
+
+   Opening the app lands here. The map is one continuous surface — zoom out far
+   enough and the stops become countries, which is Explore. The night ground
+   sits beneath the tiles so a map that has not loaded still reads as a map
+   rather than a broken white grid; on a bus with no signal that is the normal
+   case, not the error case.
+--------------------------------------------------------------------------- */
+
+.trip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--night);
+}
+
+.trip__map {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: var(--night-water);
+}
+/* Leaflet draws tiles into its own pane, so the tint lands only on the
+   basemap and leaves our pins, route and labels at full strength. */
+.trip__map .leaflet-tile-pane { filter: var(--map-tint); }
+.trip__map .leaflet-container { background: var(--night-water); }
+/* Tile attribution, rendered in the overlay rather than by Leaflet, so the
+   sheet can never cover it. The licence requires it to be visible. */
+.mapcredit {
+  align-self: center;
+  margin: 0 var(--gutter) var(--s-2);
+  color: var(--on-night-3);
+  font: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.mapcredit a { color: var(--on-night-2); text-decoration: underline; }
+
+/* Everything above the map. */
+.trip__over {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 100%;
+  pointer-events: none;
+}
+.trip__over > * { pointer-events: auto; }
+
+/* The owner line and the two circles, over the map. */
+.trip__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: calc(env(safe-area-inset-top) + var(--s-4)) var(--gutter) var(--s-3);
+}
+.trip__who {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+.trip__avatar {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line);
+  color: var(--on-night);
+  font: var(--text-xs);
+}
+.trip__titles { min-width: 0; }
+.trip__owner {
+  font: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--on-night-2);
+}
+.trip__name {
+  font: var(--text-lg);
+  color: var(--on-night);
+  text-shadow: 0 1px 12px rgba(6, 14, 28, 0.6);
+}
+
+/* A circular glass control over the map: menu, share, zoom out. */
+.mapbtn {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  flex: 0 0 auto;
+  border: 1px solid var(--glass-line);
+  border-radius: 50%;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  color: var(--on-night);
+  cursor: pointer;
+  transition: transform var(--dur) var(--ease);
+}
+.mapbtn:active { transform: scale(0.94); }
+
+.trip__spacer { flex: 1; min-height: 32vh; }
+
+/* The zoom-out pill: the discoverable twin of the pinch gesture. */
+.zoomout {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--tap);
+  margin-bottom: var(--s-2);
+  padding-inline: var(--s-4);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-pill);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  color: var(--on-night);
+  font: var(--text-sm);
+  cursor: pointer;
+}
+
+/* A note over the map, for the honest cases: tiles blocked, offline. */
+.mapnote {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  max-width: calc(100% - var(--gutter) * 2);
+  margin: 0 var(--gutter);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-pill);
+  background: rgba(6, 14, 28, 0.72);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--night-line);
+  color: var(--on-night-2);
+  font: var(--text-sm);
+  text-align: center;
+}
+
+/* ---- The route drawn over the map ---------------------------------------- */
+
+/* The route line is a Leaflet polyline in the overlay pane, so it pans and
+   zooms with the map and draws whether or not a single tile arrived. Dashed
+   on purpose: a straight line between two stops is not the road you will
+   take, and a solid one would claim a route nobody computed. */
+
+.stoppin {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--on-night);
+  border-radius: 50%;
+  background: var(--pin-mine);
+  color: var(--on-night);
+  font: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 10px rgba(6, 14, 28, 0.6);
+  /* The pin itself is 30px; the invisible pad gives it a 44px hit area. */
+  cursor: pointer;
+}
+.stoppin::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+}
+.stoppin--current {
+  background: var(--on-night);
+  color: var(--night);
+  border-color: var(--accent);
+}
+.stoppin__label {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 8px);
+  transform: translateY(-50%);
+  /* Consecutive stops can be an hour apart and land almost on top of each
+     other; alternating sides keeps their names apart without hiding any. */
+}
+.stoppin--left .stoppin__label {
+  left: auto;
+  right: calc(100% + 8px);
+  padding: 3px var(--s-2);
+  border-radius: var(--r-sm);
+  background: rgba(6, 14, 28, 0.78);
+  color: var(--on-night);
+  font: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ---- The sheet holding the itinerary ------------------------------------- */
+
+.tripsheet {
+  position: relative;
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  background: var(--bg);
+  box-shadow: var(--elev-3);
+  padding: var(--s-2) 0 calc(var(--nav-h) + var(--s-8));
+}
+.tripsheet__grip {
+  width: 36px;
+  height: 4px;
+  margin: var(--s-2) auto var(--s-3);
+  border-radius: var(--r-pill);
+  background: var(--line);
+}
+.tripsheet__body { padding-inline: var(--sheet-pad); }
+
+/* Plan | Today. A segmented control belongs with the content it filters, so
+   it sits inside the sheet rather than floating where the tab bar goes. */
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: var(--bg-sunk);
+}
+.segmented__item {
+  /* 44px, not the 32pt a system segmented control uses: the design document
+     sets a 44px floor for every tappable thing in this app and this is one. */
+  min-height: var(--tap);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-2);
+  font: var(--text-md);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.segmented__item[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--elev-1);
+}
+
+.tripsummary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  font: var(--text-sm);
+  color: var(--ink-2);
+}
+.chip-flex {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-height: 30px;
+  padding-inline: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--bg-sunk);
+  color: var(--ink-2);
+  font: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.chip-flex--open { border-style: dashed; }
+
+/* ---- A stop, its nights, and the leg to the next one -------------------- */
+
+.stops { margin-top: var(--s-4); }
+
+.stop {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-stop);
+  background: var(--surface);
+}
+.stop--current { border-color: var(--accent); }
+.stop__n {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.stop__main { flex: 1; min-width: 0; }
+.stop__name { font: var(--text-md); color: var(--ink); }
+.stop__when {
+  font: var(--text-sm);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.stop__when--open { color: var(--ink-3); }
+
+/* The stepper. 36px buttons visually, inside a 44px row, so the row clears
+   the 44px floor without the controls looking oversized. */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  flex: 0 0 auto;
+  min-height: var(--tap);
+}
+.stepper__btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+.stepper__btn:hover:not(:disabled) { background: var(--bg-sunk); }
+.stepper__btn:disabled { color: var(--ink-3); cursor: not-allowed; opacity: 0.5; }
+.stepper__value {
+  min-width: 56px;
+  text-align: center;
+  font: var(--text-sm);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.stepper__value--open { color: var(--ink-3); }
+
+/* The leg between two stops, and the `+` that inserts one. */
+.leg {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) 0 var(--s-2) var(--s-4);
+}
+.leg__rail {
+  width: 0;
+  align-self: stretch;
+  border-left: 2px dashed var(--transport);
+  opacity: 0.55;
+}
+.leg__text {
+  flex: 1;
+  min-width: 0;
+  font: var(--text-sm);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+/* `estimate` is a word, not a tooltip: the figure beside it was computed from
+   straight-line distance at one documented speed, and saying so is the point. */
+.leg__estimate {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  margin-left: var(--s-2);
+  padding-inline: var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--transport-soft);
+  color: var(--transport-ink);
+  font: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.leg__insert {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  flex: 0 0 auto;
+  border: 1px dashed var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.leg__insert:hover { border-color: var(--accent); color: var(--accent); }
+
+.stop + .leg, .leg + .stop { margin-top: 0; }
+
+/* Today: what the app can actually answer. Polarsteps puts Track here, which
+   is GPS breadcrumbing TripStash has no code for — promising it would be a
+   lie in a segmented control. */
+.today { margin-top: var(--s-4); }
+.today__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.today__row:last-child { border-bottom: 0; }
+.today__k { font: var(--text-sm); color: var(--ink-2); }
+.today__v { font: var(--text-md); color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* Naming a new stop, in place between the two it goes between. */
+.addstop {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: var(--s-2) 0;
+  padding: var(--s-2);
+  border: 1px dashed var(--accent);
+  border-radius: var(--r-stop);
+  background: var(--accent-soft);
+}
+.addstop__field {
+  flex: 1;
+  min-width: 0;
+  min-height: 38px;
+  padding-inline: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-field);
+  background: var(--surface);
+  color: var(--ink);
+  font: var(--text-sm);
+}
+.addstop__go,
+.addstop__cancel {
+  min-height: var(--tap);
+  padding-inline: var(--s-3);
+  border: 0;
+  border-radius: var(--r-field);
+  font: var(--text-md);
+  cursor: pointer;
+}
+.addstop__go { background: var(--accent); color: var(--on-accent); }
+.addstop__go:disabled { opacity: 0.5; cursor: not-allowed; }
+.addstop__cancel { background: transparent; color: var(--ink-2); }

@@ -17,6 +17,7 @@ import type {
   ReelSpot,
   Resolution,
   Resurfaced,
+  Route,
   SourceSummary,
   Trip,
 } from './types'
@@ -106,6 +107,12 @@ export const api = {
   createTrip: (body: Record<string, unknown>) => post<Trip>('/api/v1/trips', body),
   addDestination: (body: Record<string, unknown>) =>
     post<unknown>('/api/v1/trips/current/destinations', body),
+
+  // The itinerary. Nights are sent; dates come back derived, because changing
+  // one stop moves every stop after it and that sum belongs on the server.
+  route: () => get<Route>('/api/v1/trips/current/route'),
+  setStopNights: (destinationId: string, nights: number | null) =>
+    patch<Route>(`/api/v1/trips/current/destinations/${destinationId}`, { nights }),
 
   // home
   home: (query: Record<string, unknown>) => get<HomePayload>('/api/v1/home', query),

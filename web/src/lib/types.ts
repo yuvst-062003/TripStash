@@ -30,10 +30,37 @@ export interface Destination {
   lat: number | null
   lon: number | null
   position: number
+  /** How long you are staying. null means undecided, which is allowed. */
+  nights: number | null
+  /** Derived from nights by the API; never sent back. */
   arrive_on: string | null
   depart_on: string | null
   is_current: boolean
   notes: string | null
+}
+
+export interface TransportLeg {
+  from_destination_id: string
+  to_destination_id: string
+  distance_km: number | null
+  duration_minutes: number | null
+}
+
+export interface RouteStop {
+  destination: Destination
+  arrive_on: string | null
+  depart_on: string | null
+  nights: number | null
+  leg_in: TransportLeg | null
+}
+
+export interface Route {
+  trip_id: string
+  start_date: string | null
+  end_date: string | null
+  has_end_date: boolean
+  total_nights: number
+  stops: RouteStop[]
 }
 
 export interface MediaStage {

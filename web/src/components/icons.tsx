@@ -38,6 +38,8 @@ import {
   ListFilter,
   Loader2,
   MapPin,
+  MoreHorizontal,
+  Minus,
   Mountain,
   Navigation,
   Phone,
@@ -78,6 +80,7 @@ import {
   Map as MapIcon,
   Bookmark,
   Luggage,
+  ZoomOut,
 } from 'lucide-react'
 
 export type IconComponent = typeof MapPin
@@ -162,6 +165,8 @@ export {
   Luggage,
   MapIcon,
   MapPin,
+  Minus,
+  MoreHorizontal,
   Mountain,
   Navigation,
   Pause,
@@ -186,4 +191,5 @@ export {
   VolumeX,
   Wallet,
   X,
+  ZoomOut,
 }

@@ -1,10 +1,20 @@
 /* ---------------------------------------------------------------------------
-   TripStash design tokens.
+   TripStash design tokens — the redesign (docs/redesign.md).
 
-   Deliberately plain. This is a utility the traveller opens with one hand on a
-   bus, so it follows the map-app conventions people already read fluently: one
-   grotesque, a near-neutral surface, and a single accent that appears only on
-   things you can press. Decoration is what makes a tool feel untrustworthy.
+   The traveller put Polarsteps and Rhyme next to the old flat build and chose
+   the other way: image-forward, bottom sheets, a floating tab bar, colour
+   chips. What did not change is the honesty: no decoration pretending to be
+   data, and metadata that stays legible on a bus in daylight.
+
+   Two layers, and the distinction is load-bearing. The CONTENT layer is the
+   map and the sheets. The CONTROL layer floats above it — tab bar, the Save
+   circle, the chips — and is the only place the glass material appears. Apple
+   is explicit that Liquid Glass belongs to controls and navigation and muddies
+   the hierarchy if it leaks into app backgrounds.
+
+   Every text colour here was measured, not assumed; the ratios are recorded
+   beside each one. Two values in the design document failed the 4.5:1 that
+   body text needs and were corrected — see --ink-3 and --transport-ink.
 --------------------------------------------------------------------------- */
 
 @font-face {
@@ -20,14 +30,17 @@
 
   --font: 'Jakarta', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
-  /* Type: five sizes, nothing decorative. */
+  /* Type. Body is 17px because that is iOS's default text size; the floor
+     anywhere in the app is 11px, which only --text-xs approaches. */
+  --text-xxl: 800 1.75rem/1.14 var(--font);
   --text-xl: 700 1.5rem/1.2 var(--font);
-  --text-lg: 700 1.1875rem/1.28 var(--font);
-  --text-md: 600 0.9375rem/1.35 var(--font);
-  --text: 400 0.9375rem/1.45 var(--font);
-  --text-sm: 400 0.8125rem/1.4 var(--font);
-  --text-xs: 600 0.6875rem/1.3 var(--font);
+  --text-lg: 700 1.25rem/1.26 var(--font);
+  --text-md: 600 1.0625rem/1.35 var(--font);
+  --text: 400 1.0625rem/1.45 var(--font);
+  --text-sm: 400 0.9375rem/1.4 var(--font);
+  --text-xs: 600 0.75rem/1.3 var(--font);
 
+  /* 4-based, as the spec's spacing scale. */
   --s-1: 0.25rem;
   --s-2: 0.5rem;
   --s-3: 0.75rem;
@@ -37,66 +50,118 @@
   --s-8: 2rem;
   --s-10: 2.5rem;
 
+  --gutter: 1rem;      /* 16px at the screen edge */
+  --sheet-pad: 1.25rem; /* 20px inside a sheet */
+
+  /* Radii. Concentric by design: a control inside a sheet is rounder than the
+     sheet is, never the other way round. */
+  --r-phone: 2.75rem;  /* 44 — the device corner, for the canvas artboards */
+  --r-sheet: 1.75rem;  /* 28 */
+  --r-card: 1.25rem;   /* 20 */
+  --r-stop: 1.125rem;  /* 18 — a stop card inside the itinerary */
+  --r-field: 1rem;     /* 16 */
   --r-sm: 0.5rem;
   --r-md: 0.75rem;
   --r-lg: 1rem;
   --r-xl: 1.25rem;
   --r-pill: 999px;
 
+  /* 44px is iOS's default control size and the floor for a button's hit
+     target. Anything that looks smaller keeps a 44px hit area around it. */
   --tap: 44px;
-  --nav-h: calc(56px + env(safe-area-inset-bottom));
+  --nav-h: calc(60px + env(safe-area-inset-bottom));
 
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --dur: 180ms;
   --dur-slow: 300ms;
 
-  /* Light: near-white, one step of grey, hairlines. */
+  /* ---- The night layer. Same in both schemes: the map is always night. ---- */
+  --night: #060e1c;        /* the trip ground, behind everything */
+  --night-water: #06182b;  /* map water, and what shows before tiles arrive */
+  --night-globe: #0a1c35;  /* the zoomed-out map (Explore, phase 2) */
+  --night-panel: #0c1426;  /* a panel sitting on the night */
+  --on-night: #ffffff;         /* 19.31:1 on --night */
+  --on-night-2: #a6b0c0;       /* 8.82:1 */
+  --on-night-3: #7f8a9c;       /* 5.53:1 */
+  --night-line: rgba(255, 255, 255, 0.14);
+
+  /* How the basemap is tinted into the night palette. One token, so moving to
+     a purpose-built dark basemap later is a single change. */
+  --map-tint: invert(1) hue-rotate(180deg) brightness(0.86) contrast(0.92) saturate(0.68);
+
+  /* ---- Light scheme: white surfaces over that night map. ---- */
   --bg: #ffffff;
-  --bg-sunk: #f5f5f4;
+  --bg-sunk: #f4f5f8;
   --surface: #ffffff;
-  --ink: #18181b;
-  --ink-2: #52525b;
-  --ink-3: #8b8b93;
-  --line: #e6e6e4;
+  --ink: #0b1220;    /* 18.72:1 on white */
+  --ink-2: #5a6475;  /*  5.98:1 on white, 5.48:1 on --bg-sunk */
+  --ink-3: #69717f;  /*  4.92:1 on white, 4.51:1 on --bg-sunk.
+                        The document said #737C8C, which is 4.21:1 and 3.86:1
+                        — below what body text needs. Darkened to clear it. */
+  --line: #e4e7ec;
 
-  --accent: #1a6b52;
-  --accent-hover: #155744;
+  --accent: #0e7c5a;      /* 5.19:1 on white */
+  --accent-hover: #0b6749;
   --on-accent: #ffffff;
-  --accent-soft: #eaf2ef;
+  --accent-soft: #e7f2ee;
 
-  --warn: #92610a;
+  /* Transport legs. The orange is the LINE and the pin — a graphical object,
+     which is held to 3:1, and it measures 3.28:1 on white. The word beside it
+     is text, so it uses the darker ink below: 5.12:1 on white and 4.53:1 on
+     the soft chip it actually sits on. Using the line colour for the label
+     would have shipped metadata at 3.28:1, which is unreadable in sunlight. */
+  --transport: #e8663c;
+  --transport-ink: #b44f2e;
+  --transport-soft: #fdeee8;
+
+  --warn: #8a5d08;   /*  5.75:1 on white, 5.30:1 on --warn-soft */
   --warn-soft: #fdf5e4;
-  --danger: #a8231b;
+  --danger: #a8231b; /*  7.19:1 on white */
   --danger-soft: #fceceb;
 
-  --scrim: rgba(24, 24, 27, 0.4);
-  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --elev-2: 0 2px 8px rgba(0, 0, 0, 0.1);
-  --elev-3: 0 -2px 24px rgba(0, 0, 0, 0.14);
+  --scrim: rgba(6, 14, 28, 0.46);
+  --elev-1: 0 1px 2px rgba(11, 18, 32, 0.06);
+  --elev-2: 0 4px 16px rgba(11, 18, 32, 0.1);
+  --elev-3: 0 -8px 32px rgba(6, 14, 28, 0.18);
+  --elev-float: 0 8px 28px rgba(6, 14, 28, 0.28);
 
-  /* Status hues stay muted; the icon and word carry the meaning. */
-  --status-saved: #52525b;
+  /* ---- The control layer's material. ----
+     Regular rather than clear: these carry text, and the guidance reserves
+     clear for controls floating over rich photography or video. */
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-line: rgba(11, 18, 32, 0.08);
+  --glass-blur: saturate(180%) blur(20px);
+
+  /* Map pins are told apart by fill AND shape, never by colour alone. */
+  --pin-mine: #0e7c5a;
+  --pin-known: #8b93a1;
+
+  --status-saved: #5a6475;
   --status-must: #a8231b;
-  --status-planned: #1a6b52;
-  --status-visited: #8b8b93;
-  --status-inbox: #8b8b93;
-  --status-archived: #8b8b93;
+  --status-planned: #0e7c5a;
+  --status-visited: #69717f;
+  --status-inbox: #69717f;
+  --status-archived: #69717f;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0b0c;
-    --bg-sunk: #161618;
-    --surface: #131315;
-    --ink: #f4f4f5;
-    --ink-2: #a1a1aa;
-    --ink-3: #71717a;
-    --line: #26262a;
+  :root:not([data-theme='light']) {
+    --bg: #0a1220;
+    --bg-sunk: #060e1c;
+    --surface: #0c1426;
+    --ink: #f2f5f9;    /* 16.79:1 on --surface */
+    --ink-2: #a6b0c0;  /*  8.39:1 */
+    --ink-3: #7f8a9c;  /*  5.26:1 */
+    --line: #1d2a3e;
 
-    --accent: #4bb894;
-    --accent-hover: #63c9a7;
-    --on-accent: #06201a;
+    --accent: #3fbf93;  /* 7.94:1 on --surface */
+    --accent-hover: #58cfa6;
+    --on-accent: #052018;
     --accent-soft: #10241f;
+
+    --transport: #ff8a5c;
+    --transport-ink: #ff8a5c;  /* 7.91:1 on --surface; no darkening needed */
+    --transport-soft: #2a160f;
 
     --warn: #dda33f;
     --warn-soft: #251d0e;
@@ -105,17 +170,46 @@
 
     --scrim: rgba(0, 0, 0, 0.62);
     --elev-1: 0 1px 2px rgba(0, 0, 0, 0.6);
-    --elev-2: 0 2px 8px rgba(0, 0, 0, 0.5);
-    --elev-3: 0 -2px 24px rgba(0, 0, 0, 0.6);
+    --elev-2: 0 4px 16px rgba(0, 0, 0, 0.5);
+    --elev-3: 0 -8px 32px rgba(0, 0, 0, 0.6);
+    --elev-float: 0 8px 28px rgba(0, 0, 0, 0.6);
 
-    --status-saved: #a1a1aa;
+    /* The glass adapts to what is behind it; on dark content it darkens and
+       the symbols on it go light, which the system does automatically for its
+       own bars. Doing it by hand here means matching that behaviour. */
+    --glass: rgba(12, 20, 38, 0.72);
+    --glass-line: rgba(255, 255, 255, 0.12);
+
+    --pin-mine: #3fbf93;
+    --pin-known: #8b93a1;
+
+    --status-saved: #a6b0c0;
     --status-must: #ef8079;
-    --status-planned: #4bb894;
-    --status-visited: #71717a;
-    --status-inbox: #71717a;
-    --status-archived: #71717a;
+    --status-planned: #3fbf93;
+    --status-visited: #7f8a9c;
+    --status-inbox: #7f8a9c;
+    --status-archived: #7f8a9c;
   }
 }
 
 :root[data-theme='light'] { color-scheme: light; }
 :root[data-theme='dark'] { color-scheme: dark; }
+
+/* The glass is a blur over live content; without backdrop-filter support it
+   has to become opaque or the text on it sits on whatever is underneath. */
+@supports not (backdrop-filter: blur(1px)) {
+  :root {
+    --glass: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) { --glass: #0c1426; }
+  }
+}
+
+/* Honour the system setting rather than animating regardless. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur: 0ms;
+    --dur-slow: 0ms;
+  }
+}
