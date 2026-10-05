@@ -1,5 +1,11 @@
 # Design
 
+> **Superseded for the visual system.** The traveller chose an image-forward
+> direction after comparing this against Polarsteps and Rhyme — see
+> [redesign.md](redesign.md) for the new screens, tokens and navigation. The
+> rules below about honesty (no invented imagery, no decoration pretending to
+> be data) still hold; the rules about restraint no longer describe the target.
+
 TripStash is a tool someone opens one-handed on a bus, not a brochure. The
 interface follows the conventions people already read fluently in map and
 transit apps, and the design decisions below are mostly about what was left

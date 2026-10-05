@@ -160,7 +160,8 @@ implemented, what is stubbed, and what was left out on purpose.
 ## Documentation
 
 - [Architecture](docs/architecture.md)
-- [Design](docs/design.md)
+- [Design](docs/design.md) — and [the iOS redesign](docs/redesign.md) that supersedes its visual rules
+- [Where city knowledge comes from](docs/sources.md)
 - [Running a free, local model](docs/local-model.md)
 - [The media pipeline](docs/media-pipeline.md)
 - [Clips — the saved video, per spot](docs/clips.md)
