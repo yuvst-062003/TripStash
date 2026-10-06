@@ -116,3 +116,68 @@ class StorageAdapter(Protocol):
     def delete(self, key: str) -> None: ...
 
     def signed_url(self, key: str) -> str: ...
+
+
+@dataclass(frozen=True)
+class PermissionDecision:
+    """Whether a URL may be fetched, and the reason either way.
+
+    The reason is not decoration: when the answer is no, the traveller is told
+    which rule stopped it rather than being shown an empty section.
+    """
+
+    allowed: bool
+    reason: str
+    crawl_delay_seconds: float = 0.0
+
+
+@dataclass(frozen=True)
+class FetchedPage:
+    """One public page, reduced to what TripStash is allowed to keep.
+
+    `text` is readable body text held only long enough for evidence-grounded
+    extraction to run against it. What survives that step is a fact, one short
+    verbatim quote, and the credit and link back - never the article. See
+    docs/sources.md.
+    """
+
+    url: str
+    title: str | None
+    text: str
+    fetched_at: datetime
+    etag: str | None = None
+    last_modified: str | None = None
+    # True when the host answered "nothing has changed", so a freshness check
+    # costs the publisher almost nothing.
+    not_modified: bool = False
+
+
+class ContentSourceAdapter(Protocol):
+    """Reads a public page, under the rules in docs/sources.md.
+
+    Implementations must refuse rather than guess: a host whose robots.txt or
+    terms have not been read is not fetchable, and saying so is the point.
+    """
+
+    name: str
+
+    def may_fetch(self, url: str) -> PermissionDecision: ...
+
+    def fetch(
+        self, url: str, *, etag: str | None = None, last_modified: str | None = None
+    ) -> FetchedPage: ...
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    title: str
+    url: str
+    snippet: str
+
+
+class SearchProvider(Protocol):
+    """The assistant's web search. It may propose; it may never act."""
+
+    name: str
+
+    def search(self, query: str, *, limit: int = 5) -> list[SearchResult]: ...

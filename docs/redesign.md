@@ -122,9 +122,14 @@ ranked against a city. Each row carries both counts, the public one and yours:
 
 Sorting is `Most places` or `Most saved by you`. Search filters live.
 
-> **Open:** "popularity" needs a real basis. Ranking by place count is honest.
-> "Saved by many travellers" on an individual spot currently has nothing behind
-> it and must either come from a provider or be removed.
+> **Resolved, and not the way this section assumed.** TripStash holds one
+> traveller's library. There is no corpus of what anyone else saved, so a
+> public count has nothing behind it and `142 places` would be inventing an
+> audience. Every figure Explore and the country list show is counted from
+> this install, the rows read `6 of yours`, and the list carries a line saying
+> so outright. The inbox is excluded, because a queue is not a library.
+> A public count still needs a provider; until there is one, this is the only
+> number that is true.
 
 ## The clips rail
 

@@ -89,11 +89,17 @@ Not optional, and not steps to do afterwards:
 5. **One request at a time per host**, with the published crawl delay.
 6. **Honour a removal request** by host, immediately and permanently.
 
-> **Not yet verified.** `gringo.co.il` could not be reached from the
-> development sandbox — the egress proxy refuses it by policy, so neither its
-> `robots.txt` nor its terms have been read. Steps 1 and 2 are outstanding for
-> that host and must happen on an environment that can reach it, before the
-> adapter is pointed at it.
+> **Not yet verified, and now enforced.** `gringo.co.il` could not be reached
+> from the development sandbox — the egress proxy refuses it by policy, so
+> neither its `robots.txt` nor its terms have been read. Steps 1 and 2 are
+> outstanding for that host.
+>
+> This is no longer only a note. `adapters/content.py` lists the host in
+> `UNVERIFIED_HOSTS` and refuses it by name, repeating the reason, and a test
+> holds that refusal in place. Any host nobody has checked is refused the same
+> way: the gate is a allowlist of hosts somebody actually read, not a blocklist
+> of ones they didn't. Reading the two documents and adding a `HostPolicy` is
+> what makes a host fetchable, and nothing else is.
 
 ## How it reuses the pipeline that exists
 
@@ -146,4 +152,11 @@ source said, because `requires_official_verification` is set by the knowledge
 | `SearchProvider` | the agent's web search | fixed result set |
 
 Both default to the fake, like every other adapter, so the stack still runs
-with no accounts and no network.
+with no accounts and no network. There is deliberately **no real branch yet**:
+the preconditions above have to be satisfied per host before a live fetcher
+would be legitimate, and the fake applies exactly the same gate, so adding a
+transport later changes how bytes arrive and nothing else.
+
+The fake's search results are few and obviously local on purpose. A fake that
+returned plausible live-looking results would let a bug ship as a feature,
+because nobody would notice the assistant citing fiction.
