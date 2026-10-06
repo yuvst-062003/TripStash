@@ -853,7 +853,10 @@ textarea.input { min-height: 76px; resize: vertical; }
 }
 /* Leaflet draws tiles into its own pane, so the tint lands only on the
    basemap and leaves our pins, route and labels at full strength. */
-.trip__map .leaflet-tile-pane { filter: var(--map-tint); }
+.trip__map .leaflet-tile-pane {
+  filter: var(--map-tint);
+  opacity: var(--map-tile-opacity);
+}
 .trip__map .leaflet-container { background: var(--night-water); }
 /* Tile attribution, rendered in the overlay rather than by Leaflet, so the
    sheet can never cover it. The licence requires it to be visible. */
@@ -1474,7 +1477,12 @@ textarea.input { min-height: 76px; resize: vertical; }
   overflow: hidden;
 }
 .citymap__canvas { position: absolute; inset: 0; }
-.citymap__canvas .leaflet-tile-pane { filter: var(--map-tint); }
+.citymap__canvas .leaflet-tile-pane {
+  filter: var(--map-tint);
+  /* Streets are the whole point at this zoom, so they come through stronger
+     here than on the trip map, where the tiles are context rather than detail. */
+  opacity: 0.78;
+}
 .citymap__canvas .leaflet-container { background: var(--night-water); }
 
 .citymap__chips {
@@ -1529,7 +1537,13 @@ textarea.input { min-height: 76px; resize: vertical; }
   letter-spacing: 0;
 }
 
-/* Pins are told apart by fill and shape, never by colour alone. */
+/* Pins are told apart by fill and shape, never by colour alone.
+
+   Everything on this map is the traveller's own - `/map` returns personal
+   saves and nothing else - so every pin here is solid. The hollow dashed
+   style means "well known here, not saved by you", and using it for a saved
+   place would say the opposite of the truth. It stays unused until there is
+   a public layer to put under it. */
 .citypin {
   width: 18px;
   height: 18px;
@@ -1538,9 +1552,18 @@ textarea.input { min-height: 76px; resize: vertical; }
   background: var(--pin-mine);
   box-shadow: 0 1px 6px rgba(6, 14, 28, 0.7);
 }
-.citypin--visited { background: var(--on-night); border-color: var(--pin-mine); }
-.citypin--saved { background: var(--pin-known); border-style: dashed; }
-.citypin--inbox { background: transparent; border-style: dashed; }
+/* Been there: inverted, so it reads as done at a glance and by shape. */
+.citypin--visited {
+  background: var(--on-night);
+  border-color: var(--pin-mine);
+  border-width: 3px;
+}
+/* Committed to, rather than merely kept: a larger pin with a heavier ring. */
+.citypin--must_visit {
+  width: 22px;
+  height: 22px;
+  border-width: 3px;
+}
 
 .knowrow {
   display: flex;

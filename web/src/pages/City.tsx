@@ -186,6 +186,8 @@ export default function City() {
             ? `<div class="stoppin">${index + 1}</div>`
             : `<div class="citypin citypin--${feature.properties.status}"></div>`,
           iconSize: routeMode ? [30, 30] : [18, 18],
+          // Centred on the coordinate; the must-visit pin grows from its
+          // centre so this stays right for every status.
           iconAnchor: routeMode ? [15, 15] : [9, 9],
         }),
         title: feature.properties.name,

@@ -99,9 +99,22 @@
   --map-land-route: #14362c;     /* a country the trip passes through */
   --map-land-route-line: #2f7d5f;
 
-  /* How a raster basemap is tinted into the night palette. One token, so moving to
-     a purpose-built dark basemap later is a single change. */
-  --map-tint: invert(1) hue-rotate(180deg) brightness(0.86) contrast(0.92) saturate(0.68);
+  /* How a raster basemap is tinted into the night palette.
+
+     Inverting a pale OSM tile lands it close to black, and its white roads
+     inverted land closer still, so the first attempt was a dark grey murk with
+     the streets almost invisible. Brightness is lifted back up and contrast
+     pulled in to separate the two again.
+
+     The tiles then sit at partial opacity over the carried vector ground, so
+     the night blue and the on-route country come through underneath rather
+     than being painted out by whatever colour the basemap happens to be. It
+     also means the transition when tiles arrive is a gain in detail rather
+     than a change of scene.
+
+     Two tokens, so moving to a purpose-built dark basemap later is one edit. */
+  --map-tint: invert(1) hue-rotate(180deg) brightness(1.5) contrast(0.8) saturate(0.5);
+  --map-tile-opacity: 0.55;
 
   /* ---- Light scheme: white surfaces over that night map. ---- */
   --bg: #ffffff;
