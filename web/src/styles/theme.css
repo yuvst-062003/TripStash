@@ -85,7 +85,14 @@
   --on-night-3: #7f8a9c;       /* 5.53:1 */
   --night-line: rgba(255, 255, 255, 0.14);
 
-  /* How the basemap is tinted into the night palette. One token, so moving to
+  /* The vector ground that ships with the app: real coastlines, drawn before
+     any tile arrives and still there when none does. */
+  --map-land: #10233a;
+  --map-land-line: #27405e;
+  --map-land-route: #14362c;   /* a country the trip passes through */
+  --map-land-route-line: #2f7d5f;
+
+  /* How a raster basemap is tinted into the night palette. One token, so moving to
      a purpose-built dark basemap later is a single change. */
   --map-tint: invert(1) hue-rotate(180deg) brightness(0.86) contrast(0.92) saturate(0.68);
 

@@ -19,6 +19,7 @@ import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import type { HomePayload, Route, RouteStop } from '../lib/types'
+import { type CountryFeature, loadCountries, matchesCountry } from '../lib/basemap'
 import { CacheNote, ErrorNote, Note, SkeletonRows } from '../components/ui'
 import {
   AlertTriangle,
@@ -126,6 +127,13 @@ export default function TripHome() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.LayerGroup | null>(null)
+  const landRef = useRef<L.GeoJSON | null>(null)
+
+  // Which countries the route touches, so the ground can say so.
+  const routeCountries = useMemo(
+    () => new Set(stops.map((s) => s.destination.country).filter(Boolean) as string[]),
+    [stops],
+  )
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -136,10 +144,16 @@ export default function TripHome() {
       // licence condition, so it cannot be left where it might be hidden.
       attributionControl: false,
     }).setView(FALLBACK_VIEW, 4)
+    // The vector ground sits in its own pane below the tiles, so street detail
+    // layers on top wherever there is signal and the map still reads without.
+    map.createPane('basemap')
+    const basemapPane = map.getPane('basemap')
+    if (basemapPane) basemapPane.style.zIndex = '150'
+
     const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 })
     // A blocked or offline tile server is the ordinary case on the road, not
-    // an error state. The night ground and the route still read as a map, and
-    // the note below says plainly why there is no detail behind them.
+    // an error state: the coastlines and borders underneath are carried in the
+    // app, so what is lost is street detail, and the note below says only that.
     tiles.on('tileerror', () => setTilesFailed(true))
     tiles.addTo(map)
     layerRef.current = L.layerGroup().addTo(map)
@@ -156,6 +170,36 @@ export default function TripHome() {
       layerRef.current = null
     }
   }, [])
+
+  // The ground: real country outlines, carried in the app.
+  useEffect(() => {
+    let cancelled = false
+    loadCountries('regional').then((countries) => {
+      const map = mapRef.current
+      if (cancelled || !map) return
+      landRef.current?.remove()
+      landRef.current = L.geoJSON(countries, {
+        pane: 'basemap',
+        interactive: false,
+        style: (featureIn) => {
+          const onRoute = [...routeCountries].some((name) =>
+            matchesCountry(featureIn as CountryFeature, name),
+          )
+          const read = (token: string) =>
+            getComputedStyle(document.documentElement).getPropertyValue(token).trim()
+          return {
+            fillColor: read(onRoute ? '--map-land-route' : '--map-land') || '#10233a',
+            fillOpacity: 1,
+            color: read(onRoute ? '--map-land-route-line' : '--map-land-line') || '#27405e',
+            weight: onRoute ? 1.2 : 0.6,
+          }
+        },
+      }).addTo(map)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [routeCountries])
 
   // Draw the route: numbered pins in order, dashed line between them.
   useEffect(() => {
@@ -278,7 +322,7 @@ export default function TripHome() {
         {tilesFailed && (
           <p className="mapnote">
             <AlertTriangle size={14} />
-            Map detail unavailable offline — your route is drawn from what is saved here
+            Offline map — street detail returns with a connection
           </p>
         )}
 
