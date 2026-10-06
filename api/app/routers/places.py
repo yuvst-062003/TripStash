@@ -120,6 +120,7 @@ def map_view(
     max_lon: float | None = Query(default=None, ge=-180, le=180),
     status_filter: list[str] | None = Query(default=None, alias="status"),
     category: list[str] | None = Query(default=None),
+    city: str | None = Query(default=None, max_length=120),
 ) -> dict:
     """GeoJSON of personal saves only.
 
@@ -137,6 +138,10 @@ def map_view(
         stmt = stmt.where(TripPlace.status.in_(ACTIVE_PLACE_STATUSES))
     if category:
         stmt = stmt.where(Place.category.in_(category))
+    if city:
+        # The city screen asks for one city's pins. Matching ignores case
+        # because the name arrives through a URL the traveller may have typed.
+        stmt = stmt.where(func.lower(Place.city) == city.strip().lower())
     if None not in (min_lat, min_lon, max_lat, max_lon):
         stmt = stmt.where(
             Place.lat.between(min_lat, max_lat), Place.lon.between(min_lon, max_lon)

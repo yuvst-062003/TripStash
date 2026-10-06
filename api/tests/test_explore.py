@@ -161,3 +161,23 @@ def test_an_empty_library_lists_nothing_rather_than_failing(client, auth):
 
     assert client.get("/api/v1/explore/countries", headers=auth).json() == []
     assert client.get("/api/v1/explore/cities", headers=auth).json() == []
+
+
+def test_the_map_can_be_narrowed_to_one_city(client, auth, library):
+    rio = client.get("/api/v1/map", headers=auth, params={"city": "Rio de Janeiro"}).json()
+
+    names = sorted(f["properties"]["name"] for f in rio["features"])
+    assert names == ["Aprazível", "Parque Lage", "Pedra do Sal"]
+
+
+def test_the_city_filter_on_the_map_ignores_case_and_padding(client, auth, library):
+    response = client.get("/api/v1/map", headers=auth, params={"city": "  paraty "}).json()
+
+    assert [f["properties"]["name"] for f in response["features"]] == ["Casa do Alemão"]
+
+
+def test_a_city_with_nothing_in_it_returns_an_empty_collection(client, auth, library):
+    response = client.get("/api/v1/map", headers=auth, params={"city": "Lima"}).json()
+
+    assert response["type"] == "FeatureCollection"
+    assert response["features"] == []

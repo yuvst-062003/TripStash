@@ -1401,3 +1401,177 @@ textarea.input { min-height: 76px; resize: vertical; }
   color: var(--ink);
 }
 .iconbtn:hover { background: var(--bg-sunk); }
+
+/* ---------------------------------------------------------------------------
+   A city: clips first, then the map, then what is good to know
+--------------------------------------------------------------------------- */
+
+.rail { margin-top: var(--s-2); }
+.rail__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.rail__track {
+  display: flex;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+  padding-inline: var(--gutter);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.rail__track::-webkit-scrollbar { display: none; }
+
+/* A clip card is a vertical frame, the shape the video actually is. */
+.clipcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--s-1);
+  flex: 0 0 auto;
+  width: 108px;
+  height: 168px;
+  padding: var(--s-2);
+  border-radius: var(--r-card);
+  /* A drawn ground, not a fake thumbnail: inventing cover art for a video
+     nobody has decoded would be decoration pretending to be content. */
+  background: linear-gradient(180deg, var(--night-globe), var(--night));
+  border: 1px solid var(--night-line);
+  color: var(--on-night);
+  scroll-snap-align: start;
+}
+.clipcard__play {
+  position: absolute;
+  top: var(--s-2);
+  left: var(--s-2);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+.clipcard__name { font: var(--text-sm); color: var(--on-night); }
+.clipcard__count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--on-night-2);
+}
+
+.citymap {
+  position: relative;
+  height: 46vh;
+  min-height: 280px;
+  margin-top: var(--s-4);
+  background: var(--night-water);
+  overflow: hidden;
+}
+.citymap__canvas { position: absolute; inset: 0; }
+.citymap__canvas .leaflet-tile-pane { filter: var(--map-tint); }
+.citymap__canvas .leaflet-container { background: var(--night-water); }
+
+.citymap__chips {
+  position: absolute;
+  inset: var(--s-3) 0 auto;
+  z-index: 500;
+  display: flex;
+  gap: var(--s-2);
+  padding-inline: var(--gutter);
+  overflow-x: auto;
+}
+.citymap__chips::-webkit-scrollbar { display: none; }
+
+.chip-glass {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  flex: 0 0 auto;
+  min-height: var(--tap);
+  padding-inline: var(--s-3);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-pill);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  color: var(--ink);
+  font: var(--text-sm);
+  cursor: pointer;
+}
+.chip-glass[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.citymap__route { position: absolute; right: var(--gutter); bottom: var(--s-3); z-index: 500; }
+.citymap__summary {
+  position: absolute;
+  left: var(--gutter);
+  bottom: var(--s-3);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  max-width: 62%;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-pill);
+  background: rgba(6, 14, 28, 0.78);
+  color: var(--on-night);
+  font: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Pins are told apart by fill and shape, never by colour alone. */
+.citypin {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--on-night);
+  border-radius: 50%;
+  background: var(--pin-mine);
+  box-shadow: 0 1px 6px rgba(6, 14, 28, 0.7);
+}
+.citypin--visited { background: var(--on-night); border-color: var(--pin-mine); }
+.citypin--saved { background: var(--pin-known); border-style: dashed; }
+.citypin--inbox { background: transparent; border-style: dashed; }
+
+.knowrow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  color: var(--ink);
+}
+.knowrow__source {
+  margin-top: var(--s-1);
+  font: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+
+/* At street zoom the carried basemap has nothing to draw, so this view really
+   is reduced offline and says so rather than looking broken. */
+.citymap__offline {
+  position: absolute;
+  inset: auto var(--gutter) calc(var(--s-3) + var(--tap) + var(--s-2)) var(--gutter);
+  z-index: 500;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-pill);
+  background: rgba(6, 14, 28, 0.78);
+  color: var(--on-night-2);
+  font: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+  text-align: center;
+}

@@ -11,6 +11,7 @@ import Home from './pages/Home'
 import TripHome from './pages/TripHome'
 import Explore from './pages/Explore'
 import Country from './pages/Country'
+import City from './pages/City'
 import MapScreen from './pages/MapScreen'
 import Saved from './pages/Saved'
 import Clips from './pages/Clips'
@@ -130,6 +131,7 @@ export default function App() {
               planning rather than a separate place. */}
           <Route path="/explore" element={<Explore />} />
           <Route path="/explore/:country" element={<Country />} />
+          <Route path="/cities/:city" element={<City />} />
           {/* The pin-level map of saved places, reached from Saved. */}
           <Route path="/map" element={<MapScreen />} />
           <Route path="/today" element={<Home />} />
