@@ -18,6 +18,7 @@ import type {
   Resolution,
   Resurfaced,
   Route,
+  Scope,
   SourceSummary,
   Trip,
 } from './types'
@@ -113,6 +114,10 @@ export const api = {
   route: () => get<Route>('/api/v1/trips/current/route'),
   setStopNights: (destinationId: string, nights: number | null) =>
     patch<Route>(`/api/v1/trips/current/destinations/${destinationId}`, { nights }),
+
+  // Explore: the same library rolled up to country and city.
+  exploreCountries: () => get<Scope[]>('/api/v1/explore/countries'),
+  exploreCities: (query: Record<string, unknown>) => get<Scope[]>('/api/v1/explore/cities', query),
 
   // home
   home: (query: Record<string, unknown>) => get<HomePayload>('/api/v1/home', query),

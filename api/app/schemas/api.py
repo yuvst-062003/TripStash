@@ -97,6 +97,23 @@ class DestinationResponse(ApiModel):
     notes: str | None
 
 
+class ScopeResponse(ApiModel):
+    """A country or city, with what the traveller has there.
+
+    Every count is from this install. There is no corpus of what other people
+    saved, so a "popular with travellers" figure would have nothing behind it.
+    """
+
+    name: str
+    country: str | None
+    place_count: int
+    clip_count: int
+    visited_count: int
+    on_route: bool
+    lat: float | None
+    lon: float | None
+
+
 class TransportLegResponse(ApiModel):
     """The gap between two stops. Shown labelled `estimate`, always."""
 

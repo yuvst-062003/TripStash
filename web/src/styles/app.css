@@ -1273,3 +1273,131 @@ textarea.input { min-height: 76px; resize: vertical; }
 .addstop__go { background: var(--accent); color: var(--on-accent); }
 .addstop__go:disabled { opacity: 0.5; cursor: not-allowed; }
 .addstop__cancel { background: transparent; color: var(--ink-2); }
+
+/* ---------------------------------------------------------------------------
+   Explore, and a country's cities
+
+   The same map further away. A country lists cities and never single spots —
+   ranking a cafe against a city is a category error — and every count on these
+   rows is the traveller's own, because there is no corpus of what anyone else
+   saved.
+--------------------------------------------------------------------------- */
+
+.trip__map--globe { background: var(--night-globe); }
+
+/* On Explore the sheet is the whole lower half rather than a card: the list
+   is the content, not an overlay on it, so it reaches the bottom of the
+   screen even when it holds one row. */
+.tripsheet--fill { flex: 1; min-height: 62vh; }
+
+.scope {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: 56px;
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease);
+}
+.scope + .scope { margin-top: var(--s-2); }
+.scope:hover { border-color: var(--accent); }
+.scope--focused { border-color: var(--accent); background: var(--accent-soft); }
+.scope__main { flex: 1; min-width: 0; }
+.scope__name {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font: var(--text-md);
+  color: var(--ink);
+}
+.scope__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.scope__counts {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  font: var(--text-sm);
+  color: var(--ink-2);
+}
+.scope__footnote {
+  margin-top: var(--s-4);
+  font: var(--text-sm);
+  color: var(--ink-3);
+}
+
+.countryhero { padding: var(--s-2) 0 var(--s-4); }
+.countryhero__name { font: var(--text-xxl); color: var(--ink); }
+.countryhero__counts { margin-top: var(--s-1); font: var(--text-sm); color: var(--ink-2); }
+
+.searchfield {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--tap);
+  padding-inline: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-field);
+  background: var(--bg-sunk);
+  color: var(--ink-3);
+}
+.searchfield input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: var(--text);
+}
+.searchfield input:focus { outline: none; }
+
+.chiprow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.chip-toggle {
+  min-height: var(--tap);
+  padding-inline: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+  font: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.chip-toggle[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+
+.iconbtn {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  flex: 0 0 auto;
+  margin-left: calc(var(--s-2) * -1);
+  border-radius: 50%;
+  color: var(--ink);
+}
+.iconbtn:hover { background: var(--bg-sunk); }

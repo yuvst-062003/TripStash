@@ -89,7 +89,14 @@
      any tile arrives and still there when none does. */
   --map-land: #10233a;
   --map-land-line: #27405e;
-  --map-land-route: #14362c;   /* a country the trip passes through */
+  /* The zoomed-out map needs more separation than the trip map: at world
+     scale the only thing distinguishing land from sea is this pair. */
+  --globe-land: #16293f;
+  --globe-land-line: #35537a;
+
+  --map-land-mine: #152b44;      /* a country you have saved something in */
+  --map-land-mine-line: #3c5f85;
+  --map-land-route: #14362c;     /* a country the trip passes through */
   --map-land-route-line: #2f7d5f;
 
   /* How a raster basemap is tinted into the night palette. One token, so moving to

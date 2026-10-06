@@ -9,6 +9,8 @@ import Login from './pages/Login'
 import NewTrip from './pages/NewTrip'
 import Home from './pages/Home'
 import TripHome from './pages/TripHome'
+import Explore from './pages/Explore'
+import Country from './pages/Country'
 import MapScreen from './pages/MapScreen'
 import Saved from './pages/Saved'
 import Clips from './pages/Clips'
@@ -123,10 +125,13 @@ export default function App() {
         <Routes>
           {/* Home is the trip. Opening the app lands on the route. */}
           <Route path="/" element={<TripHome />} />
-          {/* Explore becomes the zoomed-out map in phase 2; until then it is
-              the real map of saved places rather than an empty promise. */}
-          <Route path="/explore" element={<MapScreen />} />
-          <Route path="/map" element={<Navigate to="/explore" replace />} />
+          {/* Explore is the trip's own map zoomed out until stops become
+              countries, which is why discovery reads as a continuation of
+              planning rather than a separate place. */}
+          <Route path="/explore" element={<Explore />} />
+          <Route path="/explore/:country" element={<Country />} />
+          {/* The pin-level map of saved places, reached from Saved. */}
+          <Route path="/map" element={<MapScreen />} />
           <Route path="/today" element={<Home />} />
           <Route path="/saved" element={<Saved />} />
           <Route path="/clips" element={<Clips />} />

@@ -39,6 +39,22 @@ export interface Destination {
   notes: string | null
 }
 
+/**
+ * A country or a city, with what you have there. Every count comes from this
+ * library — there is no corpus of what other travellers saved, so none of
+ * these numbers claim to speak for anyone else.
+ */
+export interface Scope {
+  name: string
+  country: string | null
+  place_count: number
+  clip_count: number
+  visited_count: number
+  on_route: boolean
+  lat: number | null
+  lon: number | null
+}
+
 export interface TransportLeg {
   from_destination_id: string
   to_destination_id: string
