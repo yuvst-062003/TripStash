@@ -37,6 +37,17 @@ const STARTERS = [
  * The context it is using sits at the top and can be dropped, and anything it
  * wants to change comes back as a proposal to confirm.
  */
+/** The first couple of source names, so "what it looked at" is concrete. */
+function sourceNames(citations: AskResponse['citations']): string {
+  const labels = citations
+    .map((citation) => citation.label)
+    .filter((label): label is string => Boolean(label))
+    .slice(0, 2)
+  if (!labels.length) return ''
+  const more = citations.length - labels.length
+  return labels.join(', ') + (more > 0 ? ` and ${more} more` : '')
+}
+
 export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: () => void }) {
   const { position } = useApp()
   const [question, setQuestion] = useState(seed.question ?? '')
@@ -46,6 +57,9 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [applied, setApplied] = useState<string[]>([])
+  // Dismissed proposals are forgotten here and nowhere else: declining a
+  // suggestion is not a state worth recording about the traveller.
+  const [dismissed, setDismissed] = useState<string[]>([])
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
@@ -76,7 +90,9 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
     }
   }
 
-  async function confirm(action: ProposedAction) {
+  async function add(action: ProposedAction) {
+    // The only path from a suggestion to the traveller's library, and it runs
+    // on a press. `/ask` itself changes nothing.
     await api.confirmAction(action)
     setApplied((list) => [...list, action.type])
   }
@@ -166,27 +182,48 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
             ))}
           </div>
 
-          {answer.proposed_actions.length > 0 && (
+          {/* What it looked at, before what it suggests. An answer whose
+              working is hidden is one you have to take on trust. */}
+          {answer.citations.length > 0 && (
+            <p className="pad lookedat">
+              Read {answer.citations.length}{' '}
+              {answer.citations.length === 1 ? 'source' : 'sources'} you saved
+              {sourceNames(answer.citations) && `: ${sourceNames(answer.citations)}`}
+            </p>
+          )}
+
+          {answer.proposed_actions.filter((a) => !dismissed.includes(a.type)).length > 0 && (
             <div className="pad" style={{ marginTop: 'var(--s-4)' }}>
-              {answer.proposed_actions.map((action) => (
-                <div key={action.type} className="card">
-                  <p className="t-md">{action.label}</p>
-                  <p className="t-sm dim" style={{ marginTop: 2 }}>
-                    {action.preview}
-                  </p>
-                  <div style={{ marginTop: 'var(--s-3)' }}>
-                    {applied.includes(action.type) ? (
-                      <span className="row t-sm" style={{ gap: 4, color: 'var(--accent)' }}>
-                        <Check size={15} strokeWidth={2.4} /> Done
-                      </span>
-                    ) : (
-                      <button className="btn btn--accent btn--sm" onClick={() => confirm(action)}>
-                        Confirm
-                      </button>
-                    )}
+              {answer.proposed_actions
+                .filter((action) => !dismissed.includes(action.type))
+                .map((action) => (
+                  <div key={action.type} className="proposal">
+                    <p className="proposal__label">Suggested</p>
+                    <p className="t-md">{action.label}</p>
+                    <p className="t-sm dim" style={{ marginTop: 2 }}>
+                      {action.preview}
+                    </p>
+                    <div className="proposal__actions">
+                      {applied.includes(action.type) ? (
+                        <span className="row t-sm" style={{ gap: 4, color: 'var(--accent)' }}>
+                          <Check size={15} strokeWidth={2.4} /> Added
+                        </span>
+                      ) : (
+                        <>
+                          <button className="btn btn--accent btn--sm" onClick={() => add(action)}>
+                            Add
+                          </button>
+                          <button
+                            className="btn btn--sm"
+                            onClick={() => setDismissed((list) => [...list, action.type])}
+                          >
+                            Dismiss
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           )}
 

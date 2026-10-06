@@ -1575,3 +1575,37 @@ textarea.input { min-height: 76px; resize: vertical; }
   letter-spacing: 0;
   text-align: center;
 }
+
+/* ---------------------------------------------------------------------------
+   The agent proposes; the traveller decides
+
+   A suggestion arrives as a card with Add and Dismiss, and nothing moves until
+   Add is pressed. Searching the web, or reading your own saves, does not
+   promote the assistant to an editor — `/ask` changes nothing at all, and
+   `/ask/confirm` is the only path into the library.
+--------------------------------------------------------------------------- */
+
+.lookedat {
+  margin-top: var(--s-3);
+  font: var(--text-sm);
+  color: var(--ink-3);
+}
+
+.proposal {
+  padding: var(--sheet-pad);
+  border: 1px dashed var(--accent);
+  border-radius: var(--r-card);
+  background: var(--accent-soft);
+}
+.proposal__label {
+  font: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.proposal__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}

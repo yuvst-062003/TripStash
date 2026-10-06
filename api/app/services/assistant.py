@@ -31,7 +31,6 @@ from app.services.freshness import group_with_conflicts
 from app.services.spatial import (
     haversine_km,
     nearby_trip_places,
-    walking_minutes,
     walking_minutes_if_walkable,
 )
 from app.services.text import normalize_name
@@ -280,10 +279,17 @@ def _answer_nearby(session, trip, question, context, on, focus, intent) -> Answe
         citations.extend(_sources_for_place(session, trip.id, trip_place.place_id))
 
     nearest, nearest_km = matches[0]
+    # Past the walkable limit a minute figure is noise, so say the distance and
+    # stop rather than offering a march as if it were a stroll.
+    nearest_walk = walking_minutes_if_walkable(nearest_km)
+    closest = (
+        f"Closest is {nearest.place.name}, about {nearest_walk} min on foot."
+        if nearest_walk is not None
+        else f"Closest is {nearest.place.name}, {nearest_km:.1f} km away - too far to walk."
+    )
     return Answer(
         text=(
-            f"{len(matches)} of your saved places are within {ASK_RADIUS_KM:.0f} km. "
-            f"Closest is {nearest.place.name}, about {walking_minutes(nearest_km)} min on foot."
+            f"{len(matches)} of your saved places are within {ASK_RADIUS_KM:.0f} km. {closest}"
         ),
         cards=cards,
         citations=citations,
@@ -330,9 +336,11 @@ def _answer_practical(session, trip, question, context, on, focus, intent) -> An
         f"{int(weather.precipitation_probability * 100)}% chance of rain."
     )
     if distance_km is not None:
+        walk = walking_minutes_if_walkable(distance_km)
         lines.append(
-            f"You are {distance_km:.1f} km away - roughly "
-            f"{walking_minutes(distance_km)} min walking."
+            f"You are {distance_km:.1f} km away - roughly {walk} min walking."
+            if walk is not None
+            else f"You are {distance_km:.1f} km away, which is not a walk."
         )
     if already_planned:
         lines.append("It is already on today's plan.")
