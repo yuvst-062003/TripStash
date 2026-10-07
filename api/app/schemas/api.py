@@ -570,6 +570,9 @@ class CityBreakdownResponse(ApiModel):
     #: until it is stamped.
     found_count: int = 0
     kinds: list[str]
+    #: A photo the traveller saved for this city - from their plan or their
+    #: saves, never one the app found. None when there is no such photo.
+    photo_url: str | None = None
 
 
 class CityPlaceResponse(ApiModel):

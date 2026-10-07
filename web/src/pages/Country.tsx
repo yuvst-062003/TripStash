@@ -12,6 +12,7 @@ import { api } from '../lib/api'
 import { useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import TopBar from '../components/TopBar'
+import CityCards from '../components/CityCards'
 import { ErrorNote, Note, SkeletonRows } from '../components/ui'
 import {
   ArrowLeft,
@@ -39,6 +40,8 @@ export default function Country() {
   const [sort, setSort] = useState<Sort>('places')
 
   const cities = useAsync(() => api.exploreCities({ country: name, sort }), [name, sort])
+  // The same cities as cards: your photo and your sentence for each.
+  const cards = useAsync(() => api.cities(name), [name])
 
   // Filtering happens here as you type; the server's `q` is for a cold load.
   const rows = useMemo(() => {
@@ -77,6 +80,11 @@ export default function Country() {
             {totals.onRoute && ' · on your route'}
           </p>
         </div>
+      </div>
+
+      <CityCards cities={cards.data ?? []} />
+
+      <div className="pad">
 
         <label className="searchfield">
           <Search size={18} />

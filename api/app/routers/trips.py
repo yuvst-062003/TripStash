@@ -24,6 +24,7 @@ from app.schemas.api import (
     TripUpdate,
 )
 from app.services import itinerary
+from app.services.trip_advice import route_checks, stop_suggestions
 
 router = APIRouter(prefix="/trips", tags=["trip"])
 
@@ -274,3 +275,25 @@ def update_destination(
 
     session.flush()
     return serialise_route(trip, computed)
+
+
+@router.get("/current/checks")
+def get_checks(
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> list[dict]:
+    """What the assistant notices about the route. Read-only; a fix is a proposal."""
+    return [check.to_dict() for check in route_checks(session, trip)]
+
+
+@router.get("/current/suggestions")
+def get_stop_suggestions(
+    after: str | None = None,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> list[dict]:
+    """Cities from your own library that the route skips, cheapest detour first."""
+    anchor = next((d for d in trip.destinations if d.id == after), None) if after else None
+    if after and anchor is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Destination not found.")
+    return [s.to_dict() for s in stop_suggestions(session, trip, anchor)]

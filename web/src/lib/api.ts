@@ -6,6 +6,10 @@
  */
 import type {
   ActivityPicks,
+  CityBreakdown,
+  Recommendation,
+  RouteCheck,
+  StopSuggestion,
   AskResponse,
   Candidate,
   HomePayload,
@@ -166,6 +170,15 @@ export const api = {
     if (note) form.append('note', note)
     return request<SourceSummary[]>('/api/v1/sources/upload', { method: 'POST', body: form })
   },
+  // A country's cities, with your own sentence and a photo you saved.
+  cities: (country: string) =>
+    get<CityBreakdown[]>(`/api/v1/countries/${encodeURIComponent(country)}/cities`),
+  // What the assistant notices about the route, and where it could go next.
+  routeChecks: () => get<RouteCheck[]>('/api/v1/trips/current/checks'),
+  stopSuggestions: (after?: string) =>
+    get<StopSuggestion[]>('/api/v1/trips/current/suggestions', { after }),
+  // What you stashed for a place, ranked for now. Grounded, never a web result.
+  recommend: (q: string) => get<Recommendation>('/api/v1/recommend', { q }),
   // What this trip is about. Picks filter and order; they never score.
   activities: () => get<ActivityPicks>('/api/v1/activities'),
   setActivities: (slugs: string[]) =>

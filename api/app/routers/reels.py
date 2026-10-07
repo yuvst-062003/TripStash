@@ -27,7 +27,7 @@ from app.schemas.api import (
     ReelClip,
     ReelSpot,
 )
-from app.services.cities import cities_in_country, places_in_city
+from app.services.cities import cities_in_country, normalise_city, places_in_city
 from app.services.countries import (
     UNKNOWN_COUNTRY,
     globe_countries,
@@ -127,10 +127,11 @@ def list_country_cities(
     than a 404: pressing somewhere unexplored is the point, not a mistake.
     """
     destinations = list(_destinations(session, trip).values())
+    rows = _rows(session, trip)
     found = cities_in_country(
         country_key,
         destinations,
-        _rows(session, trip),
+        rows,
         is_video=is_video_source,
         is_playable=is_playable,
         is_found=lambda source: bool(getattr(source, "found", False)),
@@ -150,9 +151,29 @@ def list_country_cities(
             playable_count=c.playable_count,
             found_count=c.found_count,
             kinds=c.kinds,
+            photo_url=_photo_for(c.destination_id, c.key, rows),
         )
         for c in found
     ]
+
+
+def _photo_for(destination_id: str | None, city_key: str, rows) -> str | None:
+    """The first picture the traveller saved for a city, or none.
+
+    Only a photo they supplied - one from their own plan or saves - and never
+    one the app found, so the card never shows an image nobody chose.
+    """
+    for _evidence, source, trip_place, place in rows:
+        if not (source.media_type or "").startswith("image/") or not source.url:
+            continue
+        if getattr(source, "found", False):
+            continue
+        here = (destination_id and trip_place.destination_id == destination_id) or (
+            normalise_city(place.city) == city_key
+        )
+        if here:
+            return source.url
+    return None
 
 
 @router.get(

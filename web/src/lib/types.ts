@@ -417,6 +417,54 @@ export interface ReelSpot {
   found_count: number
 }
 
+/** One city of a country, explained in the traveller's own words. */
+export interface CityBreakdown {
+  key: string
+  name: string
+  lat: number | null
+  lon: number | null
+  in_route: boolean
+  destination_id: string | null
+  explanation: string
+  explanation_source: 'you' | 'sources' | 'none' | string
+  place_count: number
+  video_count: number
+  playable_count: number
+  found_count: number
+  kinds: string[]
+  /** A photo the traveller saved for this city; never one the app found. */
+  photo_url: string | null
+}
+
+/** Something the assistant noticed about the route; a fix is a proposal. */
+export interface RouteCheck {
+  id: string
+  kind: 'nights_missing' | 'long_leg' | 'event_missed' | string
+  title: string
+  body: string
+  destination_id: string | null
+  fix: { type: 'set_nights'; label: string; payload: { destination_id: string; nights: number } } | null
+}
+
+/** A city from your own library that the route does not visit yet. */
+export interface StopSuggestion {
+  name: string
+  country: string | null
+  lat: number
+  lon: number
+  place_count: number
+  detour_km: number
+  why: string
+  places: string[]
+}
+
+export interface Recommendation {
+  query: string
+  summary: string
+  grounded: boolean
+  cards: AskCard[]
+}
+
 export interface ActivityPicks {
   available: { slug: string; label: string }[]
   picked: string[]
