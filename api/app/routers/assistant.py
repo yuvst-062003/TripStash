@@ -13,10 +13,12 @@ from app.db import get_session
 from app.deps import current_trip, owned_or_404
 from app.models.capture import KnowledgeItem
 from app.models.core import Trip
+from app.models.enums import KnowledgeType, Provenance
 from app.models.ops import AgentRun, ItineraryItem
 from app.models.places import TripPlace
-from app.schemas.api import AskRequest, KnowledgeUpdate
+from app.schemas.api import AskRequest, KnowledgeCreate, KnowledgeUpdate
 from app.services.assistant import AskContext, ask
+from app.services.recommend import mark_sourcing, recommend
 from app.services.resurfacing import resurface
 
 router = APIRouter(tags=["assistant"])
@@ -48,6 +50,9 @@ def ask_endpoint(
     answer, latency_ms = ask(session, trip=trip, question=body.question, context=context)
 
     payload = answer.to_dict(context)
+    # Blended, but never blurred: each card says whether the traveller saved
+    # what it rests on or the app went looking for it.
+    mark_sourcing(session, trip.id, payload.get("cards") or [])
     session.add(
         AgentRun(
             trip_id=trip.id,
@@ -86,6 +91,16 @@ def confirm_action(
         session.get(TripPlace, payload.get("trip_place_id")), trip, "Place not found."
     )
     on = date.fromisoformat(payload.get("on_date") or datetime.now(UTC).date().isoformat())
+    # A second tap on the same proposal is the same plan, not a second entry.
+    existing = session.execute(
+        select(ItineraryItem).where(
+            ItineraryItem.trip_id == trip.id,
+            ItineraryItem.trip_place_id == trip_place.id,
+            ItineraryItem.on_date == on,
+        )
+    ).scalars().first()
+    if existing is not None:
+        return {"applied": action_type, "itinerary_item_id": existing.id, "on_date": on.isoformat()}
     item = ItineraryItem(
         trip_id=trip.id,
         trip_place_id=trip_place.id,
@@ -118,6 +133,16 @@ def resurface_endpoint(
     return {"items": [item.to_dict() for item in items]}
 
 
+@router.get("/recommend")
+def recommend_for(
+    q: str = Query(min_length=1, max_length=120),
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> dict:
+    """What you stashed for a place, ranked for now. Read-only, grounded, never a web result."""
+    return recommend(session, trip=trip, query=q, on=datetime.now(UTC).date()).to_dict()
+
+
 @router.get("/knowledge")
 def list_knowledge(
     session: Session = Depends(get_session),
@@ -146,6 +171,8 @@ def list_knowledge(
             "provenance": item.provenance,
             "source_id": item.source_id,
             "source_date": item.source_date.isoformat() if item.source_date else None,
+            "happens_on": item.happens_on.isoformat() if item.happens_on else None,
+            "ends_on": item.ends_on.isoformat() if item.ends_on else None,
             "requires_official_verification": item.requires_official_verification,
             "user_edited": item.user_edited,
             "is_archived": item.is_archived,
@@ -153,6 +180,37 @@ def list_knowledge(
         }
         for item in session.execute(stmt.order_by(KnowledgeItem.created_at.desc())).scalars()
     ]
+
+
+@router.post("/knowledge", status_code=status.HTTP_201_CREATED)
+def create_knowledge(
+    body: KnowledgeCreate,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> dict:
+    """Something the traveller writes down directly — most often an event with a date.
+
+    It skips the review queue on purpose: the traveller is the source, so
+    there is nothing to confirm. Provenance says so.
+    """
+    if body.ends_on and body.happens_on and body.ends_on < body.happens_on:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "ends_on is before happens_on.")
+    item = KnowledgeItem(
+        trip_id=trip.id,
+        type=str(body.type),
+        title=body.title.strip(),
+        body=body.body.strip() if body.body else None,
+        category="event" if body.type is KnowledgeType.EVENT else None,
+        destination_scope=body.destination_scope,
+        confidence=1.0,
+        provenance=Provenance.USER,
+        happens_on=body.happens_on,
+        ends_on=body.ends_on,
+        user_edited=True,
+    )
+    session.add(item)
+    session.flush()
+    return {"id": item.id, "type": item.type, "title": item.title, "happens_on": body.happens_on}
 
 
 @router.patch("/knowledge/{item_id}")

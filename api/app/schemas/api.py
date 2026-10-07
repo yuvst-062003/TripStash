@@ -55,9 +55,36 @@ class TripCreate(ApiModel):
     name: str = Field(min_length=1, max_length=160)
     start_date: date | None = None
     end_date: date | None = None
-    base_currency: str = Field(default="USD", min_length=3, max_length=3)
-    total_budget: float | None = Field(default=None, ge=0)
+    base_currency: str = Field(default="USD", pattern=r"^[A-Za-z]{3}$")
+    total_budget: float | None = Field(default=None, ge=0, le=1_000_000_000)
     interests: list[str] = Field(default_factory=list)
+
+
+class TripUpdate(ApiModel):
+    """What a plan can change about the trip itself.
+
+    Dates move: a plan that arrives later than the one it replaces almost
+    always moves the departure, and every stop's dates hang off it. Currency
+    is not here because expenses are already recorded against it.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    start_date: date | None = None
+    end_date: date | None = None
+    total_budget: float | None = Field(default=None, ge=0, le=1_000_000_000)
+    interests: list[str] | None = None
+
+
+class DestinationOrder(ApiModel):
+    """The route, re-stated in travelling order.
+
+    The whole list rather than one stop's position, because a route is an
+    order, not a set of numbers: moving one stop moves the others, and sending
+    them one at a time leaves the trip briefly holding two stops that both
+    claim to be third.
+    """
+
+    ids: list[str] = Field(min_length=1)
 
 
 class DestinationCreate(ApiModel):
@@ -81,6 +108,7 @@ class DestinationUpdate(ApiModel):
     nights: int | None = Field(default=None, ge=0, le=365)
     name: str | None = Field(default=None, min_length=1, max_length=160)
     notes: str | None = None
+    is_current: bool | None = None
 
 
 class DestinationResponse(ApiModel):
@@ -164,6 +192,9 @@ class LinkCapture(ApiModel):
     author: str | None = None
     published_on: date | None = None
     kind: SourceKind = SourceKind.LINK
+    # Where you stood when you saved it (the "Here" capture).
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
     # Who recovered the caption: the operating system's share sheet, the
     # traveller's own browser, or the traveller typing it. Recorded so the
     # status shows which path worked, and never trusted for anything else.
@@ -212,6 +243,9 @@ class SourceResponse(ApiModel):
     candidate_count: int = 0
     pending_count: int = 0
     file_url: str | None = None
+    # True when this capture was already saved: the original is returned.
+    duplicate: bool = False
+
     duration_seconds: float | None = None
     # What the media pipeline managed to read, stage by stage.
     stages: list[MediaStageResponse] = Field(default_factory=list)
@@ -257,7 +291,10 @@ class CandidateResponse(ApiModel):
     evidence: list[EvidenceResponse]
     resolutions: list[ResolutionOption]
     duplicate_of_place_id: str | None
+    duplicate_of_name: str | None = None
     duplicate_reason: str | None
+    happens_on: date | None = None
+    ends_on: date | None = None
 
 
 class ApproveCandidate(ApiModel):
@@ -351,8 +388,8 @@ class ItineraryCreate(ApiModel):
     on_date: date
     trip_place_id: str | None = None
     destination_id: str | None = None
-    start_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
-    end_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    start_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    end_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     notes: str | None = None
 
 
@@ -384,10 +421,23 @@ class ExpenseCreate(ApiModel):
     client_op_id: str | None = None
 
 
+class KnowledgeCreate(ApiModel):
+    """A thing the traveller writes down themselves: an event, a tip, a warning."""
+
+    type: KnowledgeType = KnowledgeType.GENERAL
+    title: str = Field(min_length=1, max_length=240)
+    body: str | None = None
+    destination_scope: str | None = None
+    happens_on: date | None = None
+    ends_on: date | None = None
+
+
 class KnowledgeUpdate(ApiModel):
     title: str | None = None
     body: str | None = None
     type: KnowledgeType | None = None
+    happens_on: date | None = None
+    ends_on: date | None = None
     category: str | None = None
     destination_scope: str | None = None
     is_archived: bool | None = None
@@ -447,3 +497,105 @@ class ReelClip(ApiModel):
     quote: str | None
     confidence: float
     saved_at: datetime | None
+
+
+# ---------------------------------------------------------- country and picks
+
+
+class CountrySummary(ApiModel):
+    """One country the traveller has saved something in."""
+
+    key: str
+    name: str
+    place_count: int
+    video_count: int
+    playable_count: int
+
+
+class ActivityOption(ApiModel):
+    slug: str
+    label: str
+
+
+class ActivityPicksResponse(ApiModel):
+    available: list[ActivityOption]
+    picked: list[str]
+
+
+class ActivityPicksRequest(ApiModel):
+    slugs: list[str] = Field(default_factory=list, max_length=40)
+
+
+class GlobeCountrySummary(ApiModel):
+    """A pressable country on the globe: placed, counted, and route-aware."""
+
+    key: str
+    name: str
+    lat: float
+    lon: float
+    in_route: bool
+    stop_count: int
+    place_count: int
+    video_count: int
+    playable_count: int
+    #: How many of `video_count` the app found rather than the traveller
+    #: saved. Never merged into the total: a found clip is a suggestion
+    #: until it is stamped.
+    found_count: int = 0
+
+
+class CityBreakdownResponse(ApiModel):
+    """One city of a country: placed, counted, and explained in whose words."""
+
+    key: str
+    name: str
+    lat: float | None
+    lon: float | None
+    in_route: bool
+    destination_id: str | None
+    explanation: str
+    # "you" when the traveller wrote it, "sources" when it was summarised from
+    # what they saved, "none" when there is honestly nothing to say yet.
+    explanation_source: str
+    place_count: int
+    video_count: int
+    playable_count: int
+    #: How many of `video_count` the app found rather than the traveller
+    #: saved. Never merged into the total: a found clip is a suggestion
+    #: until it is stamped.
+    found_count: int = 0
+    kinds: list[str]
+
+
+class CityPlaceResponse(ApiModel):
+    """One thing to do in a city, with what it is and what you do there."""
+
+    trip_place_id: str
+    place_id: str
+    name: str
+    kind: str
+    activities: list[str]
+    status: str
+    lat: float | None
+    lon: float | None
+    video_count: int
+    playable_count: int
+    found_count: int
+    quote: str | None
+
+
+class FindRequest(ApiModel):
+    """Go looking for video about somewhere, on the one platform that allows it."""
+
+    place: str = Field(min_length=1, max_length=160)
+    activity: str | None = Field(default=None, max_length=40)
+
+
+class FindResponse(ApiModel):
+    query: str
+    found: int
+    already_had: int
+    # Set when the search produced nothing, so the screen says why rather than
+    # rendering an empty shelf.
+    nothing_reason: str | None = None
+    sources: list[SourceResponse]

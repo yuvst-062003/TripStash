@@ -6,7 +6,7 @@
  * than presenting week-old opening hours as current.
  */
 
-const SHELL_CACHE = 'tripstash-shell-v1'
+const SHELL_CACHE = 'tripstash-shell-v2'
 const DATA_CACHE = 'tripstash-data-v1'
 
 // Endpoints worth keeping for offline use. Everything else is network-only.
@@ -47,10 +47,44 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  if (url.origin === self.location.origin) {
-    event.respondWith(cacheFirst(request))
+  if (url.origin !== self.location.origin) return
+
+  // A navigation asks for the app shell, and the shell names the bundle to
+  // load. Serving it from cache first means a browser that installed this
+  // worker once keeps whatever shell it saw then - FOREVER, because the cached
+  // copy never expires and nothing re-fetches it. That is not staleness, it is
+  // a permanently pinned version of the app.
+  //
+  // So the shell is network-first with a cache fallback: online you get today's
+  // app, offline you get the last one that worked.
+  if (request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
+    event.respondWith(shellFirst(request))
+    return
   }
+
+  // Everything else under our origin is a hashed asset - its name changes when
+  // its content does, so cache-first is safe and right for those.
+  event.respondWith(cacheFirst(request))
 })
+
+/**
+ * The app shell, fetched fresh whenever the network allows.
+ *
+ * Falls back to the last good shell so the app still opens on a plane; the
+ * bundle it names is a hashed asset and will already be in the shell cache.
+ */
+async function shellFirst(request) {
+  const cache = await caches.open(SHELL_CACHE)
+  try {
+    const response = await fetch(request)
+    if (response.ok) cache.put('/index.html', response.clone())
+    return response
+  } catch (error) {
+    const cached = (await cache.match('/index.html')) || (await cache.match('/'))
+    if (cached) return cached
+    throw error
+  }
+}
 
 async function networkFirst(request) {
   const cache = await caches.open(DATA_CACHE)

@@ -34,6 +34,74 @@ _PRICE = re.compile(
 )
 
 # Ordered by priority: the first rule a sentence matches claims it.
+_EVENT = re.compile(
+    r"\b(festival|carnival|carnaval|fiesta|parade|full[- ]moon party|market day|"
+    r"night market|concert|celebration|semana santa|d[ií]a de (los )?muertos|"
+    r"fireworks|feria|procession)\b",
+    re.IGNORECASE,
+)
+_MONTHS = (
+    "january|february|march|april|may|june|july|august|september|october|november|december|"
+    "jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec"
+)
+# "14 February", "February 14", "Feb 14-16", "on the 3rd of March", "2026-02-14".
+_DATE_PATTERNS = (
+    re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b"),
+    re.compile(
+        rf"\b(\d{{1,2}})(?:st|nd|rd|th)?(?: of)? ({_MONTHS})\b(?:[ ,]+(\d{{4}}))?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b({_MONTHS})\.? (\d{{1,2}})(?:st|nd|rd|th)?"
+        rf"(?:\s*[-–]\s*(\d{{1,2}}))?(?:[ ,]+(\d{{4}}))?\b",
+        re.IGNORECASE,
+    ),
+)
+
+
+_MONTH_KEYS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+
+
+def _month_number(name: str) -> int:
+    return _MONTH_KEYS.index(name.lower()[:3]) + 1
+
+
+def parse_event_dates(
+    sentence: str, reference: date | None = None
+) -> tuple[date | None, date | None]:
+    """The first date in a sentence, and a range end when one is written.
+
+    Without a year, the next occurrence from `reference` is assumed — a
+    festival mentioned in July "on 14 February" means next February.
+    """
+    today = reference or date.today()
+    iso = _DATE_PATTERNS[0].search(sentence)
+    if iso:
+        try:
+            return date(int(iso[1]), int(iso[2]), int(iso[3])), None
+        except ValueError:
+            return None, None
+    day_first = _DATE_PATTERNS[1].search(sentence)
+    month_first = _DATE_PATTERNS[2].search(sentence)
+    if day_first:
+        day, month, year = int(day_first[1]), _month_number(day_first[2]), day_first[3]
+        end_day = None
+    elif month_first:
+        month, day = _month_number(month_first[1]), int(month_first[2])
+        end_day, year = month_first[3], month_first[4]
+    else:
+        return None, None
+    try:
+        year_value = int(year) if year else today.year
+        start = date(year_value, month, day)
+        if not year and start < today:
+            start = date(today.year + 1, month, day)
+        end = date(start.year, month, int(end_day)) if end_day else None
+    except ValueError:
+        return None, None
+    return start, end
+
+
 _RULES: list[tuple[KnowledgeType, str, re.Pattern[str], bool]] = [
     (
         KnowledgeType.SAFETY,
@@ -187,9 +255,9 @@ class FakeAIAdapter:
         if not channels:
             return ExtractionResult(
                 failure_reason=(
-                    "No readable text, transcript or OCR output was available for this "
-                    "source. It stays in Inbox - add a caption, screenshot or note, or "
-                    "enter the place manually."
+                    "Nothing readable came out of it — no caption, transcript or text in "
+                    "the image. It is kept under Sources: add a caption or a screenshot "
+                    "of the text and retry."
                 )
             )
 
@@ -298,6 +366,22 @@ class FakeAIAdapter:
         self, sentence: str, channel: str, penalty: float, scope: str | None
     ) -> KnowledgeCandidate | None:
         price_hit = _PRICE.search(sentence)
+
+        # A dated happening is an event before it is anything else: "the
+        # carnival is on 14 February" must not become a transport tip.
+        if _EVENT.search(sentence):
+            happens_on, ends_on = parse_event_dates(sentence)
+            return KnowledgeCandidate(
+                type=KnowledgeType.EVENT,
+                title=_gist(sentence),
+                body=sentence.strip(),
+                category="event",
+                destination_scope=_destination_scope(sentence) or scope,
+                confidence=round((0.7 if happens_on else 0.5) - penalty, 3),
+                evidence=[Evidence(quote=_shorten(sentence, 400), channel=channel)],
+                happens_on=happens_on,
+                ends_on=ends_on,
+            )
 
         for knowledge_type, category, pattern, official in _RULES:
             match = pattern.search(sentence)

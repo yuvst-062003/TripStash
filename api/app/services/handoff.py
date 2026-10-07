@@ -25,18 +25,29 @@ class Handoff:
     note: str | None = None
 
 
-def navigate(place: Place, *, mode: str = "walking") -> Handoff:
-    mode = mode if mode in {"walking", "driving", "transit", "bicycling"} else "walking"
+def navigate(place: Place, *, mode: str | None = None) -> Handoff:
+    """Directions to the place.
+
+    `mode` is only set when the caller knows it is walkable; otherwise the
+    maps app decides, so a place three hundred kilometres away never opens
+    as a walking route.
+    """
+    mode = mode if mode in {"walking", "driving", "transit", "bicycling"} else None
     coords = f"{place.lat},{place.lon}"
+    travel = f"&travelmode={mode}" if mode else ""
     return Handoff(
         key="navigate",
         label="Navigate with Google Maps",
-        url=(
-            "https://www.google.com/maps/dir/?api=1"
-            f"&destination={coords}&travelmode={mode}"
-        ),
+        url=f"https://www.google.com/maps/dir/?api=1&destination={coords}{travel}",
         web_fallback=f"https://www.google.com/maps/search/?api=1&query={coords}",
     )
+
+
+def travel_mode(distance_km: float | None) -> str | None:
+    """Walking when the place is within walking range of the traveller, else unknown."""
+    from app.services.spatial import walking_minutes_if_walkable
+
+    return "walking" if walking_minutes_if_walkable(distance_km) is not None else None
 
 
 def ride(place: Place) -> Handoff:
@@ -85,7 +96,7 @@ def contact(place: Place) -> list[Handoff]:
     return out
 
 
-def for_place(place: Place, *, mode: str = "walking") -> list[Handoff]:
+def for_place(place: Place, *, mode: str | None = None) -> list[Handoff]:
     handoffs = [navigate(place, mode=mode), ride(place), *contact(place)]
     if place.category == "accommodation":
         handoffs.extend(stay_search(place.city or place.name))

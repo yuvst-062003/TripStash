@@ -44,6 +44,9 @@ class HostPolicy:
     terms_allow_automated_access: bool = False
     crawl_delay_seconds: float = 1.0
     disallowed_prefixes: tuple[str, ...] = ()
+    # The host's published API, when it has one. Its own usage policy governs
+    # it rather than robots.txt, which is written for crawlers of pages.
+    api_paths: tuple[str, ...] = ()
     # Set when a publisher asks to be left alone. Permanent, and it outranks
     # everything above it.
     removal_requested: bool = False
@@ -61,6 +64,9 @@ KNOWN_HOSTS: dict[str, HostPolicy] = {
         terms_allow_automated_access=True,
         crawl_delay_seconds=1.0,
         disallowed_prefixes=("/w/", "/wiki/Special:"),
+        # The MediaWiki API sits under /w/ but is the sanctioned way in for a
+        # program, under the Wikimedia API etiquette (identify, go serially).
+        api_paths=("/w/api.php",),
         note="CC BY-SA. The one tier whose text may be reused in full, with attribution.",
     ),
 }
@@ -131,7 +137,8 @@ class FakeContentSource:
             )
 
         path = urlparse(url).path or "/"
-        for prefix in policy.disallowed_prefixes:
+        is_api = any(path.startswith(api) for api in policy.api_paths)
+        for prefix in () if is_api else policy.disallowed_prefixes:
             if path.startswith(prefix):
                 return PermissionDecision(False, f"{host}: robots.txt disallows {prefix}.")
 

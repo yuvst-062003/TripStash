@@ -75,6 +75,8 @@ class KnowledgeType(StrEnum):
     ROUTE = "route"
     PRICE = "price"
     PACKING = "packing"
+    # A dated thing: a festival, a market day, a full-moon party.
+    EVENT = "event"
     GENERAL = "general"
 
 

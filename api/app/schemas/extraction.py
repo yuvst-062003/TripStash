@@ -60,6 +60,9 @@ class KnowledgeCandidate(BaseModel):
     evidence: list[Evidence] = Field(default_factory=list)
     place: PlaceCandidate | None = None
     source_date: date | None = None
+    # Events only: when it happens. A single day leaves ends_on empty.
+    happens_on: date | None = None
+    ends_on: date | None = None
     # Border, visa and entry advice is never answered from a creator alone.
     requires_official_verification: bool = False
 

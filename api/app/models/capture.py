@@ -58,6 +58,8 @@ class Source(IdMixin, TimestampMixin, Base):
     media_type: Mapped[str | None] = mapped_column(String(120))
     byte_size: Mapped[int | None] = mapped_column(Integer)
     duration_seconds: Mapped[float | None] = mapped_column(Float)
+    lat: Mapped[float | None] = mapped_column(Float)
+    lon: Mapped[float | None] = mapped_column(Float)
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
     captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -66,6 +68,10 @@ class Source(IdMixin, TimestampMixin, Base):
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
     provenance: Mapped[str] = mapped_column(String(20), default=Provenance.CREATOR, nullable=False)
+    # True when the app went looking for this rather than the traveller saving
+    # it. Kept separate for good: '9 of your 12' means nine of twelve the
+    # traveller chose, and a found clip must never be able to inflate that.
+    found: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     failure_reason: Mapped[str | None] = mapped_column(Text)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -141,6 +147,10 @@ class ExtractionCandidate(IdMixin, TimestampMixin, Base):
     duplicate_of_place_id: Mapped[str | None] = mapped_column(String(32))
     duplicate_reason: Mapped[str | None] = mapped_column(String(200))
     resolved_place_id: Mapped[str | None] = mapped_column(String(32))
+    user_edited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Events carry their date through review, so approving keeps it.
+    happens_on: Mapped[date | None] = mapped_column(Date)
+    ends_on: Mapped[date | None] = mapped_column(Date)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     source: Mapped[Source] = relationship(back_populates="candidates")
@@ -199,6 +209,9 @@ class KnowledgeItem(IdMixin, TimestampMixin, Base):
     provenance: Mapped[str] = mapped_column(String(20), default=Provenance.CREATOR, nullable=False)
     evidence_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     source_date: Mapped[date | None] = mapped_column(Date)
+    # Events: when it happens, so it can be brought back as the day nears.
+    happens_on: Mapped[date | None] = mapped_column(Date, index=True)
+    ends_on: Mapped[date | None] = mapped_column(Date)
     # Border and visa answers must be re-verified against official sources.
     requires_official_verification: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False

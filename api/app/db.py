@@ -40,26 +40,6 @@ def _sqlite_pragmas(dbapi_connection, _record):  # pragma: no cover - driver hoo
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
 
 
-# Columns added after a database was first created. `create_all` will not add a
-# column to a table that already exists, and there is no Alembic yet (see
-# docs/data-model.md), so each additive column is reconciled explicitly. The
-# list is deliberately short and append-only; anything that is not a nullable
-# add belongs in a real migration.
-_ADDITIVE_COLUMNS: tuple[tuple[str, str, str], ...] = (("destination", "nights", "INTEGER"),)
-
-
-def _reconcile_additive_columns() -> None:
-    inspector = inspect(engine)
-    tables = set(inspector.get_table_names())
-    for table, column, column_type in _ADDITIVE_COLUMNS:
-        if table not in tables:
-            continue
-        if column in {c["name"] for c in inspector.get_columns(table)}:
-            continue
-        with engine.begin() as conn:
-            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
-
-
 def init_db() -> None:
     """Create the schema and, on Postgres, the PostGIS extension and index.
 
@@ -73,6 +53,7 @@ def init_db() -> None:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
 
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
 
     if engine.dialect.name == "postgresql":
         with engine.begin() as conn:
@@ -83,7 +64,57 @@ def init_db() -> None:
                 )
             )
 
-    _reconcile_additive_columns()
+    _backfill_nights()
+
+
+# Columns added after the first release. `create_all` never alters an existing
+# table, so each one is added here when absent — additive only, which is safe
+# on both SQLite and Postgres. Anything more than this is Alembic's job.
+_ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("extraction_candidate", "happens_on", "DATE"),
+    ("extraction_candidate", "ends_on", "DATE"),
+    ("knowledge_item", "happens_on", "DATE"),
+    ("knowledge_item", "ends_on", "DATE"),
+    ("extraction_candidate", "user_edited", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("source", "lat", "FLOAT"),
+    ("source", "lon", "FLOAT"),
+    # The found tier. A database built before it exists has this column
+    # missing, and every count that reads it would fail on the first query.
+    ("source", "found", "BOOLEAN NOT NULL DEFAULT 0"),
+    # Nights became the stored truth of the route; dates are derived from them.
+    ("destination", "nights", "INTEGER"),
+)
+
+
+def _add_missing_columns() -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        for table, column, ddl in _ADDED_COLUMNS:
+            if table not in tables:
+                continue
+            present = {col["name"] for col in inspector.get_columns(table)}
+            if column not in present:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+
+
+def _backfill_nights() -> None:
+    """Give a stop written before `nights` existed the count its dates imply.
+
+    Left empty, `itinerary.reschedule` reads such a stop as undecided and
+    undates every stop after it, so a route that had dates would lose them.
+    Only rows with both dates and no count are touched, so this runs once.
+    """
+    from app.models.core import Destination
+
+    with Session(engine) as session, session.begin():
+        stale = session.query(Destination).filter(
+            Destination.nights.is_(None),
+            Destination.arrive_on.is_not(None),
+            Destination.depart_on.is_not(None),
+        )
+        for destination in stale:
+            destination.nights = max(0, (destination.depart_on - destination.arrive_on).days)
 
 
 def get_session() -> Iterator[Session]:

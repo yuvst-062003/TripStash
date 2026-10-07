@@ -24,3 +24,8 @@ var/
 .DS_Store
 .idea/
 .vscode/
+
+# Finder/sync duplicates ("Dockerfile 2", "ai 2.py"). Machine-made, never ours.
+* 2.*
+* 2
+*\ 2.*

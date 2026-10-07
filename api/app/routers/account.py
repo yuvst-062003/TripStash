@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.deps import audit, current_trip, current_user
+from app.deps import audit, current_trip, current_user, traveller_date
 from app.models.capture import KnowledgeItem, Source, SourcePlaceEvidence
 from app.models.core import Trip, User
 from app.models.enums import ACTIVE_PLACE_STATUSES
@@ -26,6 +26,7 @@ def offline_bundle(
     session: Session = Depends(get_session),
     trip: Trip = Depends(current_trip),
     on: date | None = Query(default=None),
+    today_here: date = Depends(traveller_date),
 ) -> dict:
     """The offline contract (spec 11.3).
 
@@ -34,7 +35,7 @@ def offline_bundle(
     last-checked label so the client can mark them stale rather than silently
     presenting week-old opening hours as current.
     """
-    today = on or datetime.now(UTC).date()
+    today = on or today_here
 
     trip_places = list(
         session.execute(
@@ -183,6 +184,8 @@ def export_trip(
         ],
         "places": [
             {
+                "id": tp.place.id,
+                "trip_place_id": tp.id,
                 "name": tp.place.name,
                 "category": tp.place.category,
                 "lat": tp.place.lat,
@@ -213,6 +216,7 @@ def export_trip(
         ],
         "sources": [
             {
+                "id": s.id,
                 "kind": str(s.kind),
                 "url": s.url,
                 "title": s.title,

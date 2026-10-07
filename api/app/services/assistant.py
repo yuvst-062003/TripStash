@@ -20,7 +20,7 @@ from datetime import UTC, date, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.adapters import get_fx, get_weather
+from app.adapters import get_fx, get_travel_wiki, get_weather, get_web_search
 from app.models.capture import KnowledgeItem, Source, SourcePlaceEvidence
 from app.models.core import Destination, Trip
 from app.models.enums import KnowledgeType, PlaceStatus
@@ -34,6 +34,12 @@ from app.services.spatial import (
     walking_minutes_if_walkable,
 )
 from app.services.text import normalize_name
+from app.services.web_answers import (
+    guide_cards,
+    guide_disclaimer,
+    web_cards,
+    web_disclaimer,
+)
 
 ASK_RADIUS_KM = 3.0
 
@@ -98,7 +104,17 @@ class Answer:
         }
 
 
+# The subject of a question decides before its phrasing does: "what did I
+# save about safety" is a safety question, not a "why did I save this" one.
 _INTENTS: list[tuple[str, re.Pattern[str]]] = [
+    ("budget", re.compile(r"\b(budget|spend|spent|cost|money|daily burn|afford)\b", re.I)),
+    ("stay", re.compile(r"\b(hostel|hotel|stay|accommodation|sleep|dorm)\b", re.I)),
+    (
+        "transport",
+        re.compile(r"\b(bus|shuttle|ferry|boat|taxi|uber|get to|travel to|transport)\b", re.I),
+    ),
+    ("border", re.compile(r"\b(visa|border|entry|immigration|onward|stamp)\b", re.I)),
+    ("safety", re.compile(r"\b(safe|safety|scam|dangerous|careful)\b", re.I)),
     (
         "nearby",
         re.compile(r"\b(near|nearby|around me|close by|walking distance|what'?s here)\b", re.I),
@@ -108,14 +124,6 @@ _INTENTS: list[tuple[str, re.Pattern[str]]] = [
         re.compile(r"\b(open|now|today|worth going|should i go|is it worth|time to)\b", re.I),
     ),
     ("why", re.compile(r"\b(why|what did i save|remind me|who recommended)\b", re.I)),
-    ("budget", re.compile(r"\b(budget|spend|spent|cost|money|daily burn|afford)\b", re.I)),
-    ("stay", re.compile(r"\b(hostel|hotel|stay|accommodation|sleep|dorm)\b", re.I)),
-    (
-        "transport",
-        re.compile(r"\b(bus|shuttle|ferry|boat|taxi|uber|get to|travel to|transport)\b", re.I),
-    ),
-    ("border", re.compile(r"\b(visa|border|entry|immigration|onward|stamp)\b", re.I)),
-    ("safety", re.compile(r"\b(safe|safety|scam|dangerous|careful)\b", re.I)),
 ]
 
 
@@ -131,7 +139,7 @@ def ask(session: Session, *, trip: Trip, question: str, context: AskContext) -> 
     on = context.on or datetime.now(UTC).date()
     intent = classify(question)
 
-    focus = _focus_place(session, trip, context)
+    focus = _focus_place(session, trip, context) or _place_by_name(session, trip, question)
     handlers = {
         "nearby": _answer_nearby,
         "practical": _answer_practical,
@@ -228,6 +236,28 @@ def _place_facts(session: Session, place_id: str) -> list[dict]:
     return group_with_conflicts(facts)
 
 
+
+def _has_saved_source(session: Session, trip_id: str, place_id: str) -> bool:
+    """True when at least one source behind this place is one the traveller saved.
+
+    The benefit of the doubt runs this way on purpose: one saved source makes a
+    place theirs. Only a place resting entirely on found clips is described as
+    found.
+    """
+    from app.models.capture import Source, SourcePlaceEvidence
+
+    return session.execute(
+        select(SourcePlaceEvidence.id)
+        .join(Source, Source.id == SourcePlaceEvidence.source_id)
+        .where(
+            SourcePlaceEvidence.trip_id == trip_id,
+            SourcePlaceEvidence.place_id == place_id,
+            Source.found.is_(False),
+        )
+        .limit(1)
+    ).first() is not None
+
+
 def _sources_for_place(session: Session, trip_id: str, place_id: str) -> list[dict]:
     rows = session.execute(
         select(SourcePlaceEvidence).where(
@@ -249,12 +279,16 @@ def _sources_for_place(session: Session, trip_id: str, place_id: str) -> list[di
 
 def _answer_nearby(session, trip, question, context, on, focus, intent) -> Answer:
     if context.lat is None or context.lon is None:
+        saved_any = session.execute(
+            select(TripPlace.id).where(TripPlace.trip_id == trip.id)
+        ).first()
         return Answer(
             text=(
-                "I do not have your location, so I cannot rank saves by distance. "
-                "Pick a destination or drop a pin and ask again."
+                "I don't know where you are, so I can't sort your saves by distance. "
+                "Tap Use my location, or mark a stop as here now on Trip."
+                if saved_any
+                else "You haven't saved anything yet. Save a link or a screenshot and ask again."
             ),
-            disclaimers=["Location unavailable - answer limited to saved records."],
             tools_used=["places:none"],
         )
 
@@ -332,7 +366,7 @@ def _answer_practical(session, trip, question, context, on, focus, intent) -> An
         lines.append("I have no opening hours on record, so I cannot say whether it is open.")
 
     lines.append(
-        f"Weather for {on.isoformat()}: {weather.summary.lower()}, {weather.temperature_c:.0f}°C, "
+        f"Today: {weather.summary.lower()}, {weather.temperature_c:.0f}°C, "
         f"{int(weather.precipitation_probability * 100)}% chance of rain."
     )
     if distance_km is not None:
@@ -350,8 +384,8 @@ def _answer_practical(session, trip, question, context, on, focus, intent) -> An
         proposed.append(
             {
                 "type": "add_to_today",
-                "label": f"Add {place.name} to {on.isoformat()}",
-                "preview": f"Creates a plan entry for {on.isoformat()}. Nothing is booked.",
+                "label": f"Add {place.name} to today's plan",
+                "preview": "Goes on today's plan. Nothing is booked.",
                 "payload": {"trip_place_id": focus.id, "on_date": on.isoformat()},
             }
         )
@@ -378,13 +412,21 @@ def _answer_why(session, trip, question, context, on, focus, intent) -> Answer:
     takeaways = [c["takeaway"] for c in citations if c.get("takeaway")]
     reason = target.reason_saved or (takeaways[0] if takeaways else None)
 
+    # A place standing only on clips the app went looking for was never saved
+    # by anyone, and saying otherwise would hand the traveller a false memory -
+    # the exact failure the found tier exists to prevent.
+    yours = _has_saved_source(session, trip.id, target.place_id)
+    verb = "You saved" if yours else "I found"
     text = (
-        f"You saved {target.place.name} because: {reason}"
-        if reason
-        else f"You saved {target.place.name}, but no reason was recorded."
+        f"{verb} {target.place.name} because: {reason}"
+        if reason and yours
+        else f"{verb} {target.place.name}."
+        if not reason
+        else f"{verb} {target.place.name}: {reason}"
     )
     if citations:
-        text += f" It came from {len(citations)} saved source(s), all still attached."
+        kind = "saved source" if yours else "found source"
+        text += f" It came from {_plural(len(citations), kind)}, all still attached."
 
     return Answer(
         text=text,
@@ -404,19 +446,24 @@ def _answer_budget(session, trip, question, context, on, focus, intent) -> Answe
         )
     ).scalar_one()
 
+    cur = trip.base_currency
     lines = [
-        f"Recorded spending so far: {spent:.2f} {trip.base_currency}; "
-        f"{today_spent:.2f} today."
+        f"Spent so far: {spent:,.0f} {cur}"
+        + (f", {today_spent:,.0f} of it today." if today_spent else ", nothing today.")
     ]
     remaining: float | None = None
     if trip.total_budget:
         remaining = trip.total_budget - spent
-        lines.append(f"That leaves {remaining:.2f} of a {trip.total_budget:.2f} budget.")
-        if trip.end_date and trip.end_date >= on:
+        lines.append(
+            f"That leaves {remaining:,.0f} of a {trip.total_budget:,.0f} {cur} budget."
+            if remaining >= 0
+            else f"That is {-remaining:,.0f} {cur} over the {trip.total_budget:,.0f} budget."
+        )
+        if trip.end_date and trip.end_date >= on and remaining > 0:
             days_left = (trip.end_date - on).days + 1
             lines.append(
-                f"Across {days_left} remaining day(s) that is "
-                f"{remaining / days_left:.2f} {trip.base_currency} per day."
+                f"Across the {_plural(days_left, 'day')} left, that is "
+                f"{remaining / days_left:,.0f} {cur} a day."
             )
     else:
         lines.append("No total budget is set, so I cannot forecast a daily allowance.")
@@ -432,7 +479,7 @@ def _answer_budget(session, trip, question, context, on, focus, intent) -> Answe
     )
     if price_notes:
         lines.append(
-            f"You captured {len(price_notes)} price expectation(s) - shown below to compare."
+            f"You noted {_plural(len(price_notes), 'expected price')} — shown below to compare."
         )
 
     return Answer(
@@ -462,7 +509,15 @@ def _answer_budget(session, trip, question, context, on, focus, intent) -> Answe
 
 def _answer_stay(session, trip, question, context, on, focus, intent) -> Answer:
     destination = _current_destination(session, trip, context)
-    where = destination.name if destination else (trip.name or "your destination")
+    if destination is None and not trip.destinations:
+        return Answer(
+            text=(
+                "You haven't added a stop yet, so I can't search stays. "
+                "Add one on Trip and ask again."
+            ),
+            tools_used=["places:none"],
+        )
+    where = destination.name if destination else trip.destinations[0].name
 
     saved = list(
         session.execute(
@@ -492,8 +547,9 @@ def _answer_stay(session, trip, question, context, on, focus, intent) -> Answer:
     )
 
     text = (
-        f"You have {len(saved)} saved stay(s) and {len(knowledge)} saved recommendation(s) "
-        f"for {where}. I have not checked availability or prices - open a provider for that."
+        f"You have {_plural(len(saved), 'saved stay')} and "
+        f"{_plural(len(knowledge), 'saved recommendation')} for {where}. "
+        "I have not checked availability or prices — open a provider for that."
     )
     return Answer(
         text=text,
@@ -520,20 +576,36 @@ def _answer_knowledge_type(session, trip, question, context, on, focus, intent) 
             )
         ).scalars()
     )
+    # Filtering by type alone answered "is Tbilisi safe?" with a note about
+    # Antigua, which reads as an answer and is not one. If the question names a
+    # place, only notes about that place count; if none do, the traveller has
+    # nothing saved about it, whatever else is in the trip.
+    # Only a confident place name may discard saved notes. "What did I save
+    # about safety?" is a question about the library, and guessing "safety" is
+    # a place would throw away the very notes being asked for.
+    subject = _place_subject(question)
+    if subject and items:
+        about_here = [i for i in items if _note_mentions(i, subject)]
+        if not about_here:
+            return _answer_from_the_web(question, prefer=wanted[0])
+        items = about_here
+
     if not items:
-        return Answer(
-            text=f"You have not saved any {intent} notes for this trip yet.",
-            tools_used=["knowledge:filter"],
-        )
+        # Nothing saved of this kind. The free guide has a section for exactly
+        # this - "Stay safe" is a safety note, "Get in" is transport - so the
+        # right part of it can be handed back without anything having to infer
+        # what a paragraph is about.
+        return _answer_from_the_web(question, prefer=wanted[0])
 
     disclaimers = [INFERENCE_NOTE]
     if intent == "border":
         disclaimers = [OFFICIAL_NOTE]
 
     oldest = min((i.source_date for i in items if i.source_date), default=None)
-    text = f"You saved {len(items)} {intent} note(s)."
+    text = f"You saved {_plural(len(items), f'{intent} note')}."
     if oldest:
-        text += f" The oldest is from {oldest.isoformat()} - check whether it still holds."
+        when = oldest.strftime("%-d %b %Y")
+        text += f" The oldest is from {when} — check whether it still holds."
 
     return Answer(
         text=text,
@@ -544,11 +616,153 @@ def _answer_knowledge_type(session, trip, question, context, on, focus, intent) 
     )
 
 
+def _note_mentions(item: KnowledgeItem, subject: str) -> bool:
+    """Whether a saved note is about the place that was asked about.
+
+    Matched on the note's own scope first, then its words. Loose on purpose: a
+    note scoped to "Antigua" should answer a question about "Antigua
+    Guatemala", and the cost of a false match here is one irrelevant card
+    rather than a wrong answer to a safety question.
+    """
+    haystack = normalize_name(
+        " ".join(filter(None, [item.destination_scope, item.title, item.body]))
+    )
+    needle = normalize_name(subject)
+    if not needle:
+        return False
+    return any(word in haystack for word in needle.split() if len(word) > 3)
+
+
+def _answer_from_the_web(question: str, prefer: KnowledgeType | None = None) -> Answer:
+    """Read the open web, when the traveller's own library has nothing.
+
+    Everything that comes back is labelled as the web's rather than theirs,
+    graded below anything they saved, and dropped entirely if it arrives with
+    no quote behind it. A search that fails returns nothing and says so, rather
+    than letting a network problem look like a place nobody has written about.
+    """
+    subject = _subject_of(question)
+    if not subject:
+        return Answer(
+            text=(
+                "I could not match that to anything you saved, and I am not sure what to "
+                "look up. Name a place and I will read what people have written about it."
+            ),
+            disclaimers=["Answers come from your saved records first."],
+            tools_used=["knowledge:search", "places:search"],
+        )
+
+    # The free travel guide first. It needs no key, no account and no quota,
+    # and its sections already carry the meaning this app's knowledge types
+    # carry - so it is both the cheaper source and the better one. The search
+    # engine is the fallback, and only exists if somebody configured one.
+    guide = get_travel_wiki().guide(subject)
+    cards = guide_cards(guide)
+    if cards and prefer is not None:
+        # Asked about safety, lead with the safety section rather than with
+        # sightseeing. The rest still follows, because a traveller reading
+        # about one thing usually wants the others too.
+        cards.sort(key=lambda c: c.get("knowledge_type") != prefer)
+    if cards:
+        # Asked about one thing and the guide covers everything but that, say
+        # so. Leading with a section about something else, silently, reads as
+        # an answer to a question nobody asked.
+        missing = prefer is not None and not any(
+            c.get("knowledge_type") == prefer for c in cards
+        )
+        said = (
+            f"Nothing saved about {guide.title} yet. This is from a free travel guide "
+            "rather than from you."
+        )
+        if missing:
+            said = (
+                f"Nothing saved about {guide.title}, and the free guide has nothing on "
+                f"{prefer.value} there either. Here is what it does cover."
+            )
+        return Answer(
+            text=said,
+            cards=cards,
+            citations=[{"url": guide.url, "title": guide.title, "host": "en.wikivoyage.org"}],
+            disclaimers=[guide_disclaimer(guide.title)],
+            tools_used=["knowledge:search", "places:search", "guide:wikivoyage"],
+        )
+
+    results = get_web_search().search(subject)
+    cards = web_cards(results)
+
+    if not cards:
+        return Answer(
+            text=(
+                f"Nothing saved about {subject}, and nothing I could read about it either. "
+                "A travel guide covers destinations rather than single businesses, so try "
+                "the town it is in - or share a reel about it and it becomes yours."
+            ),
+            disclaimers=["Answers come from your saved records first."],
+            tools_used=["knowledge:search", "places:search", "guide:wikivoyage", "web:search"],
+        )
+
+    return Answer(
+        text=(
+            f"Nothing saved about {subject} yet, so this is from the web rather than from you."
+        ),
+        cards=cards,
+        citations=[{"url": c["url"], "title": c["title"], "host": c["host"]} for c in cards],
+        disclaimers=[web_disclaimer(len(cards))],
+        tools_used=["knowledge:search", "places:search", "guide:wikivoyage", "web:search"],
+    )
+
+
+#: Capitalised words that are still not place names.
+_NOT_A_PLACE = {"i", "im", "id", "ive", "ill", "the", "a", "an", "is", "it"}
+
+#: Words that are never the thing being asked about.
+_NOT_A_SUBJECT = {
+    "what", "where", "when", "why", "how", "who", "which", "there", "here",
+    "about", "should", "could", "would", "there's", "thing", "things", "some",
+    "good", "best", "nice", "much", "many", "does", "doing", "have", "with",
+    "from", "into", "that", "this", "these", "those", "like", "anything",
+}
+
+
+def _place_subject(question: str) -> str:
+    """A place name the question names, or nothing.
+
+    Only capitalised words past the first count, because a place name is
+    capitalised in every language this app is likely to meet in Latin script.
+    Deliberately returns nothing rather than guessing: this answer decides
+    whether saved notes are discarded, and a guess is far too weak for that.
+    """
+    words = re.findall(r"[\w\u00C0-\u024F']+", question)
+    proper = [
+        w
+        for w in words[1:]
+        # "I" is capitalised and is not a place. Nor is a single letter of any
+        # kind, and nor is a word that only starts a sentence.
+        if w[:1].isupper() and len(w) > 1 and w.casefold() not in _NOT_A_PLACE
+    ]
+    return " ".join(proper)
+
+
+def _subject_of(question: str) -> str:
+    """The thing a question is probably about, for looking it up.
+
+    A confident place name first; otherwise the longest ordinary word, which
+    is a guess. A wrong guess here costs one lookup that returns nothing
+    useful, which is why it is allowed here and not in `_place_subject`.
+    """
+    named = _place_subject(question)
+    if named:
+        return named
+    words = re.findall(r"[\w\u00C0-\u024F']+", question)
+    ordinary = [w for w in words if len(w) > 3 and w.casefold() not in _NOT_A_SUBJECT]
+    return max(ordinary, key=len, default="")
+
+
 def _answer_general(session, trip, question, context, on, focus, intent) -> Answer:
     if focus is not None:
         return _answer_why(session, trip, question, context, on, focus, intent)
 
-    tokens = {t for t in normalize_name(question).split() if len(t) > 3}
+    tokens = {t for t in normalize_name(question).split() if len(t) > 3} - _QUESTION_WORDS
     items = list(
         session.execute(
             select(KnowledgeItem).where(
@@ -556,32 +770,47 @@ def _answer_general(session, trip, question, context, on, focus, intent) -> Answ
             )
         ).scalars()
     )
+    places = _search_places(session, trip, tokens)
+    place_words = {t for tp in places for t in normalize_name(tp.place.name).split()}
     scored = [
         (item, len(tokens & {t for t in normalize_name(f"{item.title} {item.body or ''}").split()}))
         for item in items
     ]
-    hits = [item for item, score in sorted(scored, key=lambda p: -p[1]) if score > 0][:5]
-
-    places = _search_places(session, trip, tokens)
+    # One shared word is chance; two, or a saved place's name, is a match.
+    hits = [
+        item
+        for item, score in sorted(scored, key=lambda p: -p[1])
+        if score >= 2 or (score >= 1 and place_words & set(normalize_name(item.title).split()))
+    ][:5]
 
     if not hits and not places:
-        return Answer(
-            text=(
-                "I could not match that to anything you saved. I only answer from your own "
-                "trip records, so try a place name, or capture something about it first."
-            ),
-            disclaimers=["Answers are limited to your saved trip records."],
-            tools_used=["knowledge:search", "places:search"],
-        )
+        # Nothing saved about this. Until the web was reachable this was a dead
+        # end - true, and useless to someone still deciding where to go. The
+        # library is still answered from first; this is only what happens when
+        # the library has nothing at all.
+        return _answer_from_the_web(question)
 
     return Answer(
         text=(
-            f"Found {len(places)} saved place(s) and {len(hits)} saved note(s) matching that."
+            f"Found {_plural(len(places), 'saved place')} and "
+            f"{_plural(len(hits), 'saved note')} matching that."
         ),
         cards=[_place_card(tp) for tp in places] + [_knowledge_card(i) for i in hits],
         citations=[c for c in (_cite_source(session, i.source_id) for i in hits) if c],
         tools_used=["knowledge:search", "places:search"],
     )
+
+
+# Words that ask, not name: never a match on their own.
+_QUESTION_WORDS = {
+    "about", "tell", "what", "where", "which", "when", "should", "could", "would", "there",
+    "this", "that", "these", "those", "have", "with", "from", "into", "know", "anything",
+    "something", "saved", "save", "trip", "place", "places", "again", "more", "some",
+}
+
+
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
 
 def _search_places(session: Session, trip: Trip, tokens: set[str]) -> list[TripPlace]:
@@ -599,7 +828,7 @@ def _search_places(session: Session, trip: Trip, tokens: set[str]) -> list[TripP
 
 
 def _place_by_name(session: Session, trip: Trip, question: str) -> TripPlace | None:
-    tokens = {t for t in normalize_name(question).split() if len(t) > 2}
+    tokens = {t for t in normalize_name(question).split() if len(t) > 2} - _QUESTION_WORDS
     matches = _search_places(session, trip, tokens)
     return matches[0] if matches else None
 

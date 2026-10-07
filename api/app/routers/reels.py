@@ -19,7 +19,22 @@ from app.models.capture import Source, SourcePlaceEvidence
 from app.models.core import Destination, Trip
 from app.models.enums import PlaceStatus
 from app.models.places import Place, TripPlace
-from app.schemas.api import ReelClip, ReelSpot
+from app.schemas.api import (
+    CityBreakdownResponse,
+    CityPlaceResponse,
+    CountrySummary,
+    GlobeCountrySummary,
+    ReelClip,
+    ReelSpot,
+)
+from app.services.cities import cities_in_country, places_in_city
+from app.services.countries import (
+    UNKNOWN_COUNTRY,
+    globe_countries,
+    normalise_country,
+    tally_countries,
+)
+from app.services.facets import activities_for
 from app.services.reels import clip_window, is_playable, is_video_source
 
 router = APIRouter(tags=["reels"])
@@ -52,10 +67,171 @@ def _rows(session: Session, trip: Trip, *, include_archived: bool = False):
 
 
 def _destinations(session: Session, trip: Trip) -> dict[str, Destination]:
+    # In travelling order, because the globe draws the trip as a line through
+    # them. Unordered, the database returns them as they were written, so a
+    # country added late sits at the end of the route however early it is
+    # actually visited.
     rows = session.execute(
-        select(Destination).where(Destination.trip_id == trip.id)
+        select(Destination)
+        .where(Destination.trip_id == trip.id)
+        .order_by(Destination.position)
     ).scalars()
     return {destination.id: destination for destination in rows}
+
+
+@router.get("/countries", response_model=list[GlobeCountrySummary])
+def list_globe_countries(
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> list[GlobeCountrySummary]:
+    """Every country this trip touches, placed for the globe.
+
+    A country the traveller planned but never saved a reel about still belongs
+    here: the globe is how a country gets opened, so one missing from it is one
+    they cannot reach.
+    """
+    destinations = list(_destinations(session, trip).values())
+    found = globe_countries(
+        destinations,
+        _rows(session, trip),
+        is_video=is_video_source,
+        is_playable=is_playable,
+        is_found=lambda source: bool(getattr(source, "found", False)),
+    )
+    return [
+        GlobeCountrySummary(
+            key=c.key,
+            name=c.name,
+            lat=c.lat,
+            lon=c.lon,
+            in_route=c.in_route,
+            stop_count=c.stop_count,
+            place_count=c.place_count,
+            video_count=c.video_count,
+            playable_count=c.playable_count,
+            found_count=c.found_count,
+        )
+        for c in found
+    ]
+
+
+@router.get("/countries/{country_key}/cities", response_model=list[CityBreakdownResponse])
+def list_country_cities(
+    country_key: str,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> list[CityBreakdownResponse]:
+    """The cities of one country, for the map inside it.
+
+    A country the traveller has nothing in answers with an empty list rather
+    than a 404: pressing somewhere unexplored is the point, not a mistake.
+    """
+    destinations = list(_destinations(session, trip).values())
+    found = cities_in_country(
+        country_key,
+        destinations,
+        _rows(session, trip),
+        is_video=is_video_source,
+        is_playable=is_playable,
+        is_found=lambda source: bool(getattr(source, "found", False)),
+    )
+    return [
+        CityBreakdownResponse(
+            key=c.key,
+            name=c.name,
+            lat=c.lat,
+            lon=c.lon,
+            in_route=c.in_route,
+            destination_id=c.destination_id,
+            explanation=c.explanation,
+            explanation_source=c.explanation_source,
+            place_count=c.place_count,
+            video_count=c.video_count,
+            playable_count=c.playable_count,
+            found_count=c.found_count,
+            kinds=c.kinds,
+        )
+        for c in found
+    ]
+
+
+@router.get(
+    "/countries/{country_key}/cities/{city_key}/places",
+    response_model=list[CityPlaceResponse],
+)
+def list_city_places(
+    country_key: str,
+    city_key: str,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+    kind: str | None = Query(default=None),
+    activity: str | None = Query(default=None),
+) -> list[CityPlaceResponse]:
+    """Everything saved in one city, tagged for the filter strip.
+
+    `kind` is what a place is, `activity` is what you do there. They are two
+    columns because Tremendo Hostel answers to both, and a chip reads whichever
+    one it belongs to without the traveller having to know which.
+    """
+    found = places_in_city(
+        country_key,
+        city_key,
+        _rows(session, trip),
+        is_video=is_video_source,
+        is_playable=is_playable,
+        tag=activities_for,
+        is_found=lambda source: bool(getattr(source, "found", False)),
+    )
+    if kind:
+        wanted = kind.strip().lower()
+        found = [p for p in found if p.kind.lower() == wanted]
+    if activity:
+        wanted = activity.strip().lower()
+        found = [p for p in found if wanted in p.activities]
+
+    return [
+        CityPlaceResponse(
+            trip_place_id=p.trip_place_id,
+            place_id=p.place_id,
+            name=p.name,
+            kind=p.kind,
+            activities=p.activities,
+            status=p.status,
+            lat=p.lat,
+            lon=p.lon,
+            video_count=p.video_count,
+            playable_count=p.playable_count,
+            found_count=p.found_count,
+            quote=p.quote,
+        )
+        for p in found
+    ]
+
+
+@router.get("/reels/countries", response_model=list[CountrySummary])
+def list_countries(
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> list[CountrySummary]:
+    """Every country this trip has video in, most-evidenced first.
+
+    The one scope that could not be asked for until now: `_scope_label` returns
+    a destination when a place has one, so a place inside a destination never
+    grouped under its country.
+    """
+    tallies = tally_countries(
+        _rows(session, trip), is_video=is_video_source, is_playable=is_playable
+    )
+    return [
+        CountrySummary(
+            key=t.key,
+            name=t.name,
+            place_count=t.place_count,
+            video_count=t.video_count,
+            playable_count=t.playable_count,
+        )
+        for t in tallies
+    ]
 
 
 @router.get("/reels/spots", response_model=list[ReelSpot])
@@ -64,6 +240,7 @@ def list_spots(
     trip: Trip = Depends(current_trip),
     destination_id: str | None = Query(default=None),
     scope: str | None = Query(default=None),
+    country: str | None = Query(default=None),
 ) -> list[ReelSpot]:
     """Which spots have video behind them, grouped by where they are.
 
@@ -77,6 +254,13 @@ def list_spots(
         if not is_video_source(source):
             continue
         label = _scope_label(trip_place, place, destinations)
+        if country is not None:
+            wanted = normalise_country(country)
+            # "Country not known" is how the empty key is spelled to a person.
+            if wanted == normalise_country(UNKNOWN_COUNTRY):
+                wanted = ""
+            if normalise_country(place.country) != wanted:
+                continue
         if destination_id and trip_place.destination_id != destination_id:
             continue
         if scope and label.casefold() != scope.casefold():
