@@ -202,9 +202,7 @@ export default function SaveSheet({
             >
               <Upload size={20} strokeWidth={1.9} className="dimmer" />
               <span className="t-md">Choose photos, videos or a plan</span>
-              <span className="t-sm dimmer">
-                A plan can be a Word file, a PDF or a saved web page. Only what you pick is uploaded
-              </span>
+              <span className="t-sm dimmer">A plan: Word, PDF or a saved web page</span>
               <input
                 type="file"
                 multiple
