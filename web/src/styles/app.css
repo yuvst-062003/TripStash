@@ -1022,11 +1022,8 @@ textarea.input { min-height: 76px; resize: vertical; }
   left: calc(100% + 8px);
   transform: translateY(-50%);
   /* Consecutive stops can be an hour apart and land almost on top of each
-     other; alternating sides keeps their names apart without hiding any. */
-}
-.stoppin--left .stoppin__label {
-  left: auto;
-  right: calc(100% + 8px);
+     other; alternating sides keeps their names apart, and a name that would
+     still collide tries the other side before it is hidden. */
   padding: 3px var(--s-2);
   border-radius: var(--r-sm);
   background: rgba(6, 14, 28, 0.78);
@@ -1036,6 +1033,15 @@ textarea.input { min-height: 76px; resize: vertical; }
   letter-spacing: 0;
   white-space: nowrap;
   pointer-events: none;
+}
+.stoppin--left .stoppin__label,
+.stoppin__label[data-flip] {
+  left: auto;
+  right: calc(100% + 8px);
+}
+.stoppin--left .stoppin__label[data-flip] {
+  right: auto;
+  left: calc(100% + 8px);
 }
 
 /* ---- The sheet holding the itinerary ------------------------------------- */

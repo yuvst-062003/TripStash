@@ -58,6 +58,57 @@ function pin(index: number, stop: RouteStop, total: number): L.DivIcon {
   })
 }
 
+/**
+ * Hide the stop names that would land on top of one another.
+ *
+ * Twenty stops seen from a continent away put a dozen names in one thumbnail
+ * of map, and a pile of overlapping words says nothing. Names are kept in
+ * route order - the stop you are at first, then the earlier stop wins - and a
+ * name that would overlap one already kept is hidden until you zoom in far
+ * enough to separate them. The numbered pin always stays, so no stop vanishes.
+ */
+function declutterLabels(container: HTMLElement | null) {
+  if (!container) return
+  const labels = [...container.querySelectorAll<HTMLElement>('.stoppin__label')]
+  labels.forEach((label) => (label.style.visibility = 'visible'))
+  const ordered = [
+    ...labels.filter((l) => l.closest('.stoppin--current')),
+    ...labels.filter((l) => !l.closest('.stoppin--current')),
+  ]
+  const kept: DOMRect[] = []
+  const frame = container.getBoundingClientRect()
+  const pins = [...container.querySelectorAll<HTMLElement>('.stoppin')].map((p) =>
+    p.getBoundingClientRect(),
+  )
+  const overlaps = (a: DOMRect, b: DOMRect) =>
+    a.left < b.right + 2 && a.right > b.left - 2 && a.top < b.bottom + 2 && a.bottom > b.top - 2
+  const blocked = (label: HTMLElement) => {
+    const box = label.getBoundingClientRect()
+    const own = label.parentElement?.getBoundingClientRect()
+    const hitsPin = pins.some((pin) => own && !sameRect(pin, own) && overlaps(box, pin))
+    // A name running off the screen is as unreadable as one under another.
+    const offScreen = box.left < frame.left + 4 || box.right > frame.right - 4
+    return offScreen || hitsPin || kept.some((other) => overlaps(box, other))
+  }
+  for (const label of ordered) {
+    label.removeAttribute('data-flip')
+    if (blocked(label)) {
+      // Try the other side of its own pin before giving up on the name.
+      label.setAttribute('data-flip', '')
+      if (blocked(label)) {
+        label.removeAttribute('data-flip')
+        label.style.visibility = 'hidden'
+        continue
+      }
+    }
+    kept.push(label.getBoundingClientRect())
+  }
+}
+
+function sameRect(a: DOMRect, b: DOMRect) {
+  return a.left === b.left && a.top === b.top
+}
+
 function escapeHtml(value: string): string {
   return value.replace(
     /[&<>"']/g,
@@ -143,6 +194,7 @@ export default function TripHome() {
   const landRef = useRef<L.GeoJSON | null>(null)
   // Each route country's outline bounds, so a press can frame the country.
   const boundsRef = useRef<Map<string, L.LatLngBounds>>(new Map())
+  const framedRef = useRef(false)
 
   // Which countries the route touches, so the ground can say so.
   const routeCountries = useMemo(
@@ -173,6 +225,7 @@ export default function TripHome() {
     tiles.addTo(map)
     layerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
+    map.on('zoomend moveend', () => declutterLabels(containerRef.current))
     // Leaflet caches the container size at construction; after layout settles
     // that figure is stale, which throws off both tiles and fitBounds.
     const resize = () => map.invalidateSize({ animate: false })
@@ -256,6 +309,7 @@ export default function TripHome() {
       const country = stop.destination.country
       if (country) marker.on('click', () => setFocus(country))
     })
+    requestAnimationFrame(() => declutterLabels(containerRef.current))
   }, [placed])
 
   // The camera: the whole route, or the country you pressed. Kept apart from
@@ -290,6 +344,13 @@ export default function TripHome() {
         ? L.latLngBounds(inCountry).pad(inCountry.length === 1 ? 2 : 0.5)
         : (boundsRef.current.get(focus) ?? null)
       if (bounds) map.flyToBounds(bounds, { ...padding, maxZoom: 9, duration: 1.1 })
+      return
+    }
+    // The first framing is instant: an animated flight started before the map
+    // has its real size lands on the wrong place. Later moves fly.
+    if (!framedRef.current) {
+      framedRef.current = true
+      map.fitBounds(L.latLngBounds(points), { ...padding, maxZoom: 9, animate: false })
       return
     }
     map.flyToBounds(L.latLngBounds(points), { ...padding, maxZoom: 9, duration: 0.9 })
