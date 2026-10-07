@@ -275,6 +275,11 @@ function Slide({ clip, active, muted, whole, onToggleWhole, onVisible }: SlidePr
           <Icon size={16} />
           <span className="t-lg clamp-1">{clip.place_name}</span>
         </Link>
+        {clip.found && (
+          <span className="cliptag cliptag--found cliptag--night">
+            Found, not yours — keep it from Saved → Inbox
+          </span>
+        )}
         {meta.length > 0 && <p className="slide__meta clamp-1">{meta.join(' · ')}</p>}
         {caption && <p className="slide__quote clamp-3">{caption}</p>}
 

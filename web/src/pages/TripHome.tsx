@@ -301,9 +301,9 @@ export default function TripHome() {
       <div className="trip__over">
         <header className="trip__head">
           <div className="trip__who grow">
-            <span className="trip__avatar" aria-hidden="true">
+            <Link className="trip__avatar" to="/profile" aria-label="You: your picks and sources">
               {(trip?.name ?? 'T').slice(0, 1).toUpperCase()}
-            </span>
+            </Link>
             <div className="trip__titles">
               <div className="trip__owner">Your trip</div>
               <div className="trip__name clamp-1">{trip?.name ?? 'Trip'}</div>

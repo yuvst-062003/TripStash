@@ -283,6 +283,8 @@ def list_spots(
                 latest_saved_at=None,
             )
         spot.clip_count += 1
+        if getattr(source, "found", False):
+            spot.found_count += 1
         if is_playable(source):
             spot.playable_count += 1
         if spot.latest_saved_at is None or (
@@ -361,6 +363,7 @@ def list_clips(
                 quote=evidence.quote,
                 confidence=evidence.confidence,
                 saved_at=source.created_at,
+                found=bool(getattr(source, "found", False)),
             )
         )
 

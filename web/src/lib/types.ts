@@ -413,9 +413,18 @@ export interface ReelSpot {
   clip_count: number
   playable_count: number
   latest_saved_at: string | null
+  /** How many of clip_count the app found; never yours until kept. */
+  found_count: number
+}
+
+export interface ActivityPicks {
+  available: { slug: string; label: string }[]
+  picked: string[]
 }
 
 export interface ReelClip {
+  /** True when the app went looking for this clip; you did not save it. */
+  found?: boolean
   id: string
   source_id: string
   trip_place_id: string

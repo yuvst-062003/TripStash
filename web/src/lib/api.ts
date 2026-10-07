@@ -5,6 +5,7 @@
  * screens can label stale live data instead of presenting it as current.
  */
 import type {
+  ActivityPicks,
   AskResponse,
   Candidate,
   HomePayload,
@@ -44,6 +45,33 @@ export const token = {
   clear: () => localStorage.removeItem(TOKEN_KEY),
 }
 
+/**
+ * The traveller's own timezone, as an IANA name.
+ *
+ * A named zone rather than an offset because a zone knows about daylight
+ * saving: Israel is UTC+3 in September and UTC+2 in December.
+ */
+function travellerZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null
+  } catch {
+    return null
+  }
+}
+
+/** Turns FastAPI's `detail` — a string, or Pydantic's list of field errors — into a sentence. */
+function describeDetail(detail: unknown): string | null {
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const text = detail
+      .map((entry: { msg?: string }) => entry.msg?.replace(/^Value error, /, '') ?? null)
+      .filter(Boolean)
+      .join(' ')
+    return text || null
+  }
+  return null
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
@@ -60,6 +88,10 @@ async function request<T>(
   const accessToken = token.get()
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
+  // What day it is where the traveller is. Without this the server counts days
+  // in UTC, which is a day out for anyone east of it after midnight.
+  const zone = travellerZone()
+  if (zone) headers.set('X-TripStash-Timezone', zone)
 
   const response = await fetch(url.toString(), { ...init, headers })
   const fromCache = response.headers.get('x-tripstash-offline') === 'true'
@@ -73,7 +105,7 @@ async function request<T>(
     let detail = `Request failed (${response.status})`
     try {
       const body = await response.json()
-      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)
+      detail = describeDetail(body.detail) ?? detail
     } catch {
       /* keep the generic message */
     }
@@ -134,6 +166,20 @@ export const api = {
     if (note) form.append('note', note)
     return request<SourceSummary[]>('/api/v1/sources/upload', { method: 'POST', body: form })
   },
+  // What this trip is about. Picks filter and order; they never score.
+  activities: () => get<ActivityPicks>('/api/v1/activities'),
+  setActivities: (slugs: string[]) =>
+    request<ActivityPicks>('/api/v1/activities', { method: 'PUT', body: JSON.stringify({ slugs }) }),
+  // Go looking for video about somewhere. Everything it brings back is found,
+  // not saved, and counts for nothing until it is kept.
+  find: (place: string, activity?: string) =>
+    post<{
+      query: string
+      found: number
+      already_had: number
+      nothing_reason: string | null
+      sources: SourceSummary[]
+    }>('/api/v1/find', { place, activity: activity ?? null }),
   sources: (status?: string) => get<SourceSummary[]>('/api/v1/sources', { status }),
   // Hashes only. Asking costs kilobytes where uploading would cost gigabytes.
   knownFingerprints: (fingerprints: string[]) =>

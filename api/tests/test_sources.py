@@ -226,3 +226,12 @@ def test_a_refused_host_is_never_asked_for_a_guide(monkeypatch):
 
     assert travel_wiki.WikivoyageTravelWiki()._get({"action": "query"}) == {}
     assert calls == []
+
+
+def test_find_hands_back_the_clips_it_found(client, auth, trip):
+    """A count alone left Explore unable to show what it had read."""
+    response = client.post("/api/v1/find", headers=auth, json={"place": "Antigua"})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["sources"]) == body["found"]

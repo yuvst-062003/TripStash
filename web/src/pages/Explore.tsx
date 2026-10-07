@@ -19,6 +19,7 @@ import { useAsync } from '../lib/hooks'
 import type { Scope } from '../lib/types'
 import { type CountryFeature, loadCountries, matchesCountry } from '../lib/basemap'
 import { ErrorNote, Note, SkeletonRows } from '../components/ui'
+import ExploreSearch from '../components/ExploreSearch'
 import { ChevronRight, Film, MapPin, Route as RouteIcon } from '../components/icons'
 
 const WORLD_VIEW: [number, number] = [10, -30]
@@ -154,6 +155,9 @@ export default function Explore() {
         <section className="tripsheet tripsheet--fill">
           <div className="tripsheet__grip" aria-hidden="true" />
           <div className="tripsheet__body">
+            {/* Somewhere you have nothing about yet: name it and it reads. */}
+            <ExploreSearch />
+
             {countries.loading && !countries.data && <SkeletonRows rows={4} />}
             {countries.error && !countries.data && (
               <ErrorNote message={countries.error} onRetry={countries.reload} />

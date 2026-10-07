@@ -463,6 +463,9 @@ class ReelSpot(ApiModel):
     clip_count: int
     playable_count: int
     latest_saved_at: datetime | None
+    #: How many of `clip_count` the app found rather than the traveller saved.
+    #: Shown apart, never as yours, until they are kept.
+    found_count: int = 0
 
 
 class ReelClip(ApiModel):
@@ -497,6 +500,8 @@ class ReelClip(ApiModel):
     quote: str | None
     confidence: float
     saved_at: datetime | None
+    #: True when the app went looking for this clip; the traveller did not save it.
+    found: bool = False
 
 
 # ---------------------------------------------------------- country and picks
@@ -598,4 +603,7 @@ class FindResponse(ApiModel):
     # Set when the search produced nothing, so the screen says why rather than
     # rendering an empty shelf.
     nothing_reason: str | None = None
+    # The clips themselves, so the screen can show what was found rather than
+    # only how many. Each is marked found and counts for nothing until kept.
+    sources: list[SourceResponse] = []
     sources: list[SourceResponse]

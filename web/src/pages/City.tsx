@@ -12,6 +12,7 @@ import { Link, useParams } from 'react-router-dom'
 import L from 'leaflet'
 import { api } from '../lib/api'
 import { useScreenContext } from '../lib/context'
+import ClipCounts from '../components/ClipCounts'
 import { useAsync } from '../lib/hooks'
 import type { KnowledgeItem, MapFeature, ReelSpot } from '../lib/types'
 import { loadCountries } from '../lib/basemap'
@@ -21,7 +22,6 @@ import {
   ArrowLeft,
   CATEGORY_ICON,
   ChevronRight,
-  Film,
   KNOWLEDGE_ICON,
   MapPin,
   Play,
@@ -241,9 +241,10 @@ export default function City() {
                   <Play size={16} />
                 </span>
                 <span className="clipcard__name clamp-2">{spot.name}</span>
-                <span className="clipcard__count num">
-                  <Film size={12} /> {spot.playable_count}
-                </span>
+                <ClipCounts
+                  yours={spot.clip_count - (spot.found_count ?? 0)}
+                  found={spot.found_count ?? 0}
+                />
               </Link>
             ))}
           </div>
