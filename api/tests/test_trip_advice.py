@@ -56,3 +56,28 @@ def test_suggestions_after_someone_elses_stop_is_a_404(client, auth, trip):
     response = client.get("/api/v1/trips/current/suggestions?after=nope", headers=auth)
 
     assert response.status_code == 404
+
+
+def test_discover_labels_every_voice_and_keeps_gringo_apart(client, auth, trip):
+    stop = client.get("/api/v1/trips/current", headers=auth).json()["destinations"][0]["id"]
+
+    response = client.get(f"/api/v1/trips/current/discover?after={stop}", headers=auth)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert set(body) == {"gringo", "web", "reddit", "youtube", "live"}
+    assert body["live"] == {"gringo": False, "web": False, "reddit": False, "youtube": False}
+    for source, voices in body.items():
+        if source == "live":
+            continue
+        for voice in voices:
+            assert voice["source"] == source
+            assert voice["url"].startswith("http")
+    assert all(not v["by"].endswith("gringo.co.il") for v in body["web"])
+
+
+def test_gringo_is_never_fetched_directly():
+    """Its robots.txt turns away every bot but the search engines."""
+    from app.adapters.content import FakeContentSource
+
+    assert not FakeContentSource().may_fetch("https://gringo.co.il/guatemala").allowed

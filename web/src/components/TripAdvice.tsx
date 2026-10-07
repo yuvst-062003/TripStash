@@ -11,9 +11,9 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAsync } from '../lib/hooks'
-import type { RouteCheck } from '../lib/types'
+import type { Discover, RouteCheck, Voice } from '../lib/types'
 import { SkeletonRows } from './ui'
-import { Lightbulb, Plus, Sparkles, X } from './icons'
+import { ArrowUpRight, Lightbulb, Plus, Sparkles, X } from './icons'
 
 const DISMISSED_KEY = 'tripstash.dismissed-checks'
 
@@ -195,6 +195,70 @@ export function StopSuggestions({
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+const SOURCE_LABEL: Record<Voice['source'], string> = {
+  gringo: 'Gringo',
+  reddit: 'Reddit travellers',
+  youtube: 'YouTube travellers',
+  web: 'Around the web',
+}
+const SOURCE_ORDER: Voice['source'][] = ['gringo', 'reddit', 'youtube', 'web']
+
+/**
+ * What travellers say about the stretch after a stop.
+ *
+ * Read here, kept there: each is a snippet with a link to where it was said,
+ * labelled by source. Gringo arrives through a search engine because its own
+ * rules turn other bots away. A source that is not connected says so rather
+ * than showing a stand-in as if it were real.
+ */
+export function TravellerVoices({ after }: { after: string | undefined }) {
+  const state = useAsync(() => api.discover(after), [after])
+  if (state.loading && !state.data) return <SkeletonRows rows={2} />
+  const data: Discover | null = state.data
+  if (!data) return null
+  const offline = SOURCE_ORDER.filter((source) => !data.live[source])
+
+  return (
+    <div className="voices">
+      <p className="t-xs dim">
+        <Sparkles size={12} /> What travellers say about this stretch
+      </p>
+      {SOURCE_ORDER.filter((source) => data.live[source] && data[source].length).map((source) => (
+        <section key={source} className="voices__group">
+          <h4 className={`voices__source voices__source--${source}`}>{SOURCE_LABEL[source]}</h4>
+          {data[source].map((voice) => (
+            <a
+              key={voice.url}
+              className="voice"
+              href={voice.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span className="voice__title clamp-2" dir="auto">
+                {voice.title}
+              </span>
+              {voice.snippet && (
+                <span className="voice__snippet clamp-3" dir="auto">
+                  “{voice.snippet}”
+                </span>
+              )}
+              <span className="t-xs dim">
+                {voice.by} <ArrowUpRight size={11} />
+              </span>
+            </a>
+          ))}
+        </section>
+      ))}
+      {offline.length > 0 && (
+        <p className="t-sm dimmer">
+          Not connected yet: {offline.map((s) => SOURCE_LABEL[s]).join(', ')}. They read once their
+          keys are set on the server.
+        </p>
+      )}
     </div>
   )
 }

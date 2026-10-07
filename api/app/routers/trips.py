@@ -24,6 +24,7 @@ from app.schemas.api import (
     TripUpdate,
 )
 from app.services import itinerary
+from app.services.discover import discover_between
 from app.services.trip_advice import route_checks, stop_suggestions
 
 router = APIRouter(prefix="/trips", tags=["trip"])
@@ -297,3 +298,18 @@ def get_stop_suggestions(
     if after and anchor is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Destination not found.")
     return [s.to_dict() for s in stop_suggestions(session, trip, anchor)]
+
+
+@router.get("/current/discover")
+def get_discover(
+    after: str | None = None,
+    trip: Trip = Depends(current_trip),
+) -> dict:
+    """What travellers say about the stretch after a stop: Gringo, the web,
+    Reddit and YouTube, each labelled, snippet and link only."""
+    ordered = sorted(trip.destinations, key=lambda d: (d.position, d.id or ""))
+    anchor = next((d for d in ordered if d.id == after), None) if after else None
+    if after and anchor is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Destination not found.")
+    later = [d for d in ordered if anchor is not None and d.position > anchor.position]
+    return discover_between(anchor, later[0] if later else None)

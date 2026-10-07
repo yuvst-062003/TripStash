@@ -22,7 +22,7 @@ import type { HomePayload, Route, RouteCheck, RouteStop } from '../lib/types'
 import { type CountryFeature, loadCountries, matchesCountry } from '../lib/basemap'
 import { CacheNote, ErrorNote, Note, SkeletonRows } from '../components/ui'
 import CityCards from '../components/CityCards'
-import { StopIdeas, StopSuggestions, TripChecks } from '../components/TripAdvice'
+import { StopIdeas, StopSuggestions, TravellerVoices, TripChecks } from '../components/TripAdvice'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -723,6 +723,7 @@ function AddStop({
       </button>
       <div className="addstop__suggest">
         <StopSuggestions after={afterId} onAdd={onAdd} />
+        <TravellerVoices after={afterId} />
       </div>
     </form>
   )

@@ -458,6 +458,23 @@ export interface StopSuggestion {
   places: string[]
 }
 
+/** One thing a traveller said elsewhere: labelled, a snippet and a link. */
+export interface Voice {
+  source: 'gringo' | 'web' | 'reddit' | 'youtube'
+  title: string
+  snippet: string
+  url: string
+  by: string
+}
+
+export interface Discover {
+  gringo: Voice[]
+  web: Voice[]
+  reddit: Voice[]
+  youtube: Voice[]
+  live: Record<'gringo' | 'web' | 'reddit' | 'youtube', boolean>
+}
+
 export interface Recommendation {
   query: string
   summary: string

@@ -108,6 +108,18 @@ def get_video_search():
 
 
 @lru_cache
+def get_reddit():
+    """`fake` is keyless; `reddit` is the official API, with a registered app."""
+    settings = get_settings()
+    if settings.reddit_provider == "reddit":
+        from app.adapters.reddit import RedditSearch
+
+        return RedditSearch(settings.reddit_client_id or "", settings.reddit_client_secret or "")
+    from app.adapters.reddit import FakeReddit
+
+    return FakeReddit()
+
+
 def get_places() -> PlacesProvider:
     return FakePlacesProvider()
 
@@ -162,6 +174,7 @@ __all__ = [
     "get_content_source",
     "get_fx",
     "get_places",
+    "get_reddit",
     "get_search",
     "get_storage",
     "get_video_search",

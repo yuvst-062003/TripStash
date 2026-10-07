@@ -6,6 +6,7 @@
  */
 import type {
   ActivityPicks,
+  Discover,
   CityBreakdown,
   Recommendation,
   RouteCheck,
@@ -177,6 +178,8 @@ export const api = {
   routeChecks: () => get<RouteCheck[]>('/api/v1/trips/current/checks'),
   stopSuggestions: (after?: string) =>
     get<StopSuggestion[]>('/api/v1/trips/current/suggestions', { after }),
+  // What travellers say about the stretch after a stop. Snippets and links only.
+  discover: (after?: string) => get<Discover>('/api/v1/trips/current/discover', { after }),
   // What you stashed for a place, ranked for now. Grounded, never a web result.
   recommend: (q: string) => get<Recommendation>('/api/v1/recommend', { q }),
   // What this trip is about. Picks filter and order; they never score.

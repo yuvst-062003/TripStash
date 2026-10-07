@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     web_search_provider: str = "fake"
     web_search_api_key: str | None = None
     youtube_region: str | None = None
+    #: `fake` is keyless; `reddit` reads Reddit's official API with an app
+    #: registered at reddit.com/prefs/apps - never the website itself.
+    reddit_provider: str = "fake"
+    reddit_client_id: str | None = None
+    reddit_client_secret: str | None = None
 
     places_api_key: str | None = None
     weather_api_key: str | None = None
