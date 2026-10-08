@@ -20,7 +20,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 
-from app.adapters import get_reddit, get_video_search, get_web_search
+from app.adapters import get_gringo_search, get_reddit, get_video_search, get_web_search
 from app.config import get_settings
 from app.models.core import Destination
 
@@ -53,7 +53,7 @@ def discover_between(after: Destination | None, nxt: Destination | None) -> dict
     # Which sources are really connected. A stand-in answers locally, and the
     # screen says "not connected" rather than letting a stand-in read as Gringo.
     live = {
-        "gringo": settings.web_search_provider != "fake",
+        "gringo": (settings.gringo_search_provider or settings.web_search_provider) != "fake",
         "web": settings.web_search_provider != "fake",
         "reddit": settings.reddit_provider != "fake",
         "youtube": settings.video_search_provider != "fake",
@@ -69,7 +69,7 @@ def discover_between(after: Destination | None, nxt: Destination | None) -> dict
     def gringo() -> list[Voice]:
         return [
             Voice("gringo", r.title, r.snippet, r.url, r.host)
-            for r in get_web_search().search(f"site:{GRINGO_HOST} {here} {country}".strip())
+            for r in get_gringo_search().search(f"site:{GRINGO_HOST} {here} {country}".strip())
             if r.host.endswith(GRINGO_HOST)
         ][:PER_SOURCE]
 

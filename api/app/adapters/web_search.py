@@ -21,7 +21,7 @@ import urllib.parse
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from app.adapters._http import get_json
+from app.adapters._http import get_json, post_json
 
 #: Long enough for a slow provider, short enough that a question does not hang.
 TIMEOUT_SECONDS = 8.0
@@ -199,3 +199,105 @@ class BraveWebSearch:
                 )
             )
         return out
+
+
+class TavilyWebSearch:
+    """Free web search: 1,000 searches a month that refill, no card on file.
+
+    With no payment method there is nothing to overspend: past the monthly
+    allowance the API refuses, and the refusal arrives here as no results.
+    """
+
+    name = "tavily"
+    endpoint = "https://api.tavily.com/search"
+
+    def __init__(self, api_key: str | None, *, timeout_seconds: float = TIMEOUT_SECONDS) -> None:
+        if not api_key:
+            raise ValueError("Tavily needs a key; set TRIPSTASH_WEB_SEARCH_API_KEY")
+        self._api_key = api_key
+        self._timeout = timeout_seconds
+
+    def search(self, query: str, limit: int = DEFAULT_LIMIT) -> list[WebResult]:
+        subject = query.strip()
+        if not subject:
+            return []
+        # `site:` is a search-engine operator; Tavily takes the domain apart.
+        domains: list[str] = []
+        words = []
+        for word in subject.split():
+            if word.startswith("site:"):
+                domains.append(word[5:])
+            else:
+                words.append(word)
+        body = {
+            "query": " ".join(words) or subject,
+            "max_results": max(1, min(limit, 20)),
+            "search_depth": "basic",  # one credit
+        }
+        if domains:
+            body["include_domains"] = domains
+        payload = post_json(
+            self.endpoint,
+            body=body,
+            # In a header, never the body or the URL, where it would be logged.
+            headers={"Authorization": f"Bearer {self._api_key}"},
+            timeout=self._timeout,
+        )
+        out: list[WebResult] = []
+        for item in payload.get("results") or []:
+            link = (item.get("url") or "").strip()
+            if not link:
+                continue
+            out.append(
+                WebResult(
+                    url=link,
+                    title=(item.get("title") or "").strip() or link,
+                    snippet=(item.get("content") or "").strip()[:400],
+                    host=host_of(link),
+                )
+            )
+        return out[:limit]
+
+
+class SerperWebSearch:
+    """Google's results, through Serper: 2,500 free searches, no card.
+
+    Chosen for Gringo in particular. Gringo's robots.txt admits Google and
+    turns every other bot away, so Google's index is the one way to see what
+    Gringo says that respects the site's own rule - and only the snippet
+    Google shows, with a link, ever reaches the screen.
+    """
+
+    name = "serper"
+    endpoint = "https://google.serper.dev/search"
+
+    def __init__(self, api_key: str | None, *, timeout_seconds: float = TIMEOUT_SECONDS) -> None:
+        if not api_key:
+            raise ValueError("Serper needs a key; set TRIPSTASH_GRINGO_SEARCH_API_KEY")
+        self._api_key = api_key
+        self._timeout = timeout_seconds
+
+    def search(self, query: str, limit: int = DEFAULT_LIMIT) -> list[WebResult]:
+        subject = query.strip()
+        if not subject:
+            return []
+        payload = post_json(
+            self.endpoint,
+            body={"q": subject, "num": max(1, min(limit, 10))},
+            headers={"X-API-KEY": self._api_key},
+            timeout=self._timeout,
+        )
+        out: list[WebResult] = []
+        for item in payload.get("organic") or []:
+            link = (item.get("link") or "").strip()
+            if not link:
+                continue
+            out.append(
+                WebResult(
+                    url=link,
+                    title=(item.get("title") or "").strip() or link,
+                    snippet=(item.get("snippet") or "").strip(),
+                    host=host_of(link),
+                )
+            )
+        return out[:limit]
