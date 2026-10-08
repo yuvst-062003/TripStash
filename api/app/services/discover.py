@@ -16,6 +16,8 @@ a stop is added only when the traveller types or picks one.
 
 from __future__ import annotations
 
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 
 from app.adapters import get_reddit, get_video_search, get_web_search
@@ -24,6 +26,8 @@ from app.models.core import Destination
 
 GRINGO_HOST = "gringo.co.il"
 PER_SOURCE = 3
+SOURCE_TIMEOUT = 12.0
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -60,36 +64,48 @@ def discover_between(after: Destination | None, nxt: Destination | None) -> dict
     stretch = f"{a} to {b}" if a and b else (a or b)
     country = (after.country if after else None) or (nxt.country if nxt else None) or ""
 
-    search = get_web_search()
-
     here = after.name if after else ""
-    gringo = [
-        Voice("gringo", r.title, r.snippet, r.url, r.host)
-        for r in search.search(f"site:{GRINGO_HOST} {here} {country}".strip())
-        if r.host.endswith(GRINGO_HOST)
-    ][:PER_SOURCE]
 
-    web = [
-        Voice("web", r.title, r.snippet, r.url, r.host)
-        for r in search.search(f"backpacking stops between {stretch}")
-        # Gringo has its own row; the same page twice is noise.
-        if not r.host.endswith(GRINGO_HOST)
-    ][:PER_SOURCE]
+    def gringo() -> list[Voice]:
+        return [
+            Voice("gringo", r.title, r.snippet, r.url, r.host)
+            for r in get_web_search().search(f"site:{GRINGO_HOST} {here} {country}".strip())
+            if r.host.endswith(GRINGO_HOST)
+        ][:PER_SOURCE]
 
-    reddit = [
-        Voice("reddit", t.title, t.excerpt, t.url, f"r/{t.subreddit}")
-        for t in get_reddit().search(stretch, limit=PER_SOURCE)
-    ]
+    def web() -> list[Voice]:
+        return [
+            Voice("web", r.title, r.snippet, r.url, r.host)
+            for r in get_web_search().search(f"backpacking stops between {stretch}")
+            # Gringo has its own row; the same page twice is noise.
+            if not r.host.endswith(GRINGO_HOST)
+        ][:PER_SOURCE]
 
-    youtube = [
-        Voice("youtube", v.title, v.description[:240], v.url, v.channel)
-        for v in get_video_search().search(f"{stretch} backpacking", limit=PER_SOURCE)
-    ]
+    def reddit() -> list[Voice]:
+        return [
+            Voice("reddit", t.title, t.excerpt, t.url, f"r/{t.subreddit}")
+            for t in get_reddit().search(stretch, limit=PER_SOURCE)
+        ]
 
-    return {
-        "gringo": [v.to_dict() for v in gringo],
-        "web": [v.to_dict() for v in web],
-        "reddit": [v.to_dict() for v in reddit],
-        "youtube": [v.to_dict() for v in youtube],
-        "live": live,
-    }
+    def youtube() -> list[Voice]:
+        return [
+            Voice("youtube", v.title, v.description[:240], v.url, v.channel)
+            for v in get_video_search().search(f"{stretch} backpacking", limit=PER_SOURCE)
+        ]
+
+    # All four at once, each on its own: the slowest source sets the wait, not
+    # the sum of them, and one that is misconfigured or down comes back empty
+    # (and not live) instead of taking the other three with it.
+    jobs = {"gringo": gringo, "web": web, "reddit": reddit, "youtube": youtube}
+    found: dict[str, list[Voice]] = {}
+    with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+        futures = {name: pool.submit(job) for name, job in jobs.items()}
+        for name, future in futures.items():
+            try:
+                found[name] = future.result(timeout=SOURCE_TIMEOUT)
+            except Exception:  # noqa: BLE001 - a broken source is an empty one
+                log.warning("discover: %s failed", name, exc_info=True)
+                found[name] = []
+                live[name] = False
+
+    return {**{name: [v.to_dict() for v in voices] for name, voices in found.items()}, "live": live}

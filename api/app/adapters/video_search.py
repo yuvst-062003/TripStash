@@ -13,10 +13,12 @@ and no network, and swapping in the real driver is configuration.
 
 from __future__ import annotations
 
-import json
+import hashlib
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+
+from app.adapters._http import get_json
 
 # search.list costs 100 units of a 10,000/day free quota, so roughly a hundred
 # searches a day. One per place per activity, cached by video id, sits well
@@ -51,7 +53,9 @@ class FakeVideoSearch:
             return []
         # Stable ids from the query so the same search twice is the same result
         # and dedupe by fingerprint behaves as it would against real results.
-        seed = abs(hash(cleaned)) % 100000
+        # hashlib, not hash(): str hashes are salted per process, so a restart
+        # would turn the same search into new URLs and new found sources.
+        seed = int(hashlib.sha1(cleaned.encode()).hexdigest(), 16) % 100000
         return [
             FoundVideo(
                 video_id=f"fake{seed}{index}",
@@ -91,10 +95,11 @@ class YouTubeVideoSearch:
             params["regionCode"] = self.region
 
         url = f"{self.endpoint}?{urllib.parse.urlencode(params)}"
-        try:
-            with urllib.request.urlopen(url, timeout=self.timeout) as response:
-                payload = json.loads(response.read())
-        except Exception:  # noqa: BLE001 - a failed search is an empty shelf, never a crash
+        # Through the shared helper, which verifies certificates with a real
+        # bundle: a bare urlopen fails every request on a python.org macOS
+        # install, and the empty result reads as "nothing found".
+        payload = get_json(url, headers={}, timeout=self.timeout)
+        if not payload:
             return []
 
         out: list[FoundVideo] = []

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.deps import current_trip, owned_or_404
+from app.deps import current_trip, owned_or_404, traveller_date
 from app.models.capture import KnowledgeItem
 from app.models.core import Trip
 from app.models.enums import KnowledgeType, Provenance
@@ -76,6 +76,7 @@ def confirm_action(
     action: dict,
     session: Session = Depends(get_session),
     trip: Trip = Depends(current_trip),
+    today_here: date = Depends(traveller_date),
 ) -> dict:
     """Apply an action the assistant proposed, after the user confirmed it."""
     action_type = action.get("type")
@@ -90,7 +91,7 @@ def confirm_action(
     trip_place = owned_or_404(
         session.get(TripPlace, payload.get("trip_place_id")), trip, "Place not found."
     )
-    on = date.fromisoformat(payload.get("on_date") or datetime.now(UTC).date().isoformat())
+    on = date.fromisoformat(payload.get("on_date") or today_here.isoformat())
     # A second tap on the same proposal is the same plan, not a second entry.
     existing = session.execute(
         select(ItineraryItem).where(
@@ -121,13 +122,14 @@ def resurface_endpoint(
     lon: float | None = Query(default=None, ge=-180, le=180),
     destination_scope: str | None = Query(default=None),
     on: date | None = Query(default=None),
+    today_here: date = Depends(traveller_date),
 ) -> dict:
     items = resurface(
         session,
         trip_id=trip.id,
         lat=lat,
         lon=lon,
-        on=on or datetime.now(UTC).date(),
+        on=on or today_here,
         destination_scope=destination_scope,
     )
     return {"items": [item.to_dict() for item in items]}
@@ -138,9 +140,10 @@ def recommend_for(
     q: str = Query(min_length=1, max_length=120),
     session: Session = Depends(get_session),
     trip: Trip = Depends(current_trip),
+    today_here: date = Depends(traveller_date),
 ) -> dict:
     """What you stashed for a place, ranked for now. Read-only, grounded, never a web result."""
-    return recommend(session, trip=trip, query=q, on=datetime.now(UTC).date()).to_dict()
+    return recommend(session, trip=trip, query=q, on=today_here).to_dict()
 
 
 @router.get("/knowledge")

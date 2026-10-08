@@ -81,3 +81,46 @@ def test_gringo_is_never_fetched_directly():
     from app.adapters.content import FakeContentSource
 
     assert not FakeContentSource().may_fetch("https://gringo.co.il/guatemala").allowed
+
+
+def test_a_broken_source_does_not_take_the_others_with_it(client, auth, trip, monkeypatch):
+    from app.services import discover
+
+    def broken():
+        raise ValueError("Reddit needs an app")
+
+    monkeypatch.setattr(discover, "get_reddit", broken)
+    stop = client.get("/api/v1/trips/current", headers=auth).json()["destinations"][0]["id"]
+
+    response = client.get(f"/api/v1/trips/current/discover?after={stop}", headers=auth)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["reddit"] == []
+    assert response.json()["youtube"]
+
+
+def test_a_short_place_name_still_finds_your_notes():
+    from types import SimpleNamespace
+
+    from app.services.assistant import _note_mentions
+
+    note = SimpleNamespace(
+        destination_scope="Rio de Janeiro", title="Safety", body="Avoid Lapa late"
+    )
+    assert _note_mentions(note, "Rio")
+    assert not _note_mentions(note, "Ica")
+
+
+def test_the_stand_in_video_search_is_stable_across_restarts():
+    import subprocess
+    import sys
+
+    code = (
+        "from app.adapters.video_search import FakeVideoSearch;"
+        "print(FakeVideoSearch().search('Antigua')[0].url)"
+    )
+    runs = {
+        subprocess.run([sys.executable, "-c", code], capture_output=True, text=True).stdout
+        for _ in range(2)
+    }
+    assert len(runs) == 1 and next(iter(runs)).startswith("https://")

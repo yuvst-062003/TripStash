@@ -207,9 +207,9 @@ class WikivoyageTravelWiki:
         url = f"{API}?{urllib.parse.urlencode({**params, 'format': 'json'})}"
         # The same gate every fetch passes (docs/sources.md): a host nobody has
         # cleared, or one that asked to be left alone, is not read at all.
-        from app.adapters import get_content_source
+        from app.adapters.content import admit
 
-        if not get_content_source().may_fetch(url).allowed:
+        if not admit(url):
             return {}
         return get_json(url, headers={"User-Agent": USER_AGENT}, timeout=self._timeout)
 

@@ -12,6 +12,7 @@ is rebuilt on the next boot, which is how a deployed copy picks up new data.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import date, timedelta
 
@@ -373,6 +374,24 @@ def seed(force: bool = False) -> None:
     if exists and current == SEED_VERSION and not force:
         print(f"Demo account {DEMO_EMAIL} already seeded ({SEED_VERSION}) - nothing to do.")
         return
+
+    # Outside development this database holds real trips, and the container
+    # runs this script on every boot. Rebuilding would drop every table, so it
+    # never happens here, whatever the version marker says - a missing or stale
+    # marker is not evidence that the data is disposable.
+    production = get_settings().environment != "development"
+    if production and exists:
+        print(f"Demo data is {current or 'unversioned'}; production data is never rebuilt.")
+        return
+    # A new production database gets a demo login only with a password chosen
+    # for it. The one in this file is public, and would be a working login.
+    password = DEMO_PASSWORD
+    if production:
+        password = os.environ.get("TRIPSTASH_DEMO_PASSWORD", "")
+        if len(password) < 10:
+            print("Production: no demo account (set TRIPSTASH_DEMO_PASSWORD to create one).")
+            return
+
     if exists:
         # The demo data changed: this is a demo database, so it is rebuilt.
         print(f"Demo data is {current or 'unversioned'}; rebuilding as {SEED_VERSION}.")
@@ -382,7 +401,7 @@ def seed(force: bool = False) -> None:
     with session_scope() as session:
         user = User(
             email=DEMO_EMAIL,
-            password_hash=hash_password(DEMO_PASSWORD),
+            password_hash=hash_password(password),
             display_name="Demo traveller",
             base_currency="USD",
         )
@@ -578,7 +597,9 @@ def seed(force: bool = False) -> None:
 
         marker.write_text(SEED_VERSION)
         print(
-            f"Seeded {DEMO_EMAIL} / {DEMO_PASSWORD}\n"
+            f"Seeded {DEMO_EMAIL}"
+            + ("" if production else f" / {DEMO_PASSWORD}")
+            + "\n"
             f"  trip: {trip.name} ({trip.start_date} → {trip.end_date}, {len(STOPS)} stops)\n"
             f"  places: {places_seeded}\n"
             f"  notes and events: {knowledge_seeded}"

@@ -174,3 +174,10 @@ def test_a_stop_can_hold_no_nights_without_being_deleted(client, auth, trip):
     assert stop["destination"]["notes"].startswith("Alternative")
     # Still on the trip.
     assert "Oaxaca" in _route(client, auth)
+
+
+def test_an_empty_name_is_refused_rather_than_a_500(client, auth, trip):
+    response = client.patch("/api/v1/trips/current", headers=auth, json={"name": None})
+
+    assert response.status_code == 422
+    assert "name" in response.json()["detail"]

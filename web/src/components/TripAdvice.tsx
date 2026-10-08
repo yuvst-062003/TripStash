@@ -72,6 +72,7 @@ export function TripChecks({
           <div className="advice__actions">
             {check.fix && (
               <button
+              type="button"
                 className="btn btn--sm btn--accent"
                 disabled={busy === check.id}
                 onClick={async () => {
@@ -86,7 +87,8 @@ export function TripChecks({
                 {check.fix.label}
               </button>
             )}
-            <button className="btn btn--sm" onClick={() => dismiss(check.id)}>
+            <button
+              type="button" className="btn btn--sm" onClick={() => dismiss(check.id)}>
               Dismiss
             </button>
           </div>
@@ -172,6 +174,7 @@ export function StopSuggestions({
           </div>
           <div className="advice__actions">
             <button
+              type="button"
               className="btn btn--sm btn--accent"
               disabled={busy === s.name}
               onClick={async () => {
@@ -186,6 +189,7 @@ export function StopSuggestions({
               <Plus size={14} /> Add
             </button>
             <button
+              type="button"
               className="iconbtn iconbtn--sm"
               aria-label={`Dismiss ${s.name}`}
               onClick={() => setHidden(new Set(hidden).add(s.name))}

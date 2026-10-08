@@ -235,3 +235,14 @@ def test_find_hands_back_the_clips_it_found(client, auth, trip):
     assert response.status_code == 200, response.text
     body = response.json()
     assert len(body["sources"]) == body["found"]
+
+
+def test_the_guide_spends_its_own_api_budget(monkeypatch):
+    from app.adapters import content
+
+    monkeypatch.setattr(content, "API_DAILY_BUDGET", 2)
+    monkeypatch.setattr(content, "_SHARED_GATE", content.FakeContentSource())
+    url = "https://en.wikivoyage.org/w/api.php?action=query"
+
+    assert content.admit(url) and content.admit(url)
+    assert not content.admit(url)

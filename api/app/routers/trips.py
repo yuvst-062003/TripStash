@@ -126,6 +126,13 @@ def update_trip(
     always changes is when it leaves.
     """
     changes = body.model_dump(exclude_unset=True)
+    # These columns cannot be empty. Sending null for one is a mistake to
+    # name, not a database error to surface as a 500.
+    for required in ("name", "base_currency"):
+        if required in changes and changes[required] is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, f"A trip's {required} cannot be empty."
+            )
 
     # Checked against what the trip would become, not against what was sent, so
     # moving only the start date cannot silently invert a trip.

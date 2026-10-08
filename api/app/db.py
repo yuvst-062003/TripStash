@@ -75,12 +75,12 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("extraction_candidate", "ends_on", "DATE"),
     ("knowledge_item", "happens_on", "DATE"),
     ("knowledge_item", "ends_on", "DATE"),
-    ("extraction_candidate", "user_edited", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("extraction_candidate", "user_edited", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ("source", "lat", "FLOAT"),
     ("source", "lon", "FLOAT"),
     # The found tier. A database built before it exists has this column
     # missing, and every count that reads it would fail on the first query.
-    ("source", "found", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("source", "found", "BOOLEAN NOT NULL DEFAULT FALSE"),
     # Nights became the stored truth of the route; dates are derived from them.
     ("destination", "nights", "INTEGER"),
 )

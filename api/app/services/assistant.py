@@ -630,7 +630,13 @@ def _note_mentions(item: KnowledgeItem, subject: str) -> bool:
     needle = normalize_name(subject)
     if not needle:
         return False
-    return any(word in haystack for word in needle.split() if len(word) > 3)
+    words = needle.split()
+    long_words = [word for word in words if len(word) > 3]
+    if long_words:
+        return any(word in haystack for word in long_words)
+    # Every word is short - "Rio", "Leh", "Ica" - so match the name whole, on
+    # word boundaries, rather than dropping it and losing the traveller's notes.
+    return re.search(rf"\b{re.escape(needle)}\b", haystack) is not None
 
 
 def _answer_from_the_web(question: str, prefer: KnowledgeType | None = None) -> Answer:
