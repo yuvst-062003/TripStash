@@ -18,10 +18,15 @@ FROM python:3.11-slim
 # TRIPSTASH_CORS_ORIGINS is empty on purpose: the web app is served from this
 # same origin, so there is no cross-origin request to allow. Empty is the
 # correct answer here, not a missing one.
+#
+# The database and the storage directory both sit under /data because that is
+# where the host's volume is mounted. The defaults live inside the image, so
+# leaving them alone would discard every trip on the next deploy.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     TRIPSTASH_STATIC_DIR=/srv/web \
+    TRIPSTASH_DATABASE_URL=sqlite+pysqlite:////data/tripstash.db \
     TRIPSTASH_STORAGE_DIR=/data/storage \
     TRIPSTASH_ENVIRONMENT=production \
     TRIPSTASH_CORS_ORIGINS=[]
@@ -38,11 +43,19 @@ RUN pip install --no-cache-dir ".[postgres,media]"
 
 COPY --from=web /srv/dist /srv/web
 
-# Runs unprivileged; the storage volume is the only writable path it needs.
+# The storage volume is the only writable path the app needs.
 RUN useradd --system --create-home tripstash && mkdir -p /data/storage \
  && chown -R tripstash:tripstash /data
-USER tripstash
 
 EXPOSE 8000
+# Starts as root for one command only. A host's volume is mounted over /data at
+# run time and arrives owned by root, which shadows the ownership set above, so
+# a container that had already dropped privileges could not write its own
+# database. Ownership is therefore fixed after the mount, and setpriv drops to
+# the unprivileged user for everything that follows.
+#
 # Shell form on purpose: the host names the port, and PORT is what they all use.
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Seeds the demo trip when the database is new, which is a no-op afterwards.
+CMD chown -R tripstash:tripstash /data \
+ && exec setpriv --reuid=tripstash --regid=tripstash --init-groups \
+      sh -c 'python -m app.seed; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'

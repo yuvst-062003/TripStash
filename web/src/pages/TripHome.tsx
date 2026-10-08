@@ -18,12 +18,17 @@ import L from 'leaflet'
 import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
-import type { HomePayload, Route, RouteStop } from '../lib/types'
+import type { HomePayload, Route, RouteCheck, RouteStop } from '../lib/types'
 import { type CountryFeature, loadCountries, matchesCountry } from '../lib/basemap'
 import { CacheNote, ErrorNote, Note, SkeletonRows } from '../components/ui'
+import CityCards from '../components/CityCards'
+import { StopIdeas, StopSuggestions, TravellerVoices, TripChecks } from '../components/TripAdvice'
 import {
   AlertTriangle,
+  ArrowLeft,
   CloudSun,
+  Lightbulb,
+  Sparkles,
   Minus,
   MoreHorizontal,
   Plus,
@@ -51,6 +56,57 @@ function pin(index: number, stop: RouteStop, total: number): L.DivIcon {
     iconSize: [30, 30],
     iconAnchor: [15, 15],
   })
+}
+
+/**
+ * Hide the stop names that would land on top of one another.
+ *
+ * Twenty stops seen from a continent away put a dozen names in one thumbnail
+ * of map, and a pile of overlapping words says nothing. Names are kept in
+ * route order - the stop you are at first, then the earlier stop wins - and a
+ * name that would overlap one already kept is hidden until you zoom in far
+ * enough to separate them. The numbered pin always stays, so no stop vanishes.
+ */
+function declutterLabels(container: HTMLElement | null) {
+  if (!container) return
+  const labels = [...container.querySelectorAll<HTMLElement>('.stoppin__label')]
+  labels.forEach((label) => (label.style.visibility = 'visible'))
+  const ordered = [
+    ...labels.filter((l) => l.closest('.stoppin--current')),
+    ...labels.filter((l) => !l.closest('.stoppin--current')),
+  ]
+  const kept: DOMRect[] = []
+  const frame = container.getBoundingClientRect()
+  const pins = [...container.querySelectorAll<HTMLElement>('.stoppin')].map((p) =>
+    p.getBoundingClientRect(),
+  )
+  const overlaps = (a: DOMRect, b: DOMRect) =>
+    a.left < b.right + 2 && a.right > b.left - 2 && a.top < b.bottom + 2 && a.bottom > b.top - 2
+  const blocked = (label: HTMLElement) => {
+    const box = label.getBoundingClientRect()
+    const own = label.parentElement?.getBoundingClientRect()
+    const hitsPin = pins.some((pin) => own && !sameRect(pin, own) && overlaps(box, pin))
+    // A name running off the screen is as unreadable as one under another.
+    const offScreen = box.left < frame.left + 4 || box.right > frame.right - 4
+    return offScreen || hitsPin || kept.some((other) => overlaps(box, other))
+  }
+  for (const label of ordered) {
+    label.removeAttribute('data-flip')
+    if (blocked(label)) {
+      // Try the other side of its own pin before giving up on the name.
+      label.setAttribute('data-flip', '')
+      if (blocked(label)) {
+        label.removeAttribute('data-flip')
+        label.style.visibility = 'hidden'
+        continue
+      }
+    }
+    kept.push(label.getBoundingClientRect())
+  }
+}
+
+function sameRect(a: DOMRect, b: DOMRect) {
+  return a.left === b.left && a.top === b.top
 }
 
 function escapeHtml(value: string): string {
@@ -97,7 +153,15 @@ function legText(stop: RouteStop): string | null {
 }
 
 export default function TripHome() {
-  const { trip, openSave, position } = useApp()
+  const { trip, openSave, openAsk, position } = useApp()
+  // The country the camera has flown into, or null for the whole route.
+  // Pressing a country or a stop sets it; the sheet follows the camera.
+  const [focus, setFocus] = useState<string | null>(null)
+  const countryCities = useAsync(
+    () => api.cities(focus ?? ''),
+    [focus],
+    Boolean(focus),
+  )
   useScreenContext({ surface: 'home' })
   const [mode, setMode] = useState<'plan' | 'today'>('plan')
   const [tilesFailed, setTilesFailed] = useState(false)
@@ -128,6 +192,9 @@ export default function TripHome() {
   const mapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.LayerGroup | null>(null)
   const landRef = useRef<L.GeoJSON | null>(null)
+  // Each route country's outline bounds, so a press can frame the country.
+  const boundsRef = useRef<Map<string, L.LatLngBounds>>(new Map())
+  const framedRef = useRef(false)
 
   // Which countries the route touches, so the ground can say so.
   const routeCountries = useMemo(
@@ -158,6 +225,7 @@ export default function TripHome() {
     tiles.addTo(map)
     layerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
+    map.on('zoomend moveend', () => declutterLabels(containerRef.current))
     // Leaflet caches the container size at construction; after layout settles
     // that figure is stale, which throws off both tiles and fitBounds.
     const resize = () => map.invalidateSize({ animate: false })
@@ -178,9 +246,18 @@ export default function TripHome() {
       const map = mapRef.current
       if (cancelled || !map) return
       landRef.current?.remove()
+      boundsRef.current = new Map()
       landRef.current = L.geoJSON(countries, {
         pane: 'basemap',
-        interactive: false,
+        onEachFeature: (featureIn, layer) => {
+          const name = [...routeCountries].find((n) =>
+            matchesCountry(featureIn as CountryFeature, n),
+          )
+          if (!name) return
+          boundsRef.current.set(name, (layer as L.Polygon).getBounds())
+          // A country on the route flies in on a press, like a stop does.
+          layer.on('click', () => setFocus(name))
+        },
         style: (featureIn) => {
           const onRoute = [...routeCountries].some((name) =>
             matchesCountry(featureIn as CountryFeature, name),
@@ -225,8 +302,25 @@ export default function TripHome() {
       }).addTo(layer)
     }
     placed.forEach((stop, index) => {
-      L.marker(points[index], { icon: pin(index, stop, placed.length), keyboard: true }).addTo(layer)
+      const marker = L.marker(points[index], {
+        icon: pin(index, stop, placed.length),
+        keyboard: true,
+      }).addTo(layer)
+      const country = stop.destination.country
+      if (country) marker.on('click', () => setFocus(country))
     })
+    requestAnimationFrame(() => declutterLabels(containerRef.current))
+  }, [placed])
+
+  // The camera: the whole route, or the country you pressed. Kept apart from
+  // drawing so a nights change redraws the route without moving the camera.
+  const routeKey = placed.map((s) => s.destination.id).join(',')
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !placed.length) return
+    const points = placed.map(
+      (stop) => [stop.destination.lat as number, stop.destination.lon as number] as [number, number],
+    )
 
     // The sheet covers the lower half, so a plain fitBounds hides the stops
     // underneath it.
@@ -238,13 +332,30 @@ export default function TripHome() {
       window.innerHeight * 0.68
     const noteBottom = document.querySelector('.mapnote')?.getBoundingClientRect().bottom ?? 110
     map.invalidateSize({ animate: false })
-    map.fitBounds(L.latLngBounds(points), {
-      paddingTopLeft: [40, Math.round(noteBottom) + 24],
-      paddingBottomRight: [40, Math.round(window.innerHeight - sheetTop) + 72],
-      maxZoom: 9,
-      animate: false,
-    })
-  }, [placed])
+    const padding = {
+      paddingTopLeft: [40, Math.round(noteBottom) + 24] as [number, number],
+      paddingBottomRight: [40, Math.round(window.innerHeight - sheetTop) + 72] as [number, number],
+    }
+    if (focus) {
+      const inCountry = points.filter((_, i) => placed[i].destination.country === focus)
+      // Your stops in it frame the country better than its outline does: a
+      // country as big as Brazil is mostly places you are not going.
+      const bounds = inCountry.length
+        ? L.latLngBounds(inCountry).pad(inCountry.length === 1 ? 2 : 0.5)
+        : (boundsRef.current.get(focus) ?? null)
+      if (bounds) map.flyToBounds(bounds, { ...padding, maxZoom: 9, duration: 1.1 })
+      return
+    }
+    // The first framing is instant: an animated flight started before the map
+    // has its real size lands on the wrong place. Later moves fly.
+    if (!framedRef.current) {
+      framedRef.current = true
+      map.fitBounds(L.latLngBounds(points), { ...padding, maxZoom: 9, animate: false })
+      return
+    }
+    map.flyToBounds(L.latLngBounds(points), { ...padding, maxZoom: 9, duration: 0.9 })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- routeKey stands for placed
+  }, [routeKey, focus])
 
   const addStop = useCallback(
     async (name: string, afterPosition: number | null) => {
@@ -277,6 +388,27 @@ export default function TripHome() {
     [],
   )
 
+  const setOnRoute = useCallback(async (destinationId: string, onRoute: boolean) => {
+    setSaving(destinationId)
+    setRouteError(null)
+    try {
+      const updated = await api.setOnRoute(destinationId, onRoute)
+      setRoute(updated.data)
+    } catch (error) {
+      setRouteError(error instanceof Error ? error.message : 'Could not move that stop.')
+    } finally {
+      setSaving(null)
+    }
+  }, [])
+
+  const applyFix = useCallback(
+    async (check: RouteCheck) => {
+      const stop = route?.stops.find((s) => s.destination.id === check.fix?.payload.destination_id)
+      if (stop && check.fix) await setNights(stop, check.fix.payload.nights)
+    },
+    [route, setNights],
+  )
+
   if (loaded.loading && !route) {
     return (
       <div className="trip">
@@ -301,9 +433,9 @@ export default function TripHome() {
       <div className="trip__over">
         <header className="trip__head">
           <div className="trip__who grow">
-            <span className="trip__avatar" aria-hidden="true">
+            <Link className="trip__avatar" to="/profile" aria-label="You: your picks and sources">
               {(trip?.name ?? 'T').slice(0, 1).toUpperCase()}
-            </span>
+            </Link>
             <div className="trip__titles">
               <div className="trip__owner">Your trip</div>
               <div className="trip__name clamp-1">{trip?.name ?? 'Trip'}</div>
@@ -328,11 +460,19 @@ export default function TripHome() {
 
         <div className="trip__spacer" />
 
-        {/* Pinch is the real gesture; this is its discoverable twin. */}
-        <Link className="zoomout" to="/explore">
-          <ZoomOut size={16} />
-          Zoom out to Explore
-        </Link>
+        {/* Pinch is the real gesture; this is its discoverable twin. Inside a
+            country, the same place takes you back out to the whole route. */}
+        {focus ? (
+          <button className="zoomout" onClick={() => setFocus(null)}>
+            <ArrowLeft size={16} />
+            Whole trip
+          </button>
+        ) : (
+          <Link className="zoomout" to="/explore">
+            <ZoomOut size={16} />
+            Zoom out to Explore
+          </Link>
+        )}
 
         {/* Required by the tile licence, so it sits in the layout rather than
             wherever a control happens to land. */}
@@ -347,6 +487,16 @@ export default function TripHome() {
         <section className="tripsheet">
           <div className="tripsheet__grip" aria-hidden="true" />
           <div className="tripsheet__body">
+            {focus ? (
+              <CountryPane
+                name={focus}
+                state={countryCities}
+                route={route}
+                onBack={() => setFocus(null)}
+                onAsk={() => openAsk({ surface: 'trip', contextLabel: focus })}
+              />
+            ) : (
+            <>
             <div className="segmented" role="tablist" aria-label="Trip view">
               <button
                 role="tab"
@@ -373,9 +523,15 @@ export default function TripHome() {
                 error={routeError}
                 onNights={setNights}
                 onAdd={addStop}
+                onFix={applyFix}
+                onOnRoute={setOnRoute}
+                onAsk={() => openAsk({ surface: 'trip', contextLabel: 'your route' })}
+                onFocus={setFocus}
               />
             ) : (
               <TodayPane state={today} />
+            )}
+            </>
             )}
           </div>
         </section>
@@ -390,12 +546,20 @@ function PlanPane({
   error,
   onNights,
   onAdd,
+  onFix,
+  onOnRoute,
+  onAsk,
+  onFocus,
 }: {
   route: Route | null
   saving: string | null
   error: string | null
   onNights: (stop: RouteStop, next: number | null) => void
   onAdd: (name: string, afterPosition: number | null) => Promise<void>
+  onFix: (check: RouteCheck) => Promise<void>
+  onOnRoute: (destinationId: string, onRoute: boolean) => Promise<void>
+  onAsk: () => void
+  onFocus: (country: string) => void
 }) {
   // Which `+` is open. `null` is closed, a number is the position the new stop
   // goes after (so inserting mid-route does not reorder what is there), and
@@ -434,6 +598,15 @@ function PlanPane({
         )}
       </div>
 
+      <button className="btn btn--block askroute" onClick={onAsk}>
+        <Sparkles size={16} /> Ask about your route
+      </button>
+
+      <TripChecks
+        version={route.stops.map((s) => `${s.destination.id}:${s.nights}`).join(',')}
+        onFix={onFix}
+      />
+
       {error && <Note tone="warn" Icon={AlertTriangle}>{error}</Note>}
 
       <div className="stops">
@@ -463,6 +636,7 @@ function PlanPane({
                   </div>
                   {insertAfter === after && (
                     <AddStop
+                      afterId={route.stops[index - 1].destination.id}
                       onCancel={() => setInsertAfter(null)}
                       onAdd={async (name) => {
                         await onAdd(name, after)
@@ -477,6 +651,8 @@ function PlanPane({
                 index={index}
                 busy={saving === stop.destination.id}
                 onNights={onNights}
+                onFocus={onFocus}
+                onSetAside={() => onOnRoute(stop.destination.id, false)}
               />
             </div>
           )
@@ -497,6 +673,7 @@ function PlanPane({
         </div>
         {insertAfter === 'end' && (
           <AddStop
+            afterId={route.stops[route.stops.length - 1]?.destination.id}
             onCancel={() => setInsertAfter(null)}
             onAdd={async (name) => {
               await onAdd(name, null)
@@ -505,6 +682,38 @@ function PlanPane({
           />
         )}
       </div>
+
+      {(route.alternatives ?? []).length > 0 && (
+        <section className="alts" aria-label="Alternatives">
+          <h3 className="alts__head">
+            Alternatives <span className="t-xs dim num">{route.alternatives?.length}</span>
+          </h3>
+          <p className="t-sm dim">Kept with their places, not on the route and holding no days.</p>
+          {route.alternatives?.map((alt) => (
+            <div key={alt.id} className="alt">
+              <div className="alt__text">
+                <span className="alt__name">
+                  {alt.name}
+                  {alt.country && <span className="t-xs dim"> · {alt.country}</span>}
+                </span>
+                {alt.notes && (
+                  <span className="t-sm dim clamp-2" dir="auto">
+                    {alt.notes}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                className="btn btn--sm"
+                disabled={saving === alt.id}
+                onClick={() => onOnRoute(alt.id, true)}
+              >
+                Put back on the route
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
     </>
   )
 }
@@ -515,9 +724,11 @@ function PlanPane({
  * nobody chose appearing in their itinerary.
  */
 function AddStop({
+  afterId,
   onAdd,
   onCancel,
 }: {
+  afterId?: string
   onAdd: (name: string) => Promise<void>
   onCancel: () => void
 }) {
@@ -559,6 +770,10 @@ function AddStop({
       <button className="addstop__cancel" type="button" onClick={onCancel}>
         Cancel
       </button>
+      <div className="addstop__suggest">
+        <StopSuggestions after={afterId} onAdd={onAdd} />
+        <TravellerVoices after={afterId} />
+      </div>
     </form>
   )
 }
@@ -568,23 +783,35 @@ function Stop({
   index,
   busy,
   onNights,
+  onFocus,
+  onSetAside,
 }: {
   stop: RouteStop
   index: number
   busy: boolean
   onNights: (stop: RouteStop, next: number | null) => void
+  onFocus: (country: string) => void
+  onSetAside: () => void
 }) {
+  const [ideas, setIdeas] = useState(false)
   const nights = stop.nights
   const arrive = stopDate(stop.arrive_on)
   const depart = stopDate(stop.depart_on)
 
   return (
+    <>
     <div className={`stop${stop.destination.is_current ? ' stop--current' : ''}`}>
       <span className="stop__n" aria-hidden="true">
         {index + 1}
       </span>
       <div className="stop__main">
-        <div className="stop__name clamp-1">{stop.destination.name}</div>
+        <button
+          className="stop__name stop__namebtn clamp-1"
+          onClick={() => stop.destination.country && onFocus(stop.destination.country)}
+          aria-label={`Fly to ${stop.destination.name}, ${stop.destination.country ?? ''}`}
+        >
+          {stop.destination.name}
+        </button>
         <div className={`stop__when${arrive ? '' : ' stop__when--open'}`}>
           {arrive && depart
             ? `${arrive} – ${depart}`
@@ -614,6 +841,76 @@ function Stop({
           <Plus size={16} />
         </button>
       </div>
+    </div>
+    <div className="stop__extras">
+      <button
+        className="stop__ideas"
+        aria-expanded={ideas}
+        onClick={() => setIdeas(!ideas)}
+      >
+        <Lightbulb size={13} /> {ideas ? 'Hide ideas' : `Ideas for ${stop.destination.name}`}
+      </button>
+      <button className="stop__aside" disabled={busy} onClick={onSetAside}>
+        Set aside as alternative
+      </button>
+    </div>
+    {ideas && <StopIdeas name={stop.destination.name} />}
+    </>
+  )
+}
+
+/**
+ * Inside one country: its cities as cards, with your sentence and your photo,
+ * and the nights the route spends in each.
+ */
+function CountryPane({
+  name,
+  state,
+  route,
+  onBack,
+  onAsk,
+}: {
+  name: string
+  state: { data: import('../lib/types').CityBreakdown[] | null; loading: boolean; error: string | null; reload: () => void }
+  route: Route | null
+  onBack: () => void
+  onAsk: () => void
+}) {
+  const nightsFor = (city: import('../lib/types').CityBreakdown) => {
+    const stops = (route?.stops ?? []).filter(
+      (s) =>
+        s.destination.id === city.destination_id ||
+        s.destination.name.toLowerCase() === city.name.toLowerCase(),
+    )
+    if (!stops.length || stops.some((s) => s.nights === null)) return null
+    return stops.reduce((sum, s) => sum + (s.nights ?? 0), 0)
+  }
+  const cities = state.data ?? []
+  const onRoute = cities.filter((c) => c.in_route).length
+
+  return (
+    <div className="countrypane">
+      <div className="countrypane__head">
+        <button className="iconbtn" onClick={onBack} aria-label="Back to the whole trip">
+          <ArrowLeft size={19} />
+        </button>
+        <div className="grow">
+          <h2 className="t-lg">{name}</h2>
+          <p className="t-xs dim num">
+            {cities.length} {cities.length === 1 ? 'city' : 'cities'}
+            {onRoute > 0 && ` · ${onRoute} on your route`}
+          </p>
+        </div>
+      </div>
+      {state.loading && !state.data && <SkeletonRows rows={2} />}
+      {state.error && <ErrorNote message={state.error} onRetry={state.reload} />}
+      <CityCards cities={cities} nightsFor={nightsFor} />
+      <Link className="btn btn--block" to={`/explore/${encodeURIComponent(name)}`}>
+        Everything in {name}
+      </Link>
+      <button className="btn btn--block askroute" onClick={onAsk}>
+        <Sparkles size={16} /> Ask about {name}
+      </button>
     </div>
   )
 }

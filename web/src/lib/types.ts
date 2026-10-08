@@ -37,6 +37,8 @@ export interface Destination {
   depart_on: string | null
   is_current: boolean
   notes: string | null
+  /** False for an alternative: kept on the trip, not travelled. */
+  on_route?: boolean
 }
 
 /**
@@ -77,6 +79,8 @@ export interface Route {
   has_end_date: boolean
   total_nights: number
   stops: RouteStop[]
+  /** Stops set aside: kept with their places, not travelled. */
+  alternatives?: Destination[]
 }
 
 export interface MediaStage {
@@ -413,9 +417,83 @@ export interface ReelSpot {
   clip_count: number
   playable_count: number
   latest_saved_at: string | null
+  /** How many of clip_count the app found; never yours until kept. */
+  found_count: number
+}
+
+/** One city of a country, explained in the traveller's own words. */
+export interface CityBreakdown {
+  key: string
+  name: string
+  lat: number | null
+  lon: number | null
+  in_route: boolean
+  destination_id: string | null
+  explanation: string
+  explanation_source: 'you' | 'sources' | 'none' | string
+  place_count: number
+  video_count: number
+  playable_count: number
+  found_count: number
+  kinds: string[]
+  /** A photo the traveller saved for this city; never one the app found. */
+  photo_url: string | null
+}
+
+/** Something the assistant noticed about the route; a fix is a proposal. */
+export interface RouteCheck {
+  id: string
+  kind: 'nights_missing' | 'long_leg' | 'event_missed' | string
+  title: string
+  body: string
+  destination_id: string | null
+  fix: { type: 'set_nights'; label: string; payload: { destination_id: string; nights: number } } | null
+}
+
+/** A city from your own library that the route does not visit yet. */
+export interface StopSuggestion {
+  name: string
+  country: string | null
+  lat: number
+  lon: number
+  place_count: number
+  detour_km: number
+  why: string
+  places: string[]
+}
+
+/** One thing a traveller said elsewhere: labelled, a snippet and a link. */
+export interface Voice {
+  source: 'gringo' | 'web' | 'reddit' | 'youtube'
+  title: string
+  snippet: string
+  url: string
+  by: string
+}
+
+export interface Discover {
+  gringo: Voice[]
+  web: Voice[]
+  reddit: Voice[]
+  youtube: Voice[]
+  live: Record<'gringo' | 'web' | 'reddit' | 'youtube', boolean>
+}
+
+export interface Recommendation {
+  query: string
+  summary: string
+  grounded: boolean
+  cards: AskCard[]
+}
+
+export interface ActivityPicks {
+  available: { slug: string; label: string }[]
+  picked: string[]
 }
 
 export interface ReelClip {
+  /** True when the app went looking for this clip; you did not save it. */
+  found?: boolean
   id: string
   source_id: string
   trip_place_id: string

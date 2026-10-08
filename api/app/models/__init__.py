@@ -17,6 +17,7 @@ from app.models.ops import (
     ItineraryItem,
     SyncOperation,
 )
+from app.models.picks import ActivityPick
 from app.models.places import (
     Collection,
     Place,
@@ -27,6 +28,7 @@ from app.models.places import (
 )
 
 __all__ = [
+    "ActivityPick",
     "AgentRun",
     "AuditEvent",
     "Base",

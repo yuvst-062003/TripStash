@@ -110,6 +110,29 @@ def _build_user_prompt(source_text: str, hints: ExtractionHints | None) -> str:
     return "\n\n".join(blocks)
 
 
+def extraction_schema() -> dict:
+    """The schema handed to the model, stricter than the app's own.
+
+    A local model follows a schema far more reliably than it follows an
+    instruction in prose. The app's `evidence` field is optional, because
+    candidates arrive from places that have none - a traveller typing a note by
+    hand, for one - but a candidate the MODEL invents must carry a verbatim
+    quote or the grounding guard drops it the moment it arrives.
+
+    Asked in prose, gemma3:12b returned four well-typed candidates with no
+    evidence at all and every one was discarded. Said in the schema, it
+    complies: constrained decoding cannot emit the field it is told to include.
+    """
+    schema = ExtractionResult.model_json_schema()
+    candidate = schema.get("$defs", {}).get("KnowledgeCandidate")
+    if candidate:
+        required = set(candidate.get("required", []))
+        required.add("evidence")
+        candidate["required"] = sorted(required)
+        candidate.setdefault("properties", {}).setdefault("evidence", {})["minItems"] = 1
+    return schema
+
+
 def _quote_is_present(quote: str, source_text: str) -> bool:
     """Verbatim check, tolerant of whitespace, case and accents only.
 
@@ -207,7 +230,7 @@ class LocalLLMAdapter:
         return result
 
     def _complete(self, messages: list[dict]) -> ExtractionResult | None:
-        schema = ExtractionResult.model_json_schema()
+        schema = extraction_schema()
 
         raw = self._chat(messages, schema)
         parsed = self._parse(raw)

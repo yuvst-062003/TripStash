@@ -9,6 +9,12 @@ import { Check, Loader2, Upload } from './icons'
 
 type Mode = 'album' | 'link' | 'upload' | 'note' | 'place'
 
+// A plan arrives as a Word file, a PDF or a page saved from a browser. The API
+// reads each one into the same review queue as a clip, so it is just a file.
+const PLAN_TYPES =
+  'application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
+  'text/html,.docx,.pdf,.html,.htm'
+
 /**
  * Global Save.
  *
@@ -195,12 +201,12 @@ export default function SaveSheet({
               style={{ flexDirection: 'column', gap: 4, minHeight: 92, cursor: 'pointer' }}
             >
               <Upload size={20} strokeWidth={1.9} className="dimmer" />
-              <span className="t-md">Choose photos or videos</span>
-              <span className="t-sm dimmer">Only what you pick here is uploaded</span>
+              <span className="t-md">Choose photos, videos or a plan</span>
+              <span className="t-sm dimmer">A plan: Word, PDF or a saved web page</span>
               <input
                 type="file"
                 multiple
-                accept="image/*,video/*,text/plain,.srt,.vtt"
+                accept={`image/*,video/*,text/plain,.srt,.vtt,${PLAN_TYPES}`}
                 className="sr-only"
                 onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
               />

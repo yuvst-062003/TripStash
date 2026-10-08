@@ -6,6 +6,7 @@
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useScreenContext } from '../lib/context'
+import ClipCounts from '../components/ClipCounts'
 import { useAsync } from '../lib/hooks'
 import type { ReelSpot } from '../lib/types'
 import TopBar from '../components/TopBar'
@@ -66,9 +67,12 @@ export default function Clips() {
                     <Glyph Icon={CATEGORY_ICON[spot.category] ?? MapPin} />
                     <div className="item__body">
                       <p className="item__title clamp-1">{spot.name}</p>
+                      <ClipCounts
+                        yours={spot.clip_count - (spot.found_count ?? 0)}
+                        found={spot.found_count ?? 0}
+                      />
                       <Meta
                         parts={[
-                          `${spot.clip_count} ${spot.clip_count === 1 ? 'clip' : 'clips'}`,
                           spot.playable_count < spot.clip_count
                             ? `${spot.clip_count - spot.playable_count} link only`
                             : null,

@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.adapters import get_places, get_weather
+from app.adapters import get_places, get_storage, get_weather
 from app.db import get_session
-from app.deps import current_trip, owned_or_404
+from app.deps import current_trip, owned_or_404, traveller_date
 from app.models.capture import KnowledgeItem, Source, SourcePlaceEvidence
 from app.models.core import Trip
 from app.models.enums import ACTIVE_PLACE_STATUSES, PlaceStatus
@@ -178,13 +178,14 @@ def place_page(
     trip: Trip = Depends(current_trip),
     lat: float | None = Query(default=None, ge=-90, le=90),
     lon: float | None = Query(default=None, ge=-180, le=180),
+    today_here: date = Depends(traveller_date),
 ) -> dict:
     """The smart place page (spec 5.7): saved evidence and live facts, separated."""
     trip_place = owned_or_404(
         session.get(TripPlace, trip_place_id), trip, "Place not found in this trip."
     )
     place = trip_place.place
-    today = datetime.now(UTC).date()
+    today = today_here
 
     evidence_rows = list(
         session.execute(
@@ -209,6 +210,10 @@ def place_page(
                 "published_on": source.published_on.isoformat() if source.published_on else None,
                 "captured_at": source.created_at.isoformat(),
                 "provenance": str(source.provenance),
+                "media_type": source.media_type,
+                "file_url": (
+                    get_storage().signed_url(source.storage_key) if source.storage_key else None
+                ),
                 "takeaway": row.takeaway,
                 "quote": row.quote,
                 "media_timestamp_seconds": row.media_timestamp_seconds,
@@ -313,7 +318,9 @@ def place_page(
             ],
         },
         "actions": {
-            "primary": handoff.serialise([handoff.navigate(place)]),
+            "primary": handoff.serialise(
+                [handoff.navigate(place, mode=handoff.travel_mode(distance))]
+            ),
             "secondary": handoff.serialise(handoff.for_place(place)[1:]),
         },
         "suggested_questions": _suggested_questions(place.category),

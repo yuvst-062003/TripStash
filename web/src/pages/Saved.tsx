@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
-import type { MediaStage, SourceSummary } from '../lib/types'
+import type { MediaStage, PlaceSummary, SourceSummary } from '../lib/types'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import ReviewCard from '../components/ReviewCard'
@@ -38,11 +38,11 @@ import {
   Trash2,
 } from '../components/icons'
 
-type View = 'inbox' | 'places' | 'knowledge' | 'sources'
+type View = 'activity' | 'inbox' | 'places' | 'knowledge' | 'sources'
 
 /** The discovery library: what was collected, while Map answers where it is. */
 export default function Saved() {
-  const [view, setView] = useState<View>('inbox')
+  const [view, setView] = useState<View>('activity')
   const { openSave } = useApp()
   useScreenContext({ surface: 'saved' })
 
@@ -54,16 +54,151 @@ export default function Saved() {
         value={view}
         onChange={setView}
         options={[
+          { value: 'activity', label: 'By activity' },
           { value: 'inbox', label: 'Inbox' },
           { value: 'places', label: 'Places' },
           { value: 'knowledge', label: 'Knowledge' },
           { value: 'sources', label: 'Sources' },
         ]}
       />
+      {view === 'activity' && <ActivityView onInbox={() => setView('inbox')} />}
       {view === 'inbox' && <InboxView onSave={openSave} />}
       {view === 'places' && <PlacesView />}
       {view === 'knowledge' && <KnowledgeView />}
       {view === 'sources' && <SourcesView />}
+    </div>
+  )
+}
+
+/** What a traveller calls a kind of place, rather than what the database does. */
+const KIND_LABEL: Record<string, string> = {
+  accommodation: 'Places to stay',
+  attraction: 'Sights',
+  activity: 'Things to do',
+  restaurant: 'Food',
+  cafe: 'Cafés',
+  bar: 'Bars',
+  viewpoint: 'Viewpoints',
+  nature: 'Nature',
+  shop: 'Shops',
+  transport: 'Getting around',
+  other: 'Everything else',
+}
+
+/**
+ * Everything you have gathered, filed by what you DO rather than where it is.
+ *
+ * The one question the map cannot answer: "every hike I saved" spans four
+ * countries, so no single map view holds them, but one heading here does. A
+ * place's kind is the honest stand-in for its activity until the summary
+ * carries activity tags.
+ */
+function ActivityView({ onInbox }: { onInbox: () => void }) {
+  const places = useAsync(() => api.places({}), [])
+  const inbox = useAsync(() => api.inbox(), [])
+  const [kind, setKind] = useState<string | null>(null)
+  const { openAsk } = useApp()
+
+  const groups = useMemo(() => {
+    const by = new Map<string, PlaceSummary[]>()
+    for (const place of places.data ?? []) {
+      const list = by.get(place.category) ?? []
+      list.push(place)
+      by.set(place.category, list)
+    }
+    return [...by.entries()]
+      .map(([slug, list]) => ({
+        slug,
+        label: KIND_LABEL[slug] ?? slug,
+        places: list,
+        countries: new Set(list.map((p) => p.country ?? '')).size,
+      }))
+      .sort((a, b) => b.places.length - a.places.length || a.label.localeCompare(b.label))
+  }, [places.data])
+
+  if (places.loading && !places.data) return <SkeletonRows rows={4} />
+  if (places.error) return <ErrorNote message={places.error} onRetry={places.reload} />
+
+  const total = places.data?.length ?? 0
+  const waiting = inbox.data?.length ?? 0
+  const shown = kind ? groups.filter((g) => g.slug === kind) : groups
+  const label = kind ? (KIND_LABEL[kind] ?? kind) : null
+
+  return (
+    <div className="pad" style={{ paddingTop: 'var(--s-3)' }}>
+      {waiting > 0 && (
+        <button className="waiting" onClick={onInbox}>
+          <span className="cliptag cliptag--found num">{waiting}</span>
+          <span className="item__body">
+            <span className="item__title">{waiting} waiting for you to keep or pass</span>
+            <span className="t-sm dim">Found or read for you. They count for nothing until kept.</span>
+          </span>
+          <ChevronRight size={18} className="dimmer" />
+        </button>
+      )}
+
+      {groups.length > 0 && (
+        <div className="chiprow" role="group" aria-label="Filter by activity">
+          <button className="chip-toggle" aria-pressed={kind === null} onClick={() => setKind(null)}>
+            All {total}
+          </button>
+          {groups.map((g) => (
+            <button
+              key={g.slug}
+              className="chip-toggle"
+              aria-pressed={kind === g.slug}
+              onClick={() => setKind(kind === g.slug ? null : g.slug)}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {shown.length === 0 && (
+        <Empty
+          title="Nothing filed yet"
+          body="Share a reel, upload a plan, or look somewhere up in Explore. What you keep lands here."
+        />
+      )}
+
+      {shown.map((group) => (
+        <section key={group.slug} className="filegroup">
+          <div className="row between filegroup__head">
+            <h2 className="t-md">{group.label}</h2>
+            <span className="t-xs dim num">
+              {group.places.length} across{' '}
+              {group.countries === 1 ? '1 country' : `${group.countries} countries`}
+            </span>
+          </div>
+          <ul className="list">
+            {group.places.map((place) => (
+              <li key={place.trip_place_id}>
+                <Link to={`/places/${place.trip_place_id}`} className="item">
+                  <Glyph Icon={CATEGORY_ICON[place.category] ?? CATEGORY_ICON.other} />
+                  <div className="item__body">
+                    <p className="item__title clamp-1">{place.name}</p>
+                    <Meta parts={[place.city, place.country]} />
+                  </div>
+                  <ChevronRight size={18} className="dimmer" style={{ flex: 'none' }} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+
+      {total > 0 && (
+        <button
+          className="btn btn--block"
+          style={{ marginBlock: 'var(--s-4)' }}
+          onClick={() =>
+            openAsk({ surface: 'saved', contextLabel: label ?? 'everything you have saved' })
+          }
+        >
+          {label ? `Ask about your ${label.toLowerCase()}` : 'Ask about everything you saved'}
+        </button>
+      )}
     </div>
   )
 }

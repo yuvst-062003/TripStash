@@ -14,6 +14,7 @@ anyway would be the whole problem.
 
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -25,6 +26,9 @@ from app.adapters.base import FetchedPage, PermissionDecision
 # city opened on demand and a curious afternoon combined - so the three cannot
 # add up to something that looks like a crawl.
 DEFAULT_DAILY_BUDGET = 60
+# A host's own API, used the way its etiquette asks, costs it far less than a
+# page; a question to the guide is about four calls.
+API_DAILY_BUDGET = 500
 
 # Identifies us honestly, with somewhere to complain to. Not negotiable.
 USER_AGENT = "TripStashBot/0.1 (+https://github.com/yuvst-062003/TripStash; personal travel app)"
@@ -44,6 +48,9 @@ class HostPolicy:
     terms_allow_automated_access: bool = False
     crawl_delay_seconds: float = 1.0
     disallowed_prefixes: tuple[str, ...] = ()
+    # The host's published API, when it has one. Its own usage policy governs
+    # it rather than robots.txt, which is written for crawlers of pages.
+    api_paths: tuple[str, ...] = ()
     # Set when a publisher asks to be left alone. Permanent, and it outranks
     # everything above it.
     removal_requested: bool = False
@@ -61,6 +68,9 @@ KNOWN_HOSTS: dict[str, HostPolicy] = {
         terms_allow_automated_access=True,
         crawl_delay_seconds=1.0,
         disallowed_prefixes=("/w/", "/wiki/Special:"),
+        # The MediaWiki API sits under /w/ but is the sanctioned way in for a
+        # program, under the Wikimedia API etiquette (identify, go serially).
+        api_paths=("/w/api.php",),
         note="CC BY-SA. The one tier whose text may be reused in full, with attribution.",
     ),
 }
@@ -131,7 +141,8 @@ class FakeContentSource:
             )
 
         path = urlparse(url).path or "/"
-        for prefix in policy.disallowed_prefixes:
+        is_api = any(path.startswith(api) for api in policy.api_paths)
+        for prefix in () if is_api else policy.disallowed_prefixes:
             if path.startswith(prefix):
                 return PermissionDecision(False, f"{host}: robots.txt disallows {prefix}.")
 
@@ -208,3 +219,40 @@ def _split_title(body: str) -> tuple[str | None, str]:
     if lines[0].startswith("# "):
         return lines[0][2:].strip(), "\n".join(lines[1:]).strip()
     return None, "\n".join(lines).strip()
+
+
+# One gate for the whole process, so the per-host budget and the crawl delay
+# hold across requests rather than resetting with every new adapter object.
+_SHARED_GATE = FakeContentSource()
+_GATE_LOCK = threading.Lock()
+
+
+def admit(url: str) -> bool:
+    """Ask the gate, then pay for the request: budget charged, delay observed.
+
+    For adapters that talk to a host's API themselves (the Wikivoyage guide):
+    `may_fetch` alone would let them through without ever spending a budget or
+    waiting a delay. A published API path is governed by the host's API rules
+    - one request at a time, on its own larger daily budget - and a page by the
+    crawling rules above it.
+    """
+    with _GATE_LOCK:  # one request at a time, per process
+        decision = _SHARED_GATE.may_fetch(url)
+        if not decision.allowed:
+            return False
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+        policy = _SHARED_GATE.policies.get(host)
+        is_api = bool(policy) and any(
+            (parsed.path or "/").startswith(path) for path in policy.api_paths
+        )
+        today = datetime.now(UTC).date().isoformat()
+        if is_api:
+            key = (f"{host} api", today)
+            if _SHARED_GATE._spent.get(key, 0) >= API_DAILY_BUDGET:
+                return False
+        else:
+            key = (host, today)
+            _SHARED_GATE._wait_for_crawl_delay(host, decision.crawl_delay_seconds)
+        _SHARED_GATE._spent[key] = _SHARED_GATE._spent.get(key, 0) + 1
+        return True

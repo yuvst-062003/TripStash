@@ -49,3 +49,26 @@ def test_binary_media_is_not_given_a_made_up_transcript():
         MediaPayload(kind="video", filename="clip.mp4", media_type="video/mp4", text="ignored")
     )
     assert transcript is None and ocr is None
+
+
+def test_a_dated_festival_becomes_an_event_with_its_date():
+    """Spec: things that happen are events, and the date comes through extraction."""
+    from datetime import date
+
+    from app.adapters.ai import FakeAIAdapter, parse_event_dates
+    from app.adapters.base import MediaPayload
+
+    assert parse_event_dates("Carnaval in Salvador is on 14 February 2027") == (
+        date(2027, 2, 14),
+        None,
+    )
+    start, end = parse_event_dates("the full moon party runs March 3-5, 2027")
+    assert (start, end) == (date(2027, 3, 3), date(2027, 3, 5))
+    assert parse_event_dates("a festival with no date") == (None, None)
+
+    result = FakeAIAdapter().extract(
+        MediaPayload(kind="note", text="Carnaval in Salvador is on 14 February 2027, wild.")
+    )
+    events = [c for c in result.candidates if c.type == "event"]
+    assert len(events) == 1
+    assert events[0].happens_on == date(2027, 2, 14)

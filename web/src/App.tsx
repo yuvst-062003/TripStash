@@ -18,6 +18,7 @@ import Clips from './pages/Clips'
 import ClipFeed from './pages/ClipFeed'
 import TripScreen from './pages/TripScreen'
 import Place from './pages/Place'
+import Profile from './pages/Profile'
 import ShareTarget from './pages/ShareTarget'
 import { Note, SkeletonRows } from './components/ui'
 import {
@@ -141,6 +142,8 @@ export default function App() {
           <Route path="/clips/feed" element={<ClipFeed />} />
           <Route path="/trip" element={<TripScreen />} />
           <Route path="/places/:tripPlaceId" element={<Place />} />
+          {/* Your picks and sources, reached from the avatar on the trip. */}
+          <Route path="/profile" element={<Profile />} />
           {/* Declared in the manifest as the share target; the OS lands here. */}
           <Route path="/save" element={<ShareTarget />} />
           <Route path="*" element={<Navigate to="/" replace />} />

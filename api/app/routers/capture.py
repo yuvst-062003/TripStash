@@ -19,26 +19,30 @@ from fastapi import (
     status,
 )
 from sqlalchemy import case, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
-from app.adapters import get_storage
+from app.adapters import get_storage, get_video_search
 from app.adapters.storage import ALLOWED_MEDIA_TYPES, SignatureError, UnsupportedMediaError
 from app.config import get_settings
 from app.db import get_session
 from app.deps import audit, current_trip, current_user, owned_or_404
 from app.models.capture import ExtractionCandidate, MediaStage, Source
 from app.models.core import Trip, User
-from app.models.enums import CandidateStatus, SourceKind
+from app.models.enums import CandidateStatus, SourceKind, SourceStatus
+from app.models.places import Place
 from app.schemas.api import (
     ApproveCandidate,
     CandidateEdit,
     CandidateResponse,
+    FindRequest,
+    FindResponse,
     KnownFingerprints,
     KnownFingerprintsResponse,
     LinkCapture,
     MediaStageResponse,
     SourceResponse,
 )
+from app.services.documents import is_document, read_document
 from app.services.extraction import (
     CaptureError,
     DuplicateSourceError,
@@ -46,6 +50,7 @@ from app.services.extraction import (
     create_source,
     ignore_candidate,
 )
+from app.services.finding import find_videos
 from app.worker import enqueue_source_processing
 
 router = APIRouter(tags=["capture"])
@@ -92,6 +97,11 @@ def _serialise_source(session: Session, source: Source) -> SourceResponse:
 
 
 def _serialise_candidate(candidate: ExtractionCandidate) -> CandidateResponse:
+    duplicate = (
+        object_session(candidate).get(Place, candidate.duplicate_of_place_id)
+        if candidate.duplicate_of_place_id and object_session(candidate)
+        else None
+    )
     return CandidateResponse(
         id=candidate.id,
         source_id=candidate.source_id,
@@ -106,7 +116,10 @@ def _serialise_candidate(candidate: ExtractionCandidate) -> CandidateResponse:
         evidence=json.loads(candidate.evidence_json or "[]"),
         resolutions=json.loads(candidate.resolution_json or "[]"),
         duplicate_of_place_id=candidate.duplicate_of_place_id,
+        duplicate_of_name=duplicate.name if duplicate else None,
         duplicate_reason=candidate.duplicate_reason,
+        happens_on=candidate.happens_on,
+        ends_on=candidate.ends_on,
     )
 
 
@@ -117,6 +130,7 @@ def _serialise_candidate(candidate: ExtractionCandidate) -> CandidateResponse:
 def capture_link(
     body: LinkCapture,
     background: BackgroundTasks,
+    response: Response,
     session: Session = Depends(get_session),
     trip: Trip = Depends(current_trip),
 ) -> SourceResponse:
@@ -131,10 +145,15 @@ def capture_link(
             title=body.title,
             author=body.author,
             published_on=body.published_on,
+            lat=body.lat,
+            lon=body.lon,
         )
     except DuplicateSourceError as exc:
-        # Re-importing the same thing returns the original rather than a copy.
-        return _serialise_source(session, exc.source)
+        # Re-importing the same thing returns the original rather than a copy — and says so.
+        response.status_code = status.HTTP_200_OK
+        original = _serialise_source(session, exc.source)
+        original.duplicate = True
+        return original
     except CaptureError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
@@ -178,41 +197,72 @@ async def capture_upload(
     settings = get_settings()
     out: list[SourceResponse] = []
 
+    # Every file is checked before any is stored, so a bad one never leaves
+    # half a batch behind.
+    payloads: list[tuple[UploadFile, bytes]] = []
     for upload in files:
         data = await upload.read()
         if len(data) > settings.max_upload_bytes:
             raise HTTPException(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                f"{upload.filename} is larger than the {settings.max_upload_bytes // 1048576} MB "
-                "limit. Compress it or select a shorter clip.",
+                f"{upload.filename} is over the {settings.max_upload_bytes // 1048576} MB limit. "
+                "Trim it or pick a shorter clip.",
             )
         if upload.content_type and upload.content_type not in ALLOWED_MEDIA_TYPES:
             raise HTTPException(
                 status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                f"{upload.content_type} is not accepted. Supported: "
-                f"{', '.join(sorted(ALLOWED_MEDIA_TYPES))}.",
+                f"{upload.filename} is not a supported file. Use a photo (JPG, PNG, HEIC, WebP, "
+                "GIF), a video (MP4, MOV, WebM), a Word document, a PDF or a text file.",
             )
+        payloads.append((upload, data))
 
+    for upload, data in payloads:
         kind = SourceKind.VIDEO if (upload.content_type or "").startswith("video") else (
             SourceKind.IMAGE if (upload.content_type or "").startswith("image") else SourceKind.NOTE
         )
+        # A Word file or a PDF is a plan someone wrote. Read it here so the
+        # pipeline downstream sees text rather than an opaque blob; a file we
+        # cannot read is still kept, with the reason attached.
+        text = note
+        document_failure: str | None = None
+        if is_document(upload.content_type):
+            kind = SourceKind.ARTICLE
+            read = read_document(data, upload.content_type)
+            if read.text:
+                text = f"{note}\n\n{read.text}" if note else read.text
+            else:
+                document_failure = read.failure_reason
         try:
             source = create_source(
                 session,
                 trip_id=trip.id,
                 kind=kind,
-                text=note,
+                text=text,
                 filename=upload.filename,
                 media_type=upload.content_type,
                 data=data,
             )
         except DuplicateSourceError as exc:
-            out.append(_serialise_source(session, exc.source))
+            original = _serialise_source(session, exc.source)
+            original.duplicate = True
+            out.append(original)
             continue
         except UnsupportedMediaError as exc:
             raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, str(exc)) from exc
         except CaptureError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+        if document_failure:
+            # Recoverable: the file is stored and the traveller is told why it
+            # produced nothing, rather than it appearing to have worked. There
+            # is no text to extract, so the pipeline is not run at all - left to
+            # run it would replace this with generic advice about captions,
+            # which is the wrong remedy for a document that would not open.
+            source.failure_reason = document_failure
+            source.status = SourceStatus.FAILED
+            session.commit()
+            out.append(_serialise_source(session, source))
+            continue
 
         session.commit()
         enqueue_source_processing(source.id, background)
@@ -326,6 +376,8 @@ def edit_candidate(
     if candidate.status != CandidateStatus.PENDING:
         raise HTTPException(status.HTTP_409_CONFLICT, "This candidate was already decided.")
     for field, value in body.model_dump(exclude_none=True).items():
+        if getattr(candidate, field) != value:
+            candidate.user_edited = True
         setattr(candidate, field, value)
     session.flush()
     return _serialise_candidate(candidate)
@@ -373,11 +425,21 @@ def ignore(
 # ----------------------------------------------------------------- files
 
 
+# A page is accepted and stored, but it is never handed back as a page. Served
+# as markup from the API's own origin, an uploaded file would run its script
+# there - against the host that holds every traveller's trip. It is text to
+# read, so it goes back as text, and `nosniff` below stops a browser deciding
+# otherwise.
+_SERVED_AS_TEXT = {"text/html"}
+
+
 # Keys are generated internally from the uploaded filename, so the extension
 # is the only type hint the signed URL carries. Anything unrecognised is served
 # as an opaque download rather than guessed at.
 def _served_media_type(key: str) -> str:
     guessed, _ = mimetypes.guess_type(key)
+    if guessed in _SERVED_AS_TEXT:
+        return "text/plain; charset=utf-8"
     return guessed if guessed in ALLOWED_MEDIA_TYPES else "application/octet-stream"
 
 
@@ -427,7 +489,13 @@ def get_file(
     except (FileNotFoundError, OSError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found.") from exc
 
-    headers = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=600"}
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, max-age=600",
+        # Never let the browser sniff a stored file back into something that
+        # runs. The declared type is the only type.
+        "X-Content-Type-Options": "nosniff",
+    }
     if requested is None:
         return Response(content=data, media_type=_served_media_type(key), headers=headers)
     start, end = requested
@@ -437,4 +505,38 @@ def get_file(
         status_code=status.HTTP_206_PARTIAL_CONTENT,
         media_type=_served_media_type(key),
         headers=headers,
+    )
+
+
+@router.post("/find", response_model=FindResponse)
+def find(
+    body: FindRequest,
+    background: BackgroundTasks,
+    session: Session = Depends(get_session),
+    trip: Trip = Depends(current_trip),
+) -> FindResponse:
+    """Look for video the traveller has not saved.
+
+    What comes back is marked found from the moment the row exists, sits on the
+    lowest rung of the provenance ladder, and counts for nothing until it is
+    stamped. A search that finds nothing says so rather than leaving an empty
+    shelf to be read as an answer.
+    """
+    outcome = find_videos(
+        session,
+        trip_id=trip.id,
+        provider=get_video_search(),
+        place=body.place,
+        activity=body.activity,
+    )
+    session.commit()
+    for source in outcome.created:
+        enqueue_source_processing(source.id, background)
+
+    return FindResponse(
+        query=outcome.query,
+        found=len(outcome.created),
+        already_had=outcome.already_had,
+        nothing_reason=outcome.nothing_reason,
+        sources=[_serialise_source(session, source) for source in outcome.created],
     )

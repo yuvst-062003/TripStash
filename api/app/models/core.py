@@ -78,6 +78,10 @@ class Destination(IdMixin, TimestampMixin, Base):
     depart_on: Mapped[date | None] = mapped_column(Date)
     is_current: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
+    # False for an alternative: a stop kept on the trip, with its places and
+    # its reasons, but not travelled. It holds no nights and no dates, and the
+    # route, its legs and its end are worked out as if it were not there.
+    on_route: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     trip: Mapped[Trip] = relationship(back_populates="destinations")
 

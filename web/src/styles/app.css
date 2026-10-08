@@ -941,6 +941,9 @@ textarea.input { min-height: 76px; resize: vertical; }
 .mapbtn:active { transform: scale(0.94); }
 
 .trip__spacer { flex: 1; min-height: 32vh; }
+/* The spacer is the window onto the map: presses go through it to the map
+   underneath, so a country or a pin can be pressed and the map dragged. */
+.trip__over > .trip__spacer { pointer-events: none; }
 
 /* The zoom-out pill: the discoverable twin of the pinch gesture. */
 .zoomout {
@@ -1019,11 +1022,8 @@ textarea.input { min-height: 76px; resize: vertical; }
   left: calc(100% + 8px);
   transform: translateY(-50%);
   /* Consecutive stops can be an hour apart and land almost on top of each
-     other; alternating sides keeps their names apart without hiding any. */
-}
-.stoppin--left .stoppin__label {
-  left: auto;
-  right: calc(100% + 8px);
+     other; alternating sides keeps their names apart, and a name that would
+     still collide tries the other side before it is hidden. */
   padding: 3px var(--s-2);
   border-radius: var(--r-sm);
   background: rgba(6, 14, 28, 0.78);
@@ -1033,6 +1033,15 @@ textarea.input { min-height: 76px; resize: vertical; }
   letter-spacing: 0;
   white-space: nowrap;
   pointer-events: none;
+}
+.stoppin--left .stoppin__label,
+.stoppin__label[data-flip] {
+  left: auto;
+  right: calc(100% + 8px);
+}
+.stoppin--left .stoppin__label[data-flip] {
+  right: auto;
+  left: calc(100% + 8px);
 }
 
 /* ---- The sheet holding the itinerary ------------------------------------- */
@@ -1632,3 +1641,304 @@ textarea.input { min-height: 76px; resize: vertical; }
   gap: var(--s-2);
   margin-top: var(--s-3);
 }
+
+/* ---------------------------------------------------------------------------
+   Yours and found
+   A clip you saved is solid; one the app found is dashed and says so. Border
+   style and the word carry it, never colour alone.
+   ------------------------------------------------------------------------- */
+.clipcounts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  margin-block: 2px;
+}
+.cliptag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px var(--s-2);
+  border-radius: var(--r-pill);
+  font: var(--text-xs);
+  white-space: nowrap;
+}
+.cliptag--yours {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+.cliptag--found {
+  background: transparent;
+  border: 1px dashed var(--ink-3);
+  color: var(--ink-2);
+}
+.cliptag--warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.cliptag--night {
+  align-self: flex-start;
+  border-color: var(--on-night-3);
+  color: var(--on-night-2);
+}
+
+/* Explore: name a place and it reads. */
+.exsearch {
+  display: grid;
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+  padding-bottom: var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+.exsearch__bar {
+  display: flex;
+  gap: var(--s-2);
+}
+.exsearch__ask,
+.exsearch__read {
+  display: grid;
+  gap: var(--s-3);
+}
+.exsearch__q {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: var(--s-1);
+}
+.exsearch__q .chiprow { margin-top: var(--s-1); }
+.exsearch__actions {
+  display: flex;
+  gap: var(--s-2);
+}
+
+/* Saved, by activity */
+.waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-3);
+  border: 1px dashed var(--ink-3);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+}
+.filegroup { margin-top: var(--s-5); }
+.filegroup__head { align-items: baseline; gap: var(--s-2); }
+
+/* Profile */
+.profile__card {
+  display: grid;
+  gap: var(--s-2);
+  margin: var(--s-3) var(--s-4) 0;
+}
+.profile__link {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  color: inherit;
+  text-decoration: none;
+}
+a.trip__avatar { text-decoration: none; }
+.waiting .item__body,
+.profile__link .item__body {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* City cards: your photo and your sentence, swiped sideways. */
+.citycards {
+  display: flex;
+  gap: var(--s-3);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: var(--s-2) var(--s-4) var(--s-3);
+  scrollbar-width: none;
+}
+.citycards::-webkit-scrollbar { display: none; }
+.tripsheet .citycards {
+  margin-inline: calc(var(--sheet-pad, var(--s-4)) * -1);
+  padding-inline: var(--sheet-pad, var(--s-4));
+  scroll-padding-inline: var(--sheet-pad, var(--s-4));
+}
+.citycards { scroll-padding-inline: var(--s-4); }
+.citycard {
+  flex: 0 0 72%;
+  max-width: 260px;
+  scroll-snap-align: start;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--elev-1);
+}
+.citycard__photo {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 3;
+  background: var(--bg-sunk);
+}
+.citycard__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.citycard__initial {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font: var(--text-xxl);
+  color: var(--ink-3);
+}
+.citycard__badge {
+  position: absolute;
+  inset-block-start: var(--s-2);
+  inset-inline-start: var(--s-2);
+  padding: 2px var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: var(--text-xs);
+}
+.citycard__body {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: var(--s-3);
+}
+.citycard__name { font: var(--text-md); font-weight: 700; }
+.citycard__line { font: var(--text-sm); color: var(--ink-2); }
+
+/* Trip: a country you flew into */
+.countrypane { display: grid; gap: var(--s-3); }
+.countrypane__head { display: flex; align-items: center; gap: var(--s-2); }
+
+/* Trip: the assistant */
+.askroute { gap: var(--s-2); margin-block: var(--s-3) var(--s-2); }
+.advice {
+  display: grid;
+  gap: var(--s-2);
+  margin-bottom: var(--s-3);
+  padding: var(--s-3);
+  border-radius: var(--r-lg);
+  background: var(--accent-soft);
+}
+.advice__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  font: var(--text-sm);
+  font-weight: 700;
+  color: var(--accent);
+}
+.advice__item,
+.suggest__item {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.advice__text { display: grid; gap: 2px; }
+.advice__title { font: var(--text-md); font-weight: 600; }
+.advice__actions { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; }
+.suggest { display: grid; gap: var(--s-2); margin-top: var(--s-2); }
+.suggest__empty { margin-top: var(--s-2); }
+.addstop { flex-wrap: wrap; }
+.addstop__suggest { flex-basis: 100%; }
+.iconbtn--sm { width: 34px; height: 34px; }
+
+.stop__namebtn {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.stop__ideas {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 var(--s-2) 44px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: var(--text-xs);
+  cursor: pointer;
+}
+.ideas {
+  display: grid;
+  gap: var(--s-1);
+  margin: 0 0 var(--s-3) 44px;
+}
+.ideas__row {
+  display: grid;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--bg-sunk);
+  color: inherit;
+  text-decoration: none;
+}
+.ideas__title { font: var(--text-sm); font-weight: 600; }
+
+/* What travellers say, beside the + */
+.voices { display: grid; gap: var(--s-2); margin-top: var(--s-3); }
+.voices__group { display: grid; gap: var(--s-1); }
+.voices__source {
+  margin: var(--s-1) 0 0;
+  font: var(--text-xs);
+  font-weight: 700;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.voice {
+  display: grid;
+  gap: 2px;
+  padding: var(--s-2) var(--s-3);
+  border: 1px dashed var(--ink-3);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+}
+.voice__title { font: var(--text-sm); font-weight: 600; }
+.voice__snippet { font: var(--text-sm); color: var(--ink-2); }
+
+/* Alternatives: kept, not travelled */
+.stop__extras { display: flex; gap: var(--s-4); align-items: center; margin-left: 44px; }
+.stop__extras .stop__ideas { margin-left: 0; }
+.stop__aside {
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font: var(--text-xs);
+  cursor: pointer;
+}
+.alts { display: grid; gap: var(--s-2); margin-top: var(--s-5); }
+.alts__head { display: flex; align-items: baseline; gap: var(--s-2); margin: 0; font: var(--text-md); font-weight: 700; }
+.alt {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border: 1px dashed var(--ink-3);
+  border-radius: var(--r-md);
+}
+.alt__text { display: grid; gap: 2px; }
+.alt__name { font: var(--text-md); font-weight: 600; }

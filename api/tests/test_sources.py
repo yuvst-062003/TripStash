@@ -207,3 +207,42 @@ def test_the_search_provider_has_no_way_to_write_anything():
     public = {name for name in dir(FakeSearchProvider) if not name.startswith("_")}
 
     assert public == {"name", "search"}
+
+
+def test_the_travel_guide_passes_the_same_gate():
+    """Wikivoyage's API sits under /w/, which robots.txt keeps crawlers out of;
+    the API is the sanctioned way in, so it is allowed and the pages are not."""
+    gate = get_content_source()
+    assert gate.may_fetch("https://en.wikivoyage.org/w/api.php?action=query").allowed
+    assert not gate.may_fetch("https://en.wikivoyage.org/w/index.php?title=Rio").allowed
+
+
+def test_a_refused_host_is_never_asked_for_a_guide(monkeypatch):
+    from app.adapters import travel_wiki
+
+    calls: list[str] = []
+    monkeypatch.setattr(travel_wiki, "get_json", lambda url, **_: calls.append(url) or {})
+    monkeypatch.setattr(travel_wiki, "API", "https://gringo.co.il/w/api.php")
+
+    assert travel_wiki.WikivoyageTravelWiki()._get({"action": "query"}) == {}
+    assert calls == []
+
+
+def test_find_hands_back_the_clips_it_found(client, auth, trip):
+    """A count alone left Explore unable to show what it had read."""
+    response = client.post("/api/v1/find", headers=auth, json={"place": "Antigua"})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["sources"]) == body["found"]
+
+
+def test_the_guide_spends_its_own_api_budget(monkeypatch):
+    from app.adapters import content
+
+    monkeypatch.setattr(content, "API_DAILY_BUDGET", 2)
+    monkeypatch.setattr(content, "_SHARED_GATE", content.FakeContentSource())
+    url = "https://en.wikivoyage.org/w/api.php?action=query"
+
+    assert content.admit(url) and content.admit(url)
+    assert not content.admit(url)

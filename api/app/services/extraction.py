@@ -51,7 +51,7 @@ from app.models.enums import (
     SourceStatus,
 )
 from app.models.places import Place, PlaceFact, TripPlace
-from app.schemas.extraction import KnowledgeCandidate
+from app.schemas.extraction import Evidence, KnowledgeCandidate, PlaceCandidate
 from app.services.dedupe import find_duplicate, find_duplicate_for_resolved, merge_places
 from app.services.text import normalize_name
 
@@ -88,6 +88,8 @@ def create_source(
     data: bytes | None = None,
     duration_seconds: float | None = None,
     captured_at: datetime | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
 ) -> Source:
     """Persist the source before anything else can fail (step 1).
 
@@ -127,6 +129,8 @@ def create_source(
         byte_size=byte_size,
         duration_seconds=duration_seconds,
         captured_at=captured_at,
+        lat=lat,
+        lon=lon,
         fingerprint=digest,
         provenance=Provenance.USER if kind in (SourceKind.NOTE, SourceKind.MANUAL)
         else Provenance.CREATOR,
@@ -161,6 +165,23 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
     source.attempts += 1
     source.failure_reason = None
     session.flush()
+
+    if source.kind == SourceKind.MANUAL and source.lat is not None and source.lon is not None:
+        # "Here": the traveller is the source and the pin is where they stood.
+        # It still goes through review — nothing reaches the map unconfirmed.
+        name = (source.raw_text or "This spot").strip()[:200]
+        candidate = KnowledgeCandidate(
+            type=KnowledgeType.PLACE,
+            title=name,
+            confidence=1.0,
+            evidence=[Evidence(quote=name, channel="text")],
+            place=PlaceCandidate(name=name, lat=source.lat, lon=source.lon),
+        )
+        rows = [_persist_candidate(session, source, candidate)]
+        source.status = SourceStatus.NEEDS_REVIEW
+        source.processed_at = datetime.now(UTC)
+        session.flush()
+        return rows
 
     ai = get_ai()
     payload = MediaPayload(
@@ -223,8 +244,8 @@ def process_source(session: Session, source: Source) -> list[ExtractionCandidate
     source.status = SourceStatus.NEEDS_REVIEW if candidates else SourceStatus.COMPLETED
     if not candidates:
         source.failure_reason = (
-            "Nothing extractable was found. The source is kept - attach it to a place "
-            "manually or add a note explaining why it matters."
+            "Nothing worth saving was found in it. The original is kept under Sources — "
+            "add a caption or a note about why it matters and retry."
         )
     source.processed_at = datetime.now(UTC)
     session.flush()
@@ -355,6 +376,21 @@ def _persist_candidate(
     if is_place_candidate:
         resolved = _resolve_place(candidate)
         resolutions = [asdict(option) for option in resolved]
+        if candidate.place.lat is not None and candidate.place.lon is not None:
+            # The spot itself is always an option: exactly where you stood.
+            resolutions.append(
+                asdict(
+                    ResolvedPlace(
+                        provider="you",
+                        provider_place_id=f"here:{candidate.place.lat:.5f},{candidate.place.lon:.5f}",
+                        name=candidate.place.name,
+                        lat=candidate.place.lat,
+                        lon=candidate.place.lon,
+                        category=str(candidate.place.category),
+                        match_confidence=1.0,
+                    )
+                )
+            )
 
         probe = resolved[0] if resolved else None
         match = (
@@ -385,6 +421,8 @@ def _persist_candidate(
         resolution_json=json.dumps(resolutions, ensure_ascii=False),
         duplicate_of_place_id=duplicate_place_id,
         duplicate_reason=duplicate_reason,
+        happens_on=candidate.happens_on,
+        ends_on=candidate.ends_on,
     )
     session.add(row)
     session.flush()
@@ -449,7 +487,9 @@ def approve_candidate(
         _settle_source(session, candidate.source_id)
         return {"kind": "place", "trip_place_id": trip_place.id, "place_id": trip_place.place_id}
 
-    item = _approve_knowledge(session, candidate, destination_id=destination_id)
+    item = _approve_knowledge(
+        session, candidate, destination_id=destination_id, note=reason_saved
+    )
     candidate.status = CandidateStatus.APPROVED
     candidate.decided_at = datetime.now(UTC)
     _settle_source(session, candidate.source_id)
@@ -464,6 +504,9 @@ def ignore_candidate(session: Session, candidate: ExtractionCandidate) -> None:
 
 def _settle_source(session: Session, source_id: str) -> None:
     """A source leaves Inbox once every candidate has a decision."""
+    # The session does not autoflush: without this the candidate just decided
+    # still reads as pending and the source never settles.
+    session.flush()
     pending = session.execute(
         select(ExtractionCandidate).where(
             ExtractionCandidate.source_id == source_id,
@@ -679,22 +722,32 @@ def _write_provider_facts(session: Session, place: Place, chosen: dict) -> None:
 
 
 def _approve_knowledge(
-    session: Session, candidate: ExtractionCandidate, *, destination_id: str | None
+    session: Session,
+    candidate: ExtractionCandidate,
+    *,
+    destination_id: str | None,
+    note: str | None = None,
 ) -> KnowledgeItem:
     source = session.get(Source, candidate.source_id)
+    # The traveller's own words go under the claim; nothing typed is dropped.
+    note = (note or "").strip()
+    body = f"{candidate.body}\n\n{note}".strip() if note else candidate.body
     item = KnowledgeItem(
         trip_id=candidate.trip_id,
         source_id=candidate.source_id,
         destination_id=destination_id,
         type=candidate.type,
         title=candidate.title,
-        body=candidate.body,
+        body=body,
+        user_edited=candidate.user_edited or bool(note),
         category=candidate.category,
         destination_scope=candidate.destination_scope,
         confidence=candidate.confidence,
         provenance=source.provenance if source else Provenance.CREATOR,
         evidence_json=candidate.evidence_json,
         source_date=source.published_on if source else None,
+        happens_on=candidate.happens_on,
+        ends_on=candidate.ends_on,
         requires_official_verification=KnowledgeType(candidate.type) is KnowledgeType.BORDER,
     )
     session.add(item)
