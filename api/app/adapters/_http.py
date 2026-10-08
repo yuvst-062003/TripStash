@@ -46,3 +46,22 @@ def get_json(url: str, *, headers: dict[str, str], timeout: float) -> dict:
             return json.loads(r.read())
     except Exception:
         return {}
+
+
+def post_json(url: str, *, body: dict, headers: dict[str, str], timeout: float) -> dict:
+    """POST a JSON body and parse the JSON reply, or return an empty dict.
+
+    The same contract as `get_json`: a failure arrives as nothing, for the
+    caller to describe honestly, and certificates are always verified.
+    """
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json", **headers},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout, context=verified_context()) as r:
+            return json.loads(r.read())
+    except Exception:
+        return {}

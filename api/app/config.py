@@ -75,8 +75,12 @@ class Settings(BaseSettings):
     #: `fake` is deterministic and keyless; `brave` searches the open web.
     #: What comes back is graded by app.services.web_grading before it is
     #: allowed to influence anything - search never earns the top of the ladder.
-    web_search_provider: str = "fake"
+    web_search_provider: str = "fake"  # fake | tavily (free) | serper | brave
     web_search_api_key: str | None = None
+    #: Gringo is read through a search engine its robots.txt admits. Empty
+    #: means "the web search above"; `serper` is Google's index, for free.
+    gringo_search_provider: str = ""
+    gringo_search_api_key: str | None = None
     youtube_region: str | None = None
     #: `fake` is keyless; `reddit` reads Reddit's official API with an app
     #: registered at reddit.com/prefs/apps - never the website itself.

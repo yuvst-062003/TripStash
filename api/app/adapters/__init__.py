@@ -84,14 +84,32 @@ def get_web_search():
     `app.services.web_grading`, and it is applied at the point of use.
     """
     settings = get_settings()
-    if settings.web_search_provider == "brave":
-        from app.adapters.web_search import BraveWebSearch
+    return _search_driver(settings.web_search_provider, settings.web_search_api_key)
 
-        return BraveWebSearch(settings.web_search_api_key)
 
-    from app.adapters.web_search import FakeWebSearch
+def get_gringo_search():
+    """The search Gringo is read through.
 
-    return FakeWebSearch()
+    Its own provider when one is set - Serper, Google's index, the one kind of
+    bot Gringo's robots.txt lets in - and otherwise the general web search.
+    """
+    settings = get_settings()
+    if settings.gringo_search_provider:
+        return _search_driver(settings.gringo_search_provider, settings.gringo_search_api_key)
+    return get_web_search()
+
+
+def _search_driver(provider: str, api_key: str | None):
+    from app.adapters import web_search
+
+    drivers = {
+        "brave": web_search.BraveWebSearch,
+        "tavily": web_search.TavilyWebSearch,
+        "serper": web_search.SerperWebSearch,
+    }
+    if provider in drivers:
+        return drivers[provider](api_key)
+    return web_search.FakeWebSearch()
 
 
 @lru_cache
@@ -174,6 +192,7 @@ __all__ = [
     "get_content_source",
     "get_fx",
     "get_places",
+    "get_gringo_search",
     "get_reddit",
     "get_search",
     "get_storage",
