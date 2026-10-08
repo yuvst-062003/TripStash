@@ -83,7 +83,19 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("source", "found", "BOOLEAN NOT NULL DEFAULT FALSE"),
     # Nights became the stored truth of the route; dates are derived from them.
     ("destination", "nights", "INTEGER"),
+    ("destination", "on_route", "BOOLEAN NOT NULL DEFAULT TRUE"),
 )
+
+# Run once, in the same transaction that adds the column, so a traveller's
+# later choice is never overwritten. Before this column existed, an
+# alternative was a stop with no dates whose note began by saying so.
+_ON_ADD: dict[tuple[str, str], str] = {
+    ("destination", "on_route"): (
+        "UPDATE destination SET on_route = FALSE "
+        "WHERE nights IS NULL AND arrive_on IS NULL AND depart_on IS NULL "
+        "AND (notes LIKE 'אלטרנטיבה%' OR lower(notes) LIKE 'alternative%')"
+    ),
+}
 
 
 def _add_missing_columns() -> None:
@@ -96,6 +108,8 @@ def _add_missing_columns() -> None:
             present = {col["name"] for col in inspector.get_columns(table)}
             if column not in present:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+                if (table, column) in _ON_ADD:
+                    conn.execute(text(_ON_ADD[(table, column)]))
 
 
 def _backfill_nights() -> None:

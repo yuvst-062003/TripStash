@@ -109,6 +109,8 @@ class DestinationUpdate(ApiModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     notes: str | None = None
     is_current: bool | None = None
+    # False sets a stop aside as an alternative; True puts it back.
+    on_route: bool | None = None
 
 
 class DestinationResponse(ApiModel):
@@ -123,6 +125,7 @@ class DestinationResponse(ApiModel):
     depart_on: date | None
     is_current: bool
     notes: str | None
+    on_route: bool = True
 
 
 class ScopeResponse(ApiModel):
@@ -168,6 +171,8 @@ class RouteResponse(ApiModel):
     has_end_date: bool
     total_nights: int
     stops: list[RouteStopResponse]
+    # Stops kept on the trip but not travelled, in their own order.
+    alternatives: list[DestinationResponse] = []
 
 
 class TripResponse(ApiModel):

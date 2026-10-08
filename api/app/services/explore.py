@@ -79,7 +79,9 @@ def _clip_counts(session: Session, trip_id: str, column) -> dict[str, int]:
 def _route_names(session: Session, trip_id: str) -> tuple[set[str], set[str]]:
     """The countries and the stop names the trip already passes through."""
     rows = session.execute(
-        select(Destination.name, Destination.country).where(Destination.trip_id == trip_id)
+        select(Destination.name, Destination.country).where(
+            Destination.trip_id == trip_id, Destination.on_route.is_(True)
+        )
     ).all()
     cities = {name.strip().lower() for name, _ in rows if name}
     countries = {country.strip().lower() for _, country in rows if country}

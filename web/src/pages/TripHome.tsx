@@ -388,6 +388,19 @@ export default function TripHome() {
     [],
   )
 
+  const setOnRoute = useCallback(async (destinationId: string, onRoute: boolean) => {
+    setSaving(destinationId)
+    setRouteError(null)
+    try {
+      const updated = await api.setOnRoute(destinationId, onRoute)
+      setRoute(updated.data)
+    } catch (error) {
+      setRouteError(error instanceof Error ? error.message : 'Could not move that stop.')
+    } finally {
+      setSaving(null)
+    }
+  }, [])
+
   const applyFix = useCallback(
     async (check: RouteCheck) => {
       const stop = route?.stops.find((s) => s.destination.id === check.fix?.payload.destination_id)
@@ -511,6 +524,7 @@ export default function TripHome() {
                 onNights={setNights}
                 onAdd={addStop}
                 onFix={applyFix}
+                onOnRoute={setOnRoute}
                 onAsk={() => openAsk({ surface: 'trip', contextLabel: 'your route' })}
                 onFocus={setFocus}
               />
@@ -533,6 +547,7 @@ function PlanPane({
   onNights,
   onAdd,
   onFix,
+  onOnRoute,
   onAsk,
   onFocus,
 }: {
@@ -542,6 +557,7 @@ function PlanPane({
   onNights: (stop: RouteStop, next: number | null) => void
   onAdd: (name: string, afterPosition: number | null) => Promise<void>
   onFix: (check: RouteCheck) => Promise<void>
+  onOnRoute: (destinationId: string, onRoute: boolean) => Promise<void>
   onAsk: () => void
   onFocus: (country: string) => void
 }) {
@@ -636,6 +652,7 @@ function PlanPane({
                 busy={saving === stop.destination.id}
                 onNights={onNights}
                 onFocus={onFocus}
+                onSetAside={() => onOnRoute(stop.destination.id, false)}
               />
             </div>
           )
@@ -656,7 +673,7 @@ function PlanPane({
         </div>
         {insertAfter === 'end' && (
           <AddStop
-            afterId={route.stops[route.stops.length - 1].destination.id}
+            afterId={route.stops[route.stops.length - 1]?.destination.id}
             onCancel={() => setInsertAfter(null)}
             onAdd={async (name) => {
               await onAdd(name, null)
@@ -665,6 +682,38 @@ function PlanPane({
           />
         )}
       </div>
+
+      {(route.alternatives ?? []).length > 0 && (
+        <section className="alts" aria-label="Alternatives">
+          <h3 className="alts__head">
+            Alternatives <span className="t-xs dim num">{route.alternatives?.length}</span>
+          </h3>
+          <p className="t-sm dim">Kept with their places, not on the route and holding no days.</p>
+          {route.alternatives?.map((alt) => (
+            <div key={alt.id} className="alt">
+              <div className="alt__text">
+                <span className="alt__name">
+                  {alt.name}
+                  {alt.country && <span className="t-xs dim"> · {alt.country}</span>}
+                </span>
+                {alt.notes && (
+                  <span className="t-sm dim clamp-2" dir="auto">
+                    {alt.notes}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                className="btn btn--sm"
+                disabled={saving === alt.id}
+                onClick={() => onOnRoute(alt.id, true)}
+              >
+                Put back on the route
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
     </>
   )
 }
@@ -735,12 +784,14 @@ function Stop({
   busy,
   onNights,
   onFocus,
+  onSetAside,
 }: {
   stop: RouteStop
   index: number
   busy: boolean
   onNights: (stop: RouteStop, next: number | null) => void
   onFocus: (country: string) => void
+  onSetAside: () => void
 }) {
   const [ideas, setIdeas] = useState(false)
   const nights = stop.nights
@@ -791,13 +842,18 @@ function Stop({
         </button>
       </div>
     </div>
-    <button
-      className="stop__ideas"
-      aria-expanded={ideas}
-      onClick={() => setIdeas(!ideas)}
-    >
-      <Lightbulb size={13} /> {ideas ? 'Hide ideas' : `Ideas for ${stop.destination.name}`}
-    </button>
+    <div className="stop__extras">
+      <button
+        className="stop__ideas"
+        aria-expanded={ideas}
+        onClick={() => setIdeas(!ideas)}
+      >
+        <Lightbulb size={13} /> {ideas ? 'Hide ideas' : `Ideas for ${stop.destination.name}`}
+      </button>
+      <button className="stop__aside" disabled={busy} onClick={onSetAside}>
+        Set aside as alternative
+      </button>
+    </div>
     {ideas && <StopIdeas name={stop.destination.name} />}
     </>
   )

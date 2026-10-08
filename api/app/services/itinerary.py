@@ -103,6 +103,10 @@ def schedule(trip: Trip) -> Schedule:
     previous: Destination | None = None
 
     for destination in _ordered(trip):
+        # Only an explicit False sets a stop aside; a row not yet saved has
+        # no value here, and is a stop like any other.
+        if destination.on_route is False:
+            continue
         nights = destination.nights
         arrive = cursor
         if nights is None:
@@ -140,6 +144,11 @@ def reschedule(trip: Trip) -> Schedule:
     for stop in computed.stops:
         stop.destination.arrive_on = stop.arrive_on
         stop.destination.depart_on = stop.depart_on
+    # An alternative holds no days, so it carries no dates either.
+    for destination in trip.destinations:
+        if destination.on_route is False:
+            destination.arrive_on = None
+            destination.depart_on = None
     # The trip's own end follows the route; its start is the traveller's.
     trip.end_date = computed.end_date
     return computed

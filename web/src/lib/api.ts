@@ -151,6 +151,9 @@ export const api = {
   route: () => get<Route>('/api/v1/trips/current/route'),
   setStopNights: (destinationId: string, nights: number | null) =>
     patch<Route>(`/api/v1/trips/current/destinations/${destinationId}`, { nights }),
+  // Set a stop aside as an alternative, or put it back on the route.
+  setOnRoute: (destinationId: string, onRoute: boolean) =>
+    patch<Route>(`/api/v1/trips/current/destinations/${destinationId}`, { on_route: onRoute }),
 
   // Explore: the same library rolled up to country and city.
   exploreCountries: () => get<Scope[]>('/api/v1/explore/countries'),

@@ -37,6 +37,8 @@ export interface Destination {
   depart_on: string | null
   is_current: boolean
   notes: string | null
+  /** False for an alternative: kept on the trip, not travelled. */
+  on_route?: boolean
 }
 
 /**
@@ -77,6 +79,8 @@ export interface Route {
   has_end_date: boolean
   total_nights: number
   stops: RouteStop[]
+  /** Stops set aside: kept with their places, not travelled. */
+  alternatives?: Destination[]
 }
 
 export interface MediaStage {

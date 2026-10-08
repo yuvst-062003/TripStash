@@ -57,6 +57,11 @@ def serialise_route(trip: Trip, computed: itinerary.Schedule) -> RouteResponse:
             )
             for stop in computed.stops
         ],
+        alternatives=[
+            DestinationResponse.model_validate(d)
+            for d in sorted(trip.destinations, key=lambda d: (d.position, d.id or ""))
+            if d.on_route is False
+        ],
     )
 
 
@@ -273,13 +278,20 @@ def update_destination(
     if "notes" in sent:
         destination.notes = body.notes
 
+    if "on_route" in sent and body.on_route is not None:
+        # Setting a stop aside keeps its nights, so putting it back restores
+        # the stay it had; it just stops counting while it is an alternative.
+        destination.on_route = body.on_route
+        if not body.on_route:
+            destination.is_current = False
+
     if "nights" in sent:
         try:
             computed = itinerary.set_nights(trip, destination_id, body.nights)
         except ValueError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     else:
-        computed = itinerary.schedule(trip)
+        computed = itinerary.reschedule(trip)
 
     session.flush()
     return serialise_route(trip, computed)

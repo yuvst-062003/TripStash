@@ -73,7 +73,7 @@ def _destinations(session: Session, trip: Trip) -> dict[str, Destination]:
     # actually visited.
     rows = session.execute(
         select(Destination)
-        .where(Destination.trip_id == trip.id)
+        .where(Destination.trip_id == trip.id, Destination.on_route.is_(True))
         .order_by(Destination.position)
     ).scalars()
     return {destination.id: destination for destination in rows}
