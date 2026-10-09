@@ -48,9 +48,10 @@ Knowledge tab said nothing was saved · untitled notes were blank in Sources
 main bundle · 15 placeholder tiles were fetched on every cold load · three
 console warnings on every load.
 
-Not run (⏭): C4 (the fakes' found clips name no place), C7 (needs a clip
-saved at a later second), V9 (needs a real photo picker). Noted (⚠️): Q6
-Dismiss pressed only through the script; I5 depends on live keys.
+Second pass, by hand: C4 with a found clip that names a place (Acatenango
+Volcano through Explore → Inbox → Keep), C3 and C7 with a 40 s clip saved at
+0:20, V9 with three photos through the album picker, Q6's Dismiss in the
+sheet, and I5 against the live search keys. Nothing is left as ⏭ or ⚠️.
 
 Not a defect: the demo plan holds no videos, so Clips is empty until a
 clip is saved, and found clips wait in the Inbox until kept.
@@ -123,11 +124,11 @@ clip is saved, and found clips wait in the Inbox until kept.
 |---|---|---|---|---|
 | C1 | Clips list | Open Clips | Spots grouped by place; yours / found counts | ✅ empty state in the seed; grouped by city once a clip is kept |
 | C2 | Open feed | Tap a spot | Full-screen feed; tab bar hidden | ✅ |
-| C3 | Sections | Feed with a saved clip | Opens at the saved second; the section scrub bar shows; scrolling snaps one clip at a time | ✅ with an uploaded 6 s clip: plays, scrub bar; snap not driven by gesture here |
-| C4 | Found in feed | A found clip | Says "Found, not yours" | ⏭ the fakes' found clips carry no place, so no found spot locally; pinned by tests/test_reels.py |
+| C3 | Sections | Feed with a saved clip | Opens at the saved second; the section scrub bar shows; scrolling snaps one clip at a time | ✅ a 40 s clip saved at 0:20 opens at its section (17.5–32.5), the section bar shows, a 60 % swipe snaps to exactly one clip |
+| C4 | Found in feed | A found clip | Says "Found, not yours" | ✅ a found Acatenango clip kept from the Inbox reads "Found, not yours — keep it from Saved → Inbox"; Clips counts it as 1 found, 0 yours |
 | C5 | Link-only clip | A clip with no file | Shows the quote and a link out; no broken player | ✅ |
 | C6 | Close feed | ← or swipe | Back to where you were | ✅ |
-| C7 | Whole video | "Play whole video" | Plays from 0 | ⏭ the control shows only for a clip saved at a later second; the test clip starts at 0 |
+| C7 | Whole video | "Play whole video" | Plays from 0 | ✅ "Whole video" plays from 0 and the chip reads "Saved section" |
 
 ## 5. Saved
 
@@ -163,7 +164,7 @@ clip is saved, and found clips wait in the Inbox until kept.
 | V6 | Upload: wrong type | A .exe | Refused with a reason | ✅ |
 | V7 | Note | Write a note | Knowledge item created | ✅ |
 | V8 | Place by name | Add a place by name | Resolved or left for review | ✅ left for review when there is no location |
-| V9 | Album sync | Select photos | Only new ones uploaded | ⏭ needs a real photo picker; the hash dedupe is pinned by tests |
+| V9 | Album sync | Select photos | Only new ones uploaded | ✅ 2 photos → 2 uploads; the same 2 plus 1 new → "2 already saved · 1 new", 1 upload |
 
 ## 8. Ask (the assistant)
 
@@ -174,7 +175,7 @@ clip is saved, and found clips wait in the Inbox until kept.
 | Q3 | Nothing saved | "What about Bogotá?" | Reads Wikivoyage / web; says so; cites | ✅ Wikivoyage, says so, cites |
 | Q4 | Proposal | A question that yields "add to today" | One card with Add / Dismiss; nothing changes until Add | ✅ scripted with a practical question about a place |
 | Q5 | Add | Press Add | Itinerary item created; second press is not a duplicate | ✅ scripted; second Add is the same item |
-| Q6 | Dismiss | Press Dismiss | Nothing recorded | ⚠️ scripted: an action nobody offered is refused; Dismiss in the sheet not pressed by hand |
+| Q6 | Dismiss | Press Dismiss | Nothing recorded | ✅ Dismiss removed the card; the itinerary stayed at 0 items |
 | Q7 | Visa question | "Do I need a visa for Brazil?" | Official-verification warning | ✅ fixed |
 | Q8 | Empty | Send nothing | Disabled | ✅ |
 | Q9 | Hebrew | Ask in Hebrew | Answers; RTL renders | ✅ fixed: the question box and answer now read right to left |
@@ -248,5 +249,5 @@ clip is saved, and found clips wait in the Inbox until kept.
 | I2 | Found vs yours | Any count | Found never counted as yours | ✅ fixed: the Ask sheet called a web page "a source you saved" |
 | I3 | Trip check | Demo trip | Carnival flagged correctly; fix is right | ✅ |
 | I4 | Suggestions | + after Antigua | Sensible, nearest first | ✅ Oaxaca, 65 km |
-| I5 | Voices relevant | + between Antigua and San Pedro | Results are about that stretch | ⚠️ fakes locally; checked live with the discover proof |
+| I5 | Voices relevant | + between Antigua and San Pedro | Results are about that stretch | ✅ with the live keys: Gringo tips on Antigua, Reddit "Travel from Antigua to San Pedro La Laguna", YouTube on Lake Atitlán, web minivan tickets Antigua ↔ San Pedro |
 | I6 | Explore read | "Colombia", hiking | Found clips are about Colombia hiking | ✅ with fakes |
