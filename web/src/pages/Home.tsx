@@ -116,7 +116,7 @@ export default function Home() {
                 <Glyph Icon={AlertTriangle} />
                 <div className="item__body">
                   <p className="item__title">
-                    {queue.failed_sources} capture{queue.failed_sources === 1 ? '' : 's'} need a hand
+                    {queue.failed_sources} capture{queue.failed_sources === 1 ? ' needs' : 's need'} a hand
                   </p>
                   <Meta parts={['Kept in Inbox', 'retry or add the place yourself']} />
                 </div>
