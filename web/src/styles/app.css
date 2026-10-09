@@ -1945,7 +1945,7 @@ a.trip__avatar { text-decoration: none; }
    negative margins give the padding back to the layout. */
 .stop__extras .stop__ideas,
 .stop__extras .stop__aside,
-.stop__extras .stop__remove { padding: 12px 0; margin-block: -10px; }
+.stop__extras .stop__remove { padding: 14px 0; margin-block: -12px; }
 .stop__extras .stop__ideas { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .stop__aside {
   padding: 2px 0;
