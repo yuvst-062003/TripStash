@@ -38,7 +38,7 @@ Open the trip (the route draws itself) → press into a country (city cards with
 - Strongest visual element: the Trip screen's route map with numbered green pins and the dashed line; the city cards with photo + Hebrew sentence
 
 ## Facts stated (the brief's allowed list)
-21 stops, 6 countries, Mexico City to Rio Carnival, Nov 7 2026 → Feb 16 2027; every claim carries its source; found clips are never counted as yours; works offline with country outlines carried in the app; no paid API. The screens are chosen so none shows a figure these contradict: the hero shows the map band only, and the itinerary was captured with the demo trip's departure moved to Nov 7 through the app's own trip editing.
+21 stops, 6 countries, Mexico City to Rio Carnival, Nov 7 2026 → Feb 16 2027; every claim carries its source; found clips are never counted as yours; works offline with country outlines carried in the app; no paid API. The screens are chosen so none shows a figure these contradict: the hero shows the map band only, and for the capture, the demo trip was given its 21st stop (Flores, Guatemala, from the demo's own gazetteer) after Lanquín and a Nov 7 departure through the app's own editing, so the map shows 21 pins in 6 countries and the rows carry November dates; the repository's seed is unchanged.
 
 ## Share copy (draft)
 TripStash: a backpacker's plan, read back as a map. 21 stops, 6 countries, Mexico City to Rio Carnival, every claim with its source. Works offline. No paid API.
