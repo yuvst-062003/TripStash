@@ -35,8 +35,10 @@ from app.services.spatial import (
 )
 from app.services.text import normalize_name
 from app.services.web_answers import (
+    card_answers,
     guide_cards,
     guide_disclaimer,
+    topic_words,
     web_cards,
     web_disclaimer,
 )
@@ -646,7 +648,30 @@ def _answer_from_the_web(question: str, prefer: KnowledgeType | None = None) -> 
     graded below anything they saved, and dropped entirely if it arrives with
     no quote behind it. A search that fails returns nothing and says so, rather
     than letting a network problem look like a place nobody has written about.
+
+    A border question carries the official-verification warning whatever
+    answered it: a travel guide's visa paragraph goes out of date exactly as
+    a saved note does, and the warning is about the subject, not the source.
     """
+    answer = _read_the_web(question, prefer)
+    if prefer is KnowledgeType.BORDER and OFFICIAL_NOTE not in answer.disclaimers:
+        answer.disclaimers.insert(0, OFFICIAL_NOTE)
+    return answer
+
+
+def _nothing_saved(subject: str, prefer: KnowledgeType | None) -> str:
+    """"Nothing saved about safety in Antigua yet" - about the topic asked.
+
+    The library may hold plenty about the place and nothing on the topic, and
+    "nothing saved about Antigua" would then be untrue and sound like a lost
+    library. The topic is what was searched, so the topic is what is missing.
+    """
+    if prefer is None:
+        return f"Nothing saved about {subject} yet"
+    return f"Nothing saved about {topic_words(prefer)} in {subject} yet"
+
+
+def _read_the_web(question: str, prefer: KnowledgeType | None = None) -> Answer:
     subject = _subject_of(question)
     if not subject:
         return Answer(
@@ -668,22 +693,20 @@ def _answer_from_the_web(question: str, prefer: KnowledgeType | None = None) -> 
         # Asked about safety, lead with the safety section rather than with
         # sightseeing. The rest still follows, because a traveller reading
         # about one thing usually wants the others too.
-        cards.sort(key=lambda c: c.get("knowledge_type") != prefer)
+        cards.sort(key=lambda c: not card_answers(c, prefer))
     if cards:
         # Asked about one thing and the guide covers everything but that, say
         # so. Leading with a section about something else, silently, reads as
         # an answer to a question nobody asked.
-        missing = prefer is not None and not any(
-            c.get("knowledge_type") == prefer for c in cards
-        )
+        missing = prefer is not None and not any(card_answers(c, prefer) for c in cards)
         said = (
-            f"Nothing saved about {guide.title} yet. This is from a free travel guide "
+            f"{_nothing_saved(subject, prefer)}. This is from a free travel guide "
             "rather than from you."
         )
         if missing:
             said = (
-                f"Nothing saved about {guide.title}, and the free guide has nothing on "
-                f"{prefer.value} there either. Here is what it does cover."
+                f"{_nothing_saved(subject, prefer)}, and the free guide has nothing on "
+                f"{topic_words(prefer)} there either. Here is what it does cover."
             )
         return Answer(
             text=said,
@@ -699,9 +722,9 @@ def _answer_from_the_web(question: str, prefer: KnowledgeType | None = None) -> 
     if not cards:
         return Answer(
             text=(
-                f"Nothing saved about {subject}, and nothing I could read about it either. "
-                "A travel guide covers destinations rather than single businesses, so try "
-                "the town it is in - or share a reel about it and it becomes yours."
+                f"{_nothing_saved(subject, prefer)}, and nothing I could read about it "
+                "either. A travel guide covers destinations rather than single businesses, "
+                "so try the town it is in - or share a reel about it and it becomes yours."
             ),
             disclaimers=["Answers come from your saved records first."],
             tools_used=["knowledge:search", "places:search", "guide:wikivoyage", "web:search"],
@@ -709,7 +732,7 @@ def _answer_from_the_web(question: str, prefer: KnowledgeType | None = None) -> 
 
     return Answer(
         text=(
-            f"Nothing saved about {subject} yet, so this is from the web rather than from you."
+            f"{_nothing_saved(subject, prefer)}, so this is from the web rather than from you."
         ),
         cards=cards,
         citations=[{"url": c["url"], "title": c["title"], "host": c["host"]} for c in cards],

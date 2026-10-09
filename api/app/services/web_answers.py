@@ -19,11 +19,12 @@ from __future__ import annotations
 from app.adapters.travel_wiki import (
     ATTRIBUTION,
     Guide,
+    also_answers,
     knowledge_type_for,
     sections_of_interest,
 )
 from app.adapters.web_search import WebResult, dedupe_by_host
-from app.models.enums import Provenance
+from app.models.enums import KnowledgeType, Provenance
 from app.services.web_grading import grade_result
 
 
@@ -102,6 +103,9 @@ def guide_cards(guide: Guide | None) -> list[dict]:
                 "url": guide.url,
                 "host": "en.wikivoyage.org",
                 "knowledge_type": knowledge_type_for(section.heading),
+                # A section can answer a second kind of question: a country's
+                # visa rules sit under "Get in", so arrival is also border.
+                "also_answers": also_answers(section.heading),
                 # Curated and edited, but still an account rather than the
                 # place itself speaking.
                 "provenance": Provenance.REVIEWS,
@@ -119,3 +123,23 @@ def guide_disclaimer(place: str) -> str:
         f"Read a free travel guide to {place}. None of it is yours and none of it is saved - "
         f"keep anything worth keeping and it joins your library. {ATTRIBUTION}."
     )
+
+
+def card_answers(card: dict, wanted: KnowledgeType) -> bool:
+    """Whether a guide card answers a question of this kind."""
+    return card.get("knowledge_type") == wanted or wanted in card.get("also_answers", ())
+
+
+#: How a kind of question is named when telling the traveller nothing of that
+#: kind is saved. The enum's own values are field names, not words.
+TOPIC_WORDS: dict[KnowledgeType, str] = {
+    KnowledgeType.BORDER: "visas and borders",
+    KnowledgeType.TRANSPORT: "getting there",
+    KnowledgeType.ACCOMMODATION: "places to stay",
+    KnowledgeType.ROUTE: "the route onward",
+    KnowledgeType.PRICE: "prices",
+}
+
+
+def topic_words(kind: KnowledgeType | None) -> str:
+    return TOPIC_WORDS.get(kind, kind.value) if kind is not None else ""
