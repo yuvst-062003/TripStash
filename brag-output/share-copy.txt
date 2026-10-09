@@ -1,1 +1,1 @@
-Introducing TripStash: a backpacker's plan, read back as a map. 21 stops, 6 countries, Mexico City to Rio Carnival, every claim with its source. Works offline. No paid API.
+Introducing TripStash: a backpacker's plan, read back as a map. Six countries, Mexico City to Rio Carnival, every claim with its source. Works offline. No paid API.
