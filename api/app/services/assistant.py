@@ -589,7 +589,7 @@ def _answer_knowledge_type(session, trip, question, context, on, focus, intent) 
     if subject and items:
         about_here = [i for i in items if _note_mentions(i, subject)]
         if not about_here:
-            return _answer_from_the_web(question, prefer=wanted[0])
+            return _answer_from_the_web(question, prefer=wanted[0], trip=trip)
         items = about_here
 
     if not items:
@@ -597,7 +597,7 @@ def _answer_knowledge_type(session, trip, question, context, on, focus, intent) 
         # this - "Stay safe" is a safety note, "Get in" is transport - so the
         # right part of it can be handed back without anything having to infer
         # what a paragraph is about.
-        return _answer_from_the_web(question, prefer=wanted[0])
+        return _answer_from_the_web(question, prefer=wanted[0], trip=trip)
 
     disclaimers = [INFERENCE_NOTE]
     if intent == "border":
@@ -641,7 +641,9 @@ def _note_mentions(item: KnowledgeItem, subject: str) -> bool:
     return re.search(rf"\b{re.escape(needle)}\b", haystack) is not None
 
 
-def _answer_from_the_web(question: str, prefer: KnowledgeType | None = None) -> Answer:
+def _answer_from_the_web(
+    question: str, prefer: KnowledgeType | None = None, trip: Trip | None = None
+) -> Answer:
     """Read the open web, when the traveller's own library has nothing.
 
     Everything that comes back is labelled as the web's rather than theirs,
@@ -653,7 +655,7 @@ def _answer_from_the_web(question: str, prefer: KnowledgeType | None = None) -> 
     answered it: a travel guide's visa paragraph goes out of date exactly as
     a saved note does, and the warning is about the subject, not the source.
     """
-    answer = _read_the_web(question, prefer)
+    answer = _read_the_web(question, prefer, trip)
     if prefer is KnowledgeType.BORDER and OFFICIAL_NOTE not in answer.disclaimers:
         answer.disclaimers.insert(0, OFFICIAL_NOTE)
     return answer
@@ -671,7 +673,29 @@ def _nothing_saved(subject: str, prefer: KnowledgeType | None) -> str:
     return f"Nothing saved about {topic_words(prefer)} in {subject} yet"
 
 
-def _read_the_web(question: str, prefer: KnowledgeType | None = None) -> Answer:
+def _lookup_for(trip: Trip | None, subject: str) -> str:
+    """What to look up for a subject, told apart by the trip.
+
+    "Is Antigua safe?" on a trip through Guatemala is about Antigua
+    Guatemala, and a bare "Antigua" finds the Caribbean island first. If the
+    subject names a stop on the route, its country goes into the lookup, so
+    the guide read is the guide to the place the traveller is going.
+    """
+    wanted = normalize_name(subject)
+    if not trip or not wanted:
+        return subject
+    for destination in trip.destinations:
+        name = normalize_name(destination.name)
+        if not destination.country or not name:
+            continue
+        if name == wanted or name.startswith(wanted + " ") or wanted.startswith(name + " "):
+            return f"{destination.name} {destination.country}"
+    return subject
+
+
+def _read_the_web(
+    question: str, prefer: KnowledgeType | None = None, trip: Trip | None = None
+) -> Answer:
     subject = _subject_of(question)
     if not subject:
         return Answer(
@@ -687,7 +711,7 @@ def _read_the_web(question: str, prefer: KnowledgeType | None = None) -> Answer:
     # and its sections already carry the meaning this app's knowledge types
     # carry - so it is both the cheaper source and the better one. The search
     # engine is the fallback, and only exists if somebody configured one.
-    guide = get_travel_wiki().guide(subject)
+    guide = get_travel_wiki().guide(_lookup_for(trip, subject))
     cards = guide_cards(guide)
     if cards and prefer is not None:
         # Asked about safety, lead with the safety section rather than with
@@ -716,7 +740,7 @@ def _read_the_web(question: str, prefer: KnowledgeType | None = None) -> Answer:
             tools_used=["knowledge:search", "places:search", "guide:wikivoyage"],
         )
 
-    results = get_web_search().search(subject)
+    results = get_web_search().search(_lookup_for(trip, subject))
     cards = web_cards(results)
 
     if not cards:
@@ -817,7 +841,7 @@ def _answer_general(session, trip, question, context, on, focus, intent) -> Answ
         # end - true, and useless to someone still deciding where to go. The
         # library is still answered from first; this is only what happens when
         # the library has nothing at all.
-        return _answer_from_the_web(question)
+        return _answer_from_the_web(question, trip=trip)
 
     return Answer(
         text=(

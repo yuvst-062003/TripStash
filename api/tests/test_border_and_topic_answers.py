@@ -87,3 +87,19 @@ def test_a_topic_the_guide_lacks_is_named_in_plain_words(trip):
     answer = _answer_from_the_web("What do things cost in Ljubljana?", prefer=KnowledgeType.PRICE)
     assert answer.text.startswith("Nothing saved about prices in Ljubljana")
     assert "nothing on prices there either" in answer.text
+
+
+# ---------------------------------------------------------------- which Antigua
+
+
+def test_a_stop_on_the_route_is_looked_up_with_its_country(client, auth, trip):
+    """"Is Antigua safe?" on a trip through Guatemala is about Antigua
+    Guatemala; a bare "Antigua" finds the Caribbean island first."""
+    answer = _ask(client, auth, "Is Antigua safe at night?")
+    assert "guide:wikivoyage" in answer["tools_used"]
+    assert answer["citations"][0]["title"] == "Antigua Guatemala"
+
+
+def test_a_place_not_on_the_route_is_looked_up_as_asked(client, auth, trip):
+    answer = _ask(client, auth, "Is Ljubljana safe at night?")
+    assert answer["citations"][0]["title"] == "Ljubljana"
