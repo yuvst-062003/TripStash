@@ -327,10 +327,18 @@ export default function TripHome() {
     // Fit the route into the band that is actually clear: below the header
     // and any map note, above the zoom-out pill and the sheet. Measuring the
     // sheet beats guessing a fraction, which drifts as its content changes.
-    const sheetTop =
-      document.querySelector('.tripsheet')?.getBoundingClientRect().top ??
-      window.innerHeight * 0.68
-    const noteBottom = document.querySelector('.mapnote')?.getBoundingClientRect().bottom ?? 110
+    // Once the itinerary has been scrolled, the sheet's top is above the
+    // viewport and the band it leaves would be negative: adding a stop then
+    // framed the route against a band that did not exist and landed the
+    // camera on an empty patch of jungle. The sheet never sits higher than
+    // its resting position for the purpose of framing.
+    const resting = window.innerHeight * 0.5
+    const measured = document.querySelector('.tripsheet')?.getBoundingClientRect().top
+    const sheetTop = Math.max(measured ?? window.innerHeight * 0.68, resting)
+    const noteBottom = Math.max(
+      document.querySelector('.mapnote')?.getBoundingClientRect().bottom ?? 110,
+      110,
+    )
     map.invalidateSize({ animate: false })
     const padding = {
       paddingTopLeft: [40, Math.round(noteBottom) + 24] as [number, number],
