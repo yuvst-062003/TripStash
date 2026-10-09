@@ -264,3 +264,26 @@ def test_a_stored_page_is_never_served_back_as_a_page(client, auth, trip):
     assert served.status_code == 200, served.text
     assert served.headers["content-type"].startswith("text/plain")
     assert served.headers["x-content-type-options"] == "nosniff"
+
+
+def test_a_pdf_with_too_many_pages_is_read_only_so_far():
+    """One upload must not occupy the worker for minutes.
+
+    A plan is a few pages. A thousand-page PDF is a mistake or a weapon, and
+    either way the first pages are what the extraction reads.
+    """
+    pypdf = pytest.importorskip("pypdf")
+    from app.services.documents import MAX_PDF_PAGES, _read_pdf
+
+    writer = pypdf.PdfWriter()
+    for _ in range(MAX_PDF_PAGES + 20):
+        writer.add_blank_page(width=200, height=200)
+    import io
+
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    read = _read_pdf(buffer.getvalue())
+    # Blank pages carry no text, so the result is the honest "no text" one -
+    # and it came back without reading the pages past the cap.
+    assert read.engine == "pdf"
+    assert read.failure_reason and "selectable text" in read.failure_reason

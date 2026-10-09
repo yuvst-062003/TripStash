@@ -1969,3 +1969,42 @@ a.trip__avatar { text-decoration: none; }
 /* The offline note sits above the trip's fixed map, which otherwise painted
    over it and left a blank band where the warning should be. */
 .offline { position: relative; z-index: 2; background: var(--bg); }
+
+/* ---------------------------------------------------------------------------
+   Tap targets. The small controls keep their size on screen and grow their
+   hit area underneath, so a thumb lands on a 44px target without the row
+   getting taller. (iOS HIG and the user tests both ask for 44.)
+   --------------------------------------------------------------------------- */
+.btn--sm,
+.pill,
+.chip-toggle,
+.stepper__btn,
+.trip__avatar,
+.mapbtn,
+.iconbtn,
+.tabs__item,
+.leaflet-marker-icon.stoppin,
+.stop__ideas,
+.stop__aside,
+.stop__remove {
+  position: relative;
+}
+.btn--sm::after,
+.pill::after,
+.chip-toggle::after,
+.stepper__btn::after,
+.trip__avatar::after,
+.mapbtn::after,
+.iconbtn::after,
+.tabs__item::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
+.stop__ideas::after,
+.stop__aside::after,
+.stop__remove::after {
+  content: '';
+  position: absolute;
+  inset: -12px -6px;
+}

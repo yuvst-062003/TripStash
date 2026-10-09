@@ -114,6 +114,11 @@ def _read_docx(data: bytes) -> DocumentText:
     return DocumentText(text=text, engine="docx")
 
 
+#: How many pages of a PDF plan are read. Enough for any itinerary a
+#: traveller would write; small enough that a bomb of a file stays cheap.
+MAX_PDF_PAGES = 80
+
+
 def _read_pdf(data: bytes) -> DocumentText:
     try:
         from pypdf import PdfReader
@@ -129,7 +134,13 @@ def _read_pdf(data: bytes) -> DocumentText:
 
     try:
         reader = PdfReader(BytesIO(data))
-        pages = [page.extract_text() or "" for page in reader.pages]
+        # A plan is a few pages; a thousand-page PDF is a mistake or a
+        # weapon, and either way the first pages are what the extraction
+        # reads. Capped so one upload cannot occupy the worker for minutes.
+        pages = [
+            page.extract_text() or ""
+            for _, page in zip(range(MAX_PDF_PAGES), reader.pages, strict=False)
+        ]
     except Exception:  # noqa: BLE001 - any malformed PDF is a recoverable failure
         return DocumentText(
             text="",
