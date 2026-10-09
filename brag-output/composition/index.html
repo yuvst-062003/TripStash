@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>TripStash — a backpacker's plan, read back as a map</title>
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/music/audio-data.js"></script>
+    <style>
+      @font-face {
+        font-family: 'Jakarta';
+        src: url('assets/fonts/PlusJakartaSans-var.woff2') format('woff2');
+        font-weight: 400 800;
+        font-style: normal;
+        font-display: block;
+      }
+      :root {
+        --night: #060e1c;
+        --ink: #ffffff;
+        --dim: #b8c2d1;
+        --mint: #5fe3b1;
+        --bezel: #121b2b;
+      }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--night);
+        color: var(--ink);
+        font-family: 'Jakarta', system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--night);
+      }
+      .clip { position: absolute; inset: 0; }
+      .ground { position: absolute; inset: 0; background: var(--night); }
+      #glow {
+        position: absolute;
+        left: -160px;
+        top: 520px;
+        width: 1400px;
+        height: 1400px;
+        border-radius: 50%;
+        background: radial-gradient(circle at center, rgba(95, 227, 177, 0.16) 0%, rgba(95, 227, 177, 0.05) 42%, rgba(6, 14, 28, 0) 70%);
+      }
+      .vignette {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(6, 14, 28, 0) 0%, rgba(6, 14, 28, 0) 58%, rgba(6, 14, 28, 0.88) 84%, var(--night) 91%);
+        pointer-events: none;
+      }
+
+      /* Copy */
+      .copy {
+        position: absolute;
+        left: 80px;
+        right: 80px;
+        top: 200px;
+      }
+      .line {
+        margin: 0;
+        font-weight: 700;
+        font-size: 84px;
+        line-height: 1.12;
+        letter-spacing: -0.015em;
+        color: var(--ink);
+      }
+      .line--mint { color: var(--mint); font-weight: 600; }
+      .caption {
+        margin: 0;
+        font-weight: 700;
+        font-size: 64px;
+        line-height: 1.15;
+        letter-spacing: -0.012em;
+        color: var(--ink);
+      }
+      .caption--mint { color: var(--mint); font-weight: 600; }
+      .sub {
+        margin: 18px 0 0;
+        font-weight: 500;
+        font-size: 40px;
+        line-height: 1.3;
+        letter-spacing: 0.01em;
+        color: var(--dim);
+      }
+      .kicker {
+        margin: 0 0 14px;
+        font-weight: 600;
+        font-size: 30px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--mint);
+      }
+
+      /* The phone */
+      .phone {
+        position: absolute;
+        left: 160px;
+        top: 820px;
+        width: 760px;
+        height: 1645px;
+        padding: 14px;
+        box-sizing: border-box;
+        border-radius: 70px;
+        background: var(--bezel);
+        box-shadow: 0 50px 140px rgba(0, 0, 0, 0.65), inset 0 0 0 2px rgba(255, 255, 255, 0.06);
+      }
+      .phone__screen {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: 58px;
+        overflow: hidden;
+        background: #0a1424;
+      }
+      .phone__screen img {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+
+      /* City cards */
+      .cards {
+        position: absolute;
+        left: 70px;
+        top: 620px;
+        height: 600px;
+        width: 1700px;
+      }
+      .card {
+        position: absolute;
+        top: 0;
+        width: 520px;
+        height: 582px;
+        border-radius: 36px;
+        overflow: hidden;
+        background: #0b1626;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+      }
+      .card img { display: block; width: 100%; height: 100%; object-fit: cover; }
+      .card--1 { left: 0; }
+      .card--2 { left: 560px; }
+      .card--3 { left: 1120px; }
+
+      /* Source groups */
+      .groups {
+        position: absolute;
+        left: 60px;
+        top: 600px;
+        width: 960px;
+        height: 1240px;
+      }
+      .group {
+        position: absolute;
+        width: 470px;
+        height: 596px;
+        border-radius: 32px;
+        overflow: hidden;
+        background: #0b1626;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+      }
+      .group img { display: block; width: 100%; height: auto; }
+      .group--1 { left: 0; top: 0; }
+      .group--2 { left: 490px; top: 0; }
+      .group--3 { left: 0; top: 626px; }
+      .group--4 { left: 490px; top: 626px; }
+
+      /* Trip check */
+      .check {
+        position: absolute;
+        left: 90px;
+        top: 700px;
+        width: 900px;
+        height: 486px;
+        border-radius: 40px;
+        overflow: hidden;
+        background: #ffffff;
+        box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6);
+      }
+      .check img { display: block; width: 100%; height: 100%; }
+      .ring {
+        position: absolute;
+        left: 118px;
+        top: 932px;
+        width: 652px;
+        height: 118px;
+        border-radius: 59px;
+        box-sizing: border-box;
+        border: 6px solid var(--mint);
+        box-shadow: 0 0 0 10px rgba(95, 227, 177, 0.22), 0 0 60px rgba(95, 227, 177, 0.45);
+      }
+
+      /* Outro */
+      .outro {
+        position: absolute;
+        left: 80px;
+        right: 80px;
+        top: 700px;
+        text-align: center;
+      }
+      .mark {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 28px;
+      }
+      .mark img { width: 112px; height: 112px; display: block; }
+      .mark__name {
+        margin: 0;
+        font-weight: 800;
+        font-size: 104px;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+      }
+      .outro .caption--mint { margin-top: 70px; font-size: 56px; }
+      .outro .sub { font-size: 38px; }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="brag"
+      data-start="0"
+      data-width="1080"
+      data-height="1920"
+      data-duration="20"
+      data-fps="30"
+    >
+      <!-- The night ground, untimed: real coastlines in the app, a quiet glow here. -->
+      <div class="ground" aria-hidden="true">
+        <div id="glow"></div>
+      </div>
+
+      <!-- The phone persists under scenes 1 and 2. -->
+      <section id="phone-clip" class="clip" data-start="2.5" data-duration="6.0" data-track-index="1" data-layout-allow-overflow>
+        <div id="phone" class="phone">
+          <div class="phone__screen">
+            <img id="screen-map" src="assets/screens/trip-map-hero.png" alt="" />
+            <img id="screen-stops" src="assets/screens/trip-stops.png" alt="" />
+          </div>
+        </div>
+      </section>
+      <div class="vignette" aria-hidden="true"></div>
+
+      <!-- Scene 1: hook -->
+      <section id="s1" class="clip" data-start="0" data-duration="4.3" data-track-index="2">
+        <div class="copy">
+          <h1 id="s1-l1" class="line">A backpacker's plan,</h1>
+          <h1 id="s1-l2" class="line line--mint">read back as a map.</h1>
+        </div>
+      </section>
+
+      <!-- Scene 2: the itinerary -->
+      <section id="s2" class="clip" data-start="4.2" data-duration="4.3" data-track-index="2">
+        <div class="copy">
+          <p id="s2-k" class="kicker">The route</p>
+          <p id="s2-a" class="caption">21 stops. 6 countries.</p>
+          <p id="s2-b" class="caption caption--mint">Mexico City to Rio Carnival.</p>
+          <p id="s2-c" class="sub">Nov 7 2026 → Feb 16 2027</p>
+        </div>
+      </section>
+
+      <!-- Scene 3: your own sentence -->
+      <section id="s3" class="clip" data-start="8.4" data-duration="3.3" data-track-index="2">
+        <div class="copy">
+          <p id="s3-k" class="kicker">Explore</p>
+          <p id="s3-a" class="caption">Every city carries your own sentence.</p>
+        </div>
+        <div id="cards" class="cards" data-layout-allow-overflow>
+          <div id="card-1" class="card card--1"><img src="assets/screens/citycard-0.png" alt="" /></div>
+          <div id="card-2" class="card card--2"><img src="assets/screens/citycard-1.png" alt="" /></div>
+          <div id="card-3" class="card card--3"><img src="assets/screens/citycard-2.png" alt="" /></div>
+        </div>
+      </section>
+
+      <!-- Scene 4: what travellers say -->
+      <section id="s4" class="clip" data-start="11.6" data-duration="3.8" data-track-index="2">
+        <div class="copy">
+          <p id="s4-k" class="kicker">Between two stops</p>
+          <p id="s4-a" class="caption">What travellers say about this stretch</p>
+          <p id="s4-b" class="sub">Every claim with its source.</p>
+        </div>
+        <div id="groups" class="groups">
+          <div id="group-1" class="group group--1"><img src="assets/screens/voices-group-0.png" alt="" /></div>
+          <div id="group-2" class="group group--2"><img src="assets/screens/voices-group-1.png" alt="" /></div>
+          <div id="group-3" class="group group--3"><img src="assets/screens/voices-group-2.png" alt="" /></div>
+          <div id="group-4" class="group group--4"><img src="assets/screens/voices-group-3.png" alt="" /></div>
+        </div>
+      </section>
+
+      <!-- Scene 5: the trip check -->
+      <section id="s5" class="clip" data-start="15.3" data-duration="2.2" data-track-index="2">
+        <div class="copy">
+          <p id="s5-k" class="kicker">Trip check</p>
+          <p id="s5-a" class="caption">Notices you'd miss Carnival. Fixes it.</p>
+        </div>
+        <div id="check" class="check"><img src="assets/screens/check-card.png" alt="" /></div>
+        <div id="ring" class="ring" aria-hidden="true"></div>
+      </section>
+
+      <!-- Scene 6: outro -->
+      <section id="s6" class="clip" data-start="17.4" data-duration="2.6" data-track-index="2">
+        <div class="outro">
+          <div id="mark" class="mark">
+            <img src="assets/icon.svg" alt="" />
+            <p class="mark__name">TripStash</p>
+          </div>
+          <p id="s6-a" class="caption caption--mint">Works offline. No paid API.</p>
+          <p id="s6-b" class="sub">Found clips are never counted as yours.</p>
+        </div>
+      </section>
+
+      <!-- Audio -->
+      <audio id="bgm" data-start="0" data-duration="20" data-track-index="3" data-volume="1" src="assets/music/bed.mp3"></audio>
+      <audio id="sfx-phone" data-start="2.65" data-track-index="4" data-duration="1.4" data-volume="0.7" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="sfx-swap" data-start="4.23" data-track-index="5" data-duration="1.4" data-volume="0.45" src="assets/sfx/interface/select_008.ogg"></audio>
+      <audio id="sfx-card-1" data-start="8.44" data-track-index="6" data-duration="1.4" data-volume="0.6" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx-card-2" data-start="8.96" data-track-index="7" data-duration="1.4" data-volume="0.6" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx-card-3" data-start="9.50" data-track-index="8" data-duration="1.4" data-volume="0.6" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx-group-1" data-start="12.65" data-track-index="9" data-duration="1.4" data-volume="0.6" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="sfx-group-2" data-start="13.18" data-track-index="10" data-duration="1.4" data-volume="0.5" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx-group-3" data-start="13.70" data-track-index="11" data-duration="1.4" data-volume="0.5" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx-group-4" data-start="14.22" data-track-index="12" data-duration="1.4" data-volume="0.5" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx-check" data-start="15.28" data-track-index="13" data-duration="1.4" data-volume="0.7" src="assets/sfx/impact/impactSoft_medium_000.ogg"></audio>
+      <audio id="sfx-mark" data-start="17.38" data-track-index="14" data-duration="1.4" data-volume="0.5" src="assets/sfx/impact/impactBell_heavy_000.ogg"></audio>
+    </div>
+
+    <script>
+      // One paused timeline. Scene visibility belongs to the clips; every
+      // tween here moves a child of a clip, never the clip itself.
+      function build() {
+        var tl = gsap.timeline({ paused: true });
+        var up = { ease: 'power3.out' };
+
+        // Scene 1 — hook
+        tl.fromTo('#s1-l1', { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: 'power3.out' }, 0.3);
+        tl.fromTo('#s1-l2', { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, ease: 'power3.out' }, 1.4);
+        // beat-locked: 2.65s — the phone rises into frame
+        tl.fromTo('#phone', { y: 1200, opacity: 0 }, { y: 0, opacity: 1, duration: 1.3, ease: 'power3.out' }, 2.55);
+        tl.to('#s1-l1', { opacity: 0, duration: 0.35, ease: 'power2.in' }, 3.85);
+        tl.to('#s1-l2', { opacity: 0, duration: 0.35, ease: 'power2.in' }, 3.85);
+
+        // Scene 2 — the itinerary. beat-locked: 4.23s — the screen swaps
+        tl.fromTo('#screen-stops', { opacity: 0 }, { opacity: 1, duration: 0.45, ease: 'power2.out' }, 4.23);
+        tl.fromTo('#screen-stops', { y: 0 }, { y: -150, duration: 4.0, ease: 'none', immediateRender: false }, 4.23);
+        tl.fromTo('#s2-k', { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 4.3);
+        tl.fromTo('#s2-a', { y: 36, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'power3.out' }, 4.4);
+        tl.to('#s2-a', { opacity: 0, duration: 0.3, ease: 'power2.in' }, 6.05);
+        // beat-locked: 6.34s — the second caption
+        tl.fromTo('#s2-b', { y: 36, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'power3.out' }, 6.34);
+        tl.fromTo('#s2-c', { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 6.6);
+        tl.to(['#s2-k', '#s2-b', '#s2-c'], { opacity: 0, duration: 0.35, ease: 'power2.in' }, 8.1);
+        tl.to('#phone', { y: 420, opacity: 0, duration: 0.5, ease: 'power2.in' }, 8.0);
+
+        // Scene 3 — your own sentence
+        tl.fromTo('#s3-k', { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 8.45);
+        tl.fromTo('#s3-a', { y: 36, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'power3.out' }, 8.55);
+        // beat-grid: card 1 at 8.44s, card 2 at 8.96s, card 3 at 9.50s
+        tl.fromTo('#card-1', { x: 360, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 8.44);
+        tl.fromTo('#card-2', { x: 360, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 8.96);
+        tl.fromTo('#card-3', { x: 360, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 9.5);
+        tl.fromTo('#cards', { x: 0 }, { x: -315, duration: 1.6, ease: 'power2.inOut' }, 9.7);
+        tl.to(['#s3-k', '#s3-a', '#cards'], { opacity: 0, duration: 0.35, ease: 'power2.in' }, 11.3);
+
+        // Scene 4 — what travellers say
+        tl.fromTo('#s4-k', { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 11.65);
+        tl.fromTo('#s4-a', { y: 36, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'power3.out' }, 11.75);
+        // beat-locked: 12.65s (strong cue) — beat-grid: 13.18s, 13.70s, 14.22s
+        tl.fromTo('#group-1', { y: 120, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: 'power3.out' }, 12.65);
+        tl.fromTo('#group-2', { y: 120, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: 'power3.out' }, 13.18);
+        tl.fromTo('#group-3', { y: 120, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: 'power3.out' }, 13.7);
+        tl.fromTo('#group-4', { y: 120, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: 'power3.out' }, 14.22);
+        tl.fromTo('#s4-b', { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 13.7);
+        tl.to(['#s4-k', '#s4-a', '#s4-b', '#groups'], { opacity: 0, duration: 0.35, ease: 'power2.in' }, 15.0);
+
+        // Scene 5 — the trip check. beat-locked: 15.28s
+        tl.fromTo('#check', { y: 160, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'power3.out' }, 15.3);
+        tl.fromTo('#s5-k', { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 15.4);
+        tl.fromTo('#s5-a', { y: 36, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'power3.out' }, 15.5);
+        tl.fromTo('#ring', { scale: 1.25, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.45, ease: 'power3.out' }, 16.34);
+        tl.to(['#s5-k', '#s5-a', '#check', '#ring'], { opacity: 0, duration: 0.35, ease: 'power2.in' }, 17.1);
+
+        // Scene 6 — outro. beat-locked: 17.38s
+        tl.fromTo('#mark', { scale: 0.92, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.7, ease: 'power3.out' }, 17.4);
+        tl.fromTo('#s6-a', { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 17.9);
+        tl.fromTo('#s6-b', { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 18.3);
+
+        // The bed sits low under the whole film and fades under the outro.
+        tl.set('#bgm', { volume: 0.5 }, 0);
+        tl.to('#bgm', { volume: 0, duration: 1.5, ease: 'power1.in' }, 18.5);
+
+        // Audio-reactive ground: the mint glow breathes with the bass band.
+        // Pre-extracted data, sampled per frame — nothing is analysed at render time.
+        var glow = document.getElementById('glow');
+        if (window.AUDIO_DATA && glow) {
+          var frames = AUDIO_DATA.frames;
+          var fps = AUDIO_DATA.fps || 30;
+          var last = Math.min(frames.length, Math.round(20 * fps));
+          var draw = function (frame) {
+            var bass = frame.bands[0] || 0;
+            var low = (frame.bands[1] || 0) * 0.5;
+            var energy = Math.min(1, bass * 0.8 + low);
+            gsap.set(glow, { opacity: 0.55 + energy * 0.4, scale: 1 + energy * 0.06, transformOrigin: '50% 50%' });
+          };
+          for (var f = 0; f < last; f++) {
+            tl.call(
+              (function (frame) {
+                return function () {
+                  draw(frame);
+                };
+              })(frames[f]),
+              [],
+              f / fps
+            );
+          }
+        }
+
+        window.__timelines['brag'] = tl;
+      }
+
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(build);
+      } else {
+        build();
+      }
+    </script>
+  </body>
+</html>
