@@ -13,7 +13,7 @@
  * — doing the arithmetic here would be a second, drifting implementation.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import L from 'leaflet'
 import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
@@ -161,7 +161,14 @@ export default function TripHome() {
   const { trip, openSave, openAsk, position } = useApp()
   // The country the camera has flown into, or null for the whole route.
   // Pressing a country or a stop sets it; the sheet follows the camera.
-  const [focus, setFocus] = useState<string | null>(null)
+  // In the URL rather than in state: opening a city from the pane and
+  // pressing back should land on the pane, not on the whole route.
+  const [params, setParams] = useSearchParams()
+  const focus = params.get('in')
+  const setFocus = useCallback(
+    (name: string | null) => setParams(name ? { in: name } : {}),
+    [setParams],
+  )
   const countryCities = useAsync(
     () => api.cities(focus ?? ''),
     [focus],

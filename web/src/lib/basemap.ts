@@ -44,7 +44,31 @@ async function build(detail: Detail): Promise<FeatureCollection<Geometry, Countr
     topo as never,
     (topo as { objects: { countries: unknown } }).objects.countries as never,
   ) as unknown as FeatureCollection<Geometry, CountryProperties>
+  for (const item of collection.features) unwrapAntimeridian(item.geometry)
   return collection
+}
+
+/**
+ * A ring that crosses the antimeridian (Russia, Fiji) jumps from +180 to
+ * -180 between two points, and drawn as given it became a line across the
+ * whole map. Points on the far side are shifted by 360 so the ring continues
+ * past the edge instead of leaping back across it.
+ */
+function unwrapAntimeridian(geometry: Geometry): void {
+  const rings: number[][][] =
+    geometry.type === 'Polygon'
+      ? geometry.coordinates
+      : geometry.type === 'MultiPolygon'
+        ? geometry.coordinates.flat()
+        : []
+  for (const ring of rings) {
+    let crosses = false
+    for (let i = 1; i < ring.length; i++) {
+      if (Math.abs(ring[i][0] - ring[i - 1][0]) > 180) crosses = true
+    }
+    if (!crosses) continue
+    for (const point of ring) if (point[0] < 0) point[0] += 360
+  }
 }
 
 /** Country polygons at the requested detail. Fetched once, then reused. */

@@ -1433,7 +1433,9 @@ textarea.input { min-height: 76px; resize: vertical; }
    A city: clips first, then the map, then what is good to know
 --------------------------------------------------------------------------- */
 
-.rail { margin-top: var(--s-2); }
+/* The city's clips rail: a heading row, then a track that scrolls. Not the
+   generic .rail, which is itself the flex row and put the two side by side. */
+.cliprail { margin-top: var(--s-2); }
 .rail__head {
   display: flex;
   align-items: baseline;
