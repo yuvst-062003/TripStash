@@ -287,12 +287,13 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
                 )
                 // Handoff links live outside the row link: an anchor may not
                 // contain another anchor.
-                const actions = card.actions.length > 0 && (
+                // A guide or web card carries no actions; a saved place does.
+                const actions = (card.actions ?? []).length > 0 && (
                   <div
                     className="pad row"
                     style={{ gap: 'var(--s-3)', paddingBottom: 'var(--s-3)', marginTop: -6 }}
                   >
-                    {card.actions.slice(0, 2).map((action) => (
+                    {(card.actions ?? []).slice(0, 2).map((action) => (
                       <a
                         className="btn btn--sm btn--plain"
                         key={action.key}
