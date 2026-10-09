@@ -42,6 +42,12 @@ class Voice:
         return asdict(self)
 
 
+def _subreddit(url: str) -> str:
+    """`r/backpacking` from a thread's link, or plain `Reddit`."""
+    parts = url.split("/r/", 1)
+    return f"r/{parts[1].split('/', 1)[0]}" if len(parts) == 2 else "Reddit"
+
+
 def _where(stop: Destination | None) -> str:
     if stop is None:
         return ""
@@ -55,7 +61,11 @@ def discover_between(after: Destination | None, nxt: Destination | None) -> dict
     live = {
         "gringo": (settings.gringo_search_provider or settings.web_search_provider) != "fake",
         "web": settings.web_search_provider != "fake",
-        "reddit": settings.reddit_provider != "fake",
+        # Reddit's own API needs an approved app (its Responsible Builder
+        # Policy, late 2025); until then its threads come through search.
+        "reddit": settings.reddit_provider != "fake"
+        or settings.web_search_provider != "fake"
+        or bool(settings.gringo_search_provider),
         "youtube": settings.video_search_provider != "fake",
     }
     a, b = _where(after), _where(nxt)
@@ -82,10 +92,24 @@ def discover_between(after: Destination | None, nxt: Destination | None) -> dict
         ][:PER_SOURCE]
 
     def reddit() -> list[Voice]:
-        return [
-            Voice("reddit", t.title, t.excerpt, t.url, f"r/{t.subreddit}")
-            for t in get_reddit().search(stretch, limit=PER_SOURCE)
-        ]
+        if settings.reddit_provider != "fake":
+            return [
+                Voice("reddit", t.title, t.excerpt, t.url, f"r/{t.subreddit}")
+                for t in get_reddit().search(stretch, limit=PER_SOURCE)
+            ]
+        # Without an approved Reddit app, ask a search engine for Reddit
+        # threads: the monthly web search first, Google's index if that has
+        # none. Only the engine's snippet and the link reach the screen.
+        query = f"site:reddit.com {stretch} backpacking"
+        for engine in (get_web_search, get_gringo_search):
+            found = [
+                Voice("reddit", r.title, r.snippet, r.url, _subreddit(r.url))
+                for r in engine().search(query, PER_SOURCE * 2)
+                if r.host.endswith("reddit.com") and "/comments/" in r.url
+            ][:PER_SOURCE]
+            if found:
+                return found
+        return []
 
     def youtube() -> list[Voice]:
         return [
