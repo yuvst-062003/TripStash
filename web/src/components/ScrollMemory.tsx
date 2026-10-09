@@ -35,7 +35,9 @@ export default function ScrollMemory() {
     frame = requestAnimationFrame(settle)
 
     return () => {
-      remember()
+      // Not remembered here: by the time this runs the next screen has
+      // rendered, short, and the window has already been clamped to 0.
+      // The scroll listener recorded the last real position.
       window.removeEventListener('scroll', remember)
       cancelAnimationFrame(frame)
     }
