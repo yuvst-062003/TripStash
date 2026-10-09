@@ -203,6 +203,7 @@ export default function TripHome() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.LayerGroup | null>(null)
+  const tilesRef = useRef<L.TileLayer | null>(null)
   const landRef = useRef<L.GeoJSON | null>(null)
   // Each route country's outline bounds, so a press can frame the country.
   const boundsRef = useRef<Map<string, L.LatLngBounds>>(new Map())
@@ -234,7 +235,10 @@ export default function TripHome() {
     // an error state: the coastlines and borders underneath are carried in the
     // app, so what is lost is street detail, and the note below says only that.
     tiles.on('tileerror', () => setTilesFailed(true))
-    tiles.addTo(map)
+    // Added once the route has framed the map, not now: at this point the
+    // camera is on a placeholder view, and every cold load fetched fifteen
+    // tiles of it that were thrown away a moment later.
+    tilesRef.current = tiles
     layerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
     map.on('zoomend moveend', () => declutterLabels(containerRef.current))
@@ -374,6 +378,8 @@ export default function TripHome() {
     if (!framedRef.current) {
       framedRef.current = true
       map.fitBounds(L.latLngBounds(points), { ...padding, maxZoom: 9, animate: false })
+      // Street detail arrives for the view that will actually be looked at.
+      if (tilesRef.current && !map.hasLayer(tilesRef.current)) tilesRef.current.addTo(map)
       return
     }
     if (prefersReducedMotion()) {
