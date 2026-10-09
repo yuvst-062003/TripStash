@@ -25,6 +25,7 @@ from app.schemas.api import (
 )
 from app.services import itinerary
 from app.services.discover import discover_between
+from app.services.geocode import locate_destination
 from app.services.trip_advice import route_checks, stop_suggestions
 
 router = APIRouter(prefix="/trips", tags=["trip"])
@@ -211,12 +212,24 @@ def add_destination(
         for other in trip.destinations:
             other.is_current = False
 
+    # The `+` sends only a name. A stop with no coordinates has no pin, no
+    # legs and cannot be flown into, so the name is placed now, from the free
+    # guide or the gazetteer - and only the blanks are filled: a caller that
+    # knows where the place is has said so.
+    lat, lon, country = body.lat, body.lon, body.country
+    if lat is None or lon is None or not country:
+        located = locate_destination(body.name)
+        if located is not None:
+            if lat is None or lon is None:
+                lat, lon = located.lat, located.lon
+            country = country or located.country
+
     destination = Destination(
         trip_id=trip.id,
         name=body.name,
-        country=body.country,
-        lat=body.lat,
-        lon=body.lon,
+        country=country,
+        lat=lat,
+        lon=lon,
         nights=body.nights,
         is_current=body.is_current,
         notes=body.notes,

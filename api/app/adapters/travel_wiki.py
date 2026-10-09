@@ -27,6 +27,8 @@ than return nothing and look broken.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 import urllib.parse
 from dataclasses import dataclass, field
 
@@ -56,6 +58,10 @@ class Guide:
     sections: list[GuideSection] = field(default_factory=list)
     lat: float | None = None
     lon: float | None = None
+    #: The country the place is in, as the map names it. Read from the ISO
+    #: code on the coordinates when Wikivoyage sets one, else from the title
+    #: ("Flores (Guatemala)"), else from the opening sentence.
+    country: str | None = None
     attribution: str = ATTRIBUTION
 
 
@@ -80,10 +86,28 @@ _HEADINGS: dict[str, KnowledgeType] = {
 #: "Cope" are written for people moving somewhere, not visiting.
 _WORTH_KEEPING = frozenset(_HEADINGS)
 
+#: Headings that answer a second kind of question. Wikivoyage keeps a
+#: country's visa and entry rules under "Get in", next to the flights and the
+#: buses, so the arrival section is also the border section.
+_ALSO_ANSWERS: dict[str, frozenset[KnowledgeType]] = {
+    "get in": frozenset({KnowledgeType.BORDER}),
+}
+
+
+def heading_answers(heading: str, wanted: KnowledgeType) -> bool:
+    """Whether a section under this heading answers a question of this kind."""
+    key = (heading or "").strip().casefold()
+    return knowledge_type_for(heading) is wanted or wanted in _ALSO_ANSWERS.get(key, ())
+
+
+def also_answers(heading: str) -> list[KnowledgeType]:
+    """The further kinds of question a section under this heading answers."""
+    return sorted(_ALSO_ANSWERS.get((heading or "").strip().casefold(), ()))
+
 
 #: How a Wikivoyage disambiguation page introduces itself.
 _DISAMBIGUATION = (
-    "there is more than one place",
+    "more than one place",
     "may refer to",
     "can refer to",
     "is the name of several",
@@ -149,24 +173,31 @@ class FakeTravelWiki:
     name = "fake"
 
     _KNOWN = {
-        "antigua guatemala": (14.5667, -90.7333),
-        "antigua": (14.5667, -90.7333),
-        "guatemala": (15.5, -90.25),
-        "lake atitlán": (14.6906, -91.2025),
-        "ljubljana": (46.0514, 14.5060),
+        "antigua guatemala": (14.5667, -90.7333, "Guatemala"),
+        "antigua": (14.5667, -90.7333, "Guatemala"),
+        "guatemala": (15.5, -90.25, "Guatemala"),
+        "lake atitlán": (14.6906, -91.2025, "Guatemala"),
+        "flores": (16.93, -89.8833, "Guatemala"),
+        "cartagena": (10.4, -75.5, "Colombia"),
+        "ljubljana": (46.0514, 14.5060, "Slovenia"),
     }
+
+    def locate(self, place: str) -> Guide | None:
+        """Where a place is, with no more of the guide than that needs."""
+        return self.guide(place)
 
     def guide(self, place: str) -> Guide | None:
         key = (place or "").strip().casefold()
         if not key or key not in self._KNOWN:
             return None
-        lat, lon = self._KNOWN[key]
+        lat, lon, country = self._KNOWN[key]
         name = place.strip()
         return Guide(
             title=name,
             url=f"https://en.wikivoyage.org/wiki/{urllib.parse.quote(name.replace(' ', '_'))}",
             lat=lat,
             lon=lon,
+            country=country,
             sections=[
                 GuideSection(
                     heading="Understand",
@@ -223,7 +254,21 @@ class WikivoyageTravelWiki:
         hits = (found.get("query") or {}).get("search") or []
         return [hit["title"] for hit in hits]
 
-    def guide(self, place: str) -> Guide | None:
+    def locate(self, place: str) -> Guide | None:
+        """Where a place is: its coordinates and country, from its guide.
+
+        Only the opening of the article is fetched, which is all that placing
+        a pin needs, and a match is held to a stricter test than reading is: a
+        search for a name the guide has never heard of still returns the
+        articles that mention something like it, and a pin on one of those
+        would be a confident wrong answer. So the article has to name the
+        place in its title or its opening, or it is not the place.
+        """
+        return self.guide(place, intro_only=True, must_mention=True)
+
+    def guide(
+        self, place: str, *, intro_only: bool = False, must_mention: bool = False
+    ) -> Guide | None:
         subject = (place or "").strip()
         if not subject:
             return None
@@ -231,14 +276,17 @@ class WikivoyageTravelWiki:
         for title in self._candidate_titles(subject):
             # Plain text rather than HTML: the app stores what was said, not
             # how it was marked up.
-            page = self._get(
-                {
-                    "action": "query",
-                    "prop": "extracts|coordinates",
-                    "titles": title,
-                    "explaintext": "1",
-                }
-            )
+            params = {
+                "action": "query",
+                "prop": "extracts|coordinates",
+                "titles": title,
+                "explaintext": "1",
+                # The ISO code of the country, on the few articles that set it.
+                "coprop": "country",
+            }
+            if intro_only:
+                params["exintro"] = "1"
+            page = self._get(params)
             pages = (page.get("query") or {}).get("pages") or {}
             if not pages:
                 continue
@@ -248,8 +296,14 @@ class WikivoyageTravelWiki:
             if looks_like_disambiguation(extract):
                 # A list of places, not a guide to one. Try the next match.
                 continue
+            if must_mention and not _mentions(subject, title, extract):
+                continue
 
             coords = (record.get("coordinates") or [{}])[0]
+            if intro_only and coords.get("lat") is None:
+                # Placing a pin is the point; an article that cannot be placed
+                # is not the answer, however well its name matches.
+                continue
             return Guide(
                 title=title,
                 url=(
@@ -259,9 +313,48 @@ class WikivoyageTravelWiki:
                 sections=merge_repeated_headings(_split_sections(extract)),
                 lat=coords.get("lat"),
                 lon=coords.get("lon"),
+                country=country_of(title, extract, coords.get("country")),
             )
 
         return None
+
+
+def country_of(title: str, extract: str, iso_code: str | None = None) -> str | None:
+    """The country an article is about, by the most reliable sign it gives.
+
+    The ISO code on its coordinates first, where Wikivoyage set one; then the
+    country in its title, which is how it tells "Flores (Guatemala)" from
+    "Flores (Indonesia)"; then the country its opening sentence names, which is
+    nearly always the one the place is in. An article about a country itself
+    names it in both.
+    """
+    from app.adapters.country_names import as_country, country_from_code, find_country
+
+    coded = country_from_code(iso_code)
+    if coded:
+        return coded
+    bracketed = re.search(r"\(([^()]+)\)\s*$", title or "")
+    if bracketed:
+        named = as_country(bracketed.group(1))
+        if named:
+            return named
+    if as_country(title):
+        return as_country(title)
+    opening = (extract or "").strip().split("\n", 1)[0]
+    return find_country(opening[:400])
+
+
+def _mentions(subject: str, title: str, extract: str) -> bool:
+    """Whether an article is about the place asked for, by its own words."""
+    wanted = _fold(subject)
+    if not wanted:
+        return False
+    return wanted in _fold(title) or wanted in _fold(extract)
+
+
+def _fold(text: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).casefold()
 
 
 def _split_sections(extract: str) -> list[GuideSection]:
