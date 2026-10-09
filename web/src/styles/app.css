@@ -2006,3 +2006,16 @@ a.trip__avatar { text-decoration: none; }
   position: absolute;
   inset: -5px;
 }
+
+/* The place header map takes the same night tint as the other maps when
+   the phone is dark, instead of a bright daylight tile over a dark screen. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .minimap .leaflet-tile-pane {
+    filter: var(--map-tint);
+    opacity: var(--map-tile-opacity);
+  }
+}
+:root[data-theme='dark'] .minimap .leaflet-tile-pane {
+  filter: var(--map-tint);
+  opacity: var(--map-tile-opacity);
+}
