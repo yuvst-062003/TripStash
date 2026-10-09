@@ -113,6 +113,9 @@ export interface SourceSummary {
   stages: MediaStage[]
   transcript_chars: number
   ocr_chars: number
+  // The opening of what was pasted or written, for a source with no title,
+  // file or link to be named by.
+  excerpt: string | null
 }
 
 export interface Evidence {

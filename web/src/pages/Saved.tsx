@@ -348,8 +348,12 @@ function KnowledgeView() {
       {knowledge.error && <ErrorNote message={knowledge.error} onRetry={knowledge.reload} />}
       {knowledge.data?.length === 0 && (
         <Empty
-          title="No saved knowledge yet"
-          body="Not everything is a map pin. Safety warnings, transport tips, prices and packing advice live here, each with its source."
+          title={type === null ? 'No saved knowledge yet' : `Nothing under ${KNOWLEDGE_LABEL[type] ?? type} yet`}
+          body={
+            type === null
+              ? 'Not everything is a map pin. Safety warnings, transport tips, prices and packing advice live here, each with its source.'
+              : 'Your other notes are under All. Save a link or write a note and anything of this kind lands here.'
+          }
         />
       )}
 
@@ -474,8 +478,8 @@ function SourcesView() {
             <div className="item" style={{ cursor: 'default' }}>
               <Glyph Icon={Icon} />
               <div className="item__body">
-                <p className="item__title clamp-2">
-                  {source.title || source.filename || source.url}
+                <p className="item__title clamp-2" dir="auto">
+                  {source.title || source.filename || source.url || source.excerpt || 'Untitled'}
                 </p>
                 <Meta
                   parts={[

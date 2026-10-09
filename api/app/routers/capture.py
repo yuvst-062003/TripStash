@@ -101,7 +101,16 @@ def _serialise_source(session: Session, source: Source) -> SourceResponse:
         stages=[MediaStageResponse.model_validate(stage) for stage in source.stages],
         transcript_chars=len(source.transcript or ""),
         ocr_chars=len(source.ocr_text or ""),
+        excerpt=_excerpt(source.raw_text),
     )
+
+
+def _excerpt(text: str | None, limit: int = 120) -> str | None:
+    """The first line of what was written, trimmed to a row's width."""
+    first = next((line.strip() for line in (text or "").splitlines() if line.strip()), "")
+    if not first:
+        return None
+    return first if len(first) <= limit else first[:limit].rsplit(" ", 1)[0] + "…"
 
 
 def _serialise_candidate(candidate: ExtractionCandidate) -> CandidateResponse:

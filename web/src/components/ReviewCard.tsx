@@ -194,7 +194,7 @@ export default function ReviewCard({
       <div className="row" style={{ marginTop: 'var(--s-3)', gap: 'var(--s-2)' }}>
         <button className="btn btn--accent btn--sm" disabled={busy || needsPin} onClick={approve}>
           <Check size={15} strokeWidth={2.4} />
-          {busy ? 'Saving…' : merging ? 'Merge and save' : 'Save'}
+          {busy ? 'Keeping…' : merging ? 'Merge and keep' : 'Keep'}
         </button>
         <button className="btn btn--sm btn--plain" disabled={busy} onClick={() => setEditing((on) => !on)}>
           <Pencil size={14} strokeWidth={2.2} />
@@ -211,7 +211,7 @@ export default function ReviewCard({
           onClick={() => run(() => api.ignoreCandidate(candidate.id))}
         >
           <X size={15} strokeWidth={2.2} />
-          Ignore
+          Pass
         </button>
       </div>
     </article>
