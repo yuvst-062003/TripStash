@@ -1033,6 +1033,11 @@ textarea.input { min-height: 76px; resize: vertical; }
   letter-spacing: 0;
   white-space: nowrap;
   pointer-events: none;
+  /* Never wider than the map allows: a long name ends in an ellipsis
+     rather than pushing the page sideways. */
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .stoppin--left .stoppin__label,
 .stoppin__label[data-flip] {
@@ -1143,7 +1148,17 @@ textarea.input { min-height: 76px; resize: vertical; }
   font-variant-numeric: tabular-nums;
 }
 .stop__main { flex: 1; min-width: 0; }
-.stop__name { font: var(--text-md); color: var(--ink); }
+.stop__name {
+  font: var(--text-md);
+  color: var(--ink);
+  /* A 160-character name is allowed; it wraps and stops at two lines. */
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-align: start;
+}
 .stop__when {
   font: var(--text-sm);
   color: var(--ink-2);
@@ -1418,7 +1433,9 @@ textarea.input { min-height: 76px; resize: vertical; }
    A city: clips first, then the map, then what is good to know
 --------------------------------------------------------------------------- */
 
-.rail { margin-top: var(--s-2); }
+/* The city's clips rail: a heading row, then a track that scrolls. Not the
+   generic .rail, which is itself the flex row and put the two side by side. */
+.cliprail { margin-top: var(--s-2); }
 .rail__head {
   display: flex;
   align-items: baseline;
@@ -1860,7 +1877,8 @@ a.trip__avatar { text-decoration: none; }
 .iconbtn--sm { width: 34px; height: 34px; }
 
 .stop__namebtn {
-  display: block;
+  /* -webkit-box, not block: the two-line clamp on .stop__name needs it. */
+  display: -webkit-box;
   padding: 0;
   border: 0;
   background: none;
@@ -1921,8 +1939,16 @@ a.trip__avatar { text-decoration: none; }
 .voice__snippet { font: var(--text-sm); color: var(--ink-2); }
 
 /* Alternatives: kept, not travelled */
-.stop__extras { display: flex; gap: var(--s-4); align-items: center; margin-left: 44px; }
+/* Each action stays on one line; a long stop name wraps the row, not the words. */
+.stop__extras { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); align-items: center; margin-left: 44px; }
 .stop__extras .stop__ideas { margin-left: 0; }
+.stop__extras > * { white-space: nowrap; min-width: 0; }
+/* The text actions keep their 20px look and pad out to a 44px hit area; the
+   negative margins give the padding back to the layout. */
+.stop__extras .stop__ideas,
+.stop__extras .stop__aside,
+.stop__extras .stop__remove { padding: 14px 0; margin-block: -12px; }
+.stop__extras .stop__ideas { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .stop__aside {
   padding: 2px 0;
   border: 0;
@@ -1942,3 +1968,54 @@ a.trip__avatar { text-decoration: none; }
 }
 .alt__text { display: grid; gap: 2px; }
 .alt__name { font: var(--text-md); font-weight: 600; }
+
+/* Removing a stop: a two-tap confirm in place, never a browser dialog. */
+.stop__remove { padding: 2px 0; border: 0; background: none; color: var(--ink-3); font: var(--text-xs); cursor: pointer; }
+.stop__confirm { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; margin: 0 0 var(--s-2) 44px; font: var(--text-sm); color: var(--ink-2); }
+.stop__confirm .btn { min-height: 32px; }
+
+/* The offline note sits above the trip's fixed map, which otherwise painted
+   over it and left a blank band where the warning should be. */
+.offline { position: relative; z-index: 2; background: var(--bg); }
+
+/* ---------------------------------------------------------------------------
+   Tap targets. The small controls keep their size on screen and grow their
+   hit area underneath, so a thumb lands on a 44px target without the row
+   getting taller. (iOS HIG and the user tests both ask for 44.)
+   --------------------------------------------------------------------------- */
+.btn--sm,
+.pill,
+.chip-toggle,
+.stepper__btn,
+.trip__avatar,
+.mapbtn,
+.iconbtn,
+.tabs__item,
+.leaflet-marker-icon.stoppin {
+  position: relative;
+}
+.btn--sm::after,
+.pill::after,
+.chip-toggle::after,
+.stepper__btn::after,
+.trip__avatar::after,
+.mapbtn::after,
+.iconbtn::after,
+.tabs__item::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
+
+/* The place header map takes the same night tint as the other maps when
+   the phone is dark, instead of a bright daylight tile over a dark screen. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .minimap .leaflet-tile-pane {
+    filter: var(--map-tint);
+    opacity: var(--map-tile-opacity);
+  }
+}
+:root[data-theme='dark'] .minimap .leaflet-tile-pane {
+  filter: var(--map-tint);
+  opacity: var(--map-tile-opacity);
+}

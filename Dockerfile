@@ -39,7 +39,8 @@ RUN apt-get update \
 
 COPY api/pyproject.toml ./
 COPY api/app ./app
-RUN pip install --no-cache-dir ".[postgres,media]"
+# docs: reading a PDF plan. Without it a PDF upload is kept but never read.
+RUN pip install --no-cache-dir ".[postgres,media,docs]"
 
 COPY --from=web /srv/dist /srv/web
 

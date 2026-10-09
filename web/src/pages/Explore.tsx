@@ -17,7 +17,7 @@ import { api } from '../lib/api'
 import { useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import type { Scope } from '../lib/types'
-import { type CountryFeature, loadCountries, matchesCountry } from '../lib/basemap'
+import { type CountryFeature, loadCountries, matchesCountry, prefersReducedMotion } from '../lib/basemap'
 import { ErrorNote, Note, SkeletonRows } from '../components/ui'
 import ExploreSearch from '../components/ExploreSearch'
 import { ChevronRight, Film, MapPin, Route as RouteIcon } from '../components/icons'
@@ -135,7 +135,8 @@ export default function Explore() {
     const map = mapRef.current
     const scope = focused ? byName.get(focused.toLowerCase()) : null
     if (!map || !scope || scope.lat === null || scope.lon === null) return
-    map.flyTo([scope.lat, scope.lon], 4, { duration: 0.6 })
+    if (prefersReducedMotion()) map.setView([scope.lat, scope.lon], 4, { animate: false })
+    else map.flyTo([scope.lat, scope.lon], 4, { duration: 0.6 })
   }, [focused, byName])
 
   return (

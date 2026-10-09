@@ -12,5 +12,19 @@ export default defineConfig({
       '/health': { target: 'http://127.0.0.1:8000', changeOrigin: true },
     },
   },
-  build: { outDir: 'dist', sourcemap: true },
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        // The big libraries in their own chunks: they change rarely, so a
+        // new build of the app does not make the phone download Leaflet or
+        // React again.
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          leaflet: ['leaflet'],
+        },
+      },
+    },
+  },
 })

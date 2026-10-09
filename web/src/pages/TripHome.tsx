@@ -13,13 +13,18 @@
  * — doing the arithmetic here would be a second, drifting implementation.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import L from 'leaflet'
 import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import type { HomePayload, Route, RouteCheck, RouteStop } from '../lib/types'
-import { type CountryFeature, loadCountries, matchesCountry } from '../lib/basemap'
+import {
+  type CountryFeature,
+  loadCountries,
+  matchesCountry,
+  prefersReducedMotion,
+} from '../lib/basemap'
 import { CacheNote, ErrorNote, Note, SkeletonRows } from '../components/ui'
 import CityCards from '../components/CityCards'
 import { StopIdeas, StopSuggestions, TravellerVoices, TripChecks } from '../components/TripAdvice'
@@ -51,7 +56,7 @@ function pin(index: number, stop: RouteStop, total: number): L.DivIcon {
       `${index % 2 ? ' stoppin--left' : ''}" ` +
       `aria-label="Stop ${index + 1} of ${total}: ${escapeHtml(label)}">` +
       `${index + 1}` +
-      `<span class="stoppin__label">${escapeHtml(label)}</span>` +
+      `<span class="stoppin__label" dir="auto">${escapeHtml(label)}</span>` +
       `</div>`,
     iconSize: [30, 30],
     iconAnchor: [15, 15],
@@ -156,7 +161,14 @@ export default function TripHome() {
   const { trip, openSave, openAsk, position } = useApp()
   // The country the camera has flown into, or null for the whole route.
   // Pressing a country or a stop sets it; the sheet follows the camera.
-  const [focus, setFocus] = useState<string | null>(null)
+  // In the URL rather than in state: opening a city from the pane and
+  // pressing back should land on the pane, not on the whole route.
+  const [params, setParams] = useSearchParams()
+  const focus = params.get('in')
+  const setFocus = useCallback(
+    (name: string | null) => setParams(name ? { in: name } : {}),
+    [setParams],
+  )
   const countryCities = useAsync(
     () => api.cities(focus ?? ''),
     [focus],
@@ -191,6 +203,7 @@ export default function TripHome() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.LayerGroup | null>(null)
+  const tilesRef = useRef<L.TileLayer | null>(null)
   const landRef = useRef<L.GeoJSON | null>(null)
   // Each route country's outline bounds, so a press can frame the country.
   const boundsRef = useRef<Map<string, L.LatLngBounds>>(new Map())
@@ -222,7 +235,10 @@ export default function TripHome() {
     // an error state: the coastlines and borders underneath are carried in the
     // app, so what is lost is street detail, and the note below says only that.
     tiles.on('tileerror', () => setTilesFailed(true))
-    tiles.addTo(map)
+    // Added once the route has framed the map, not now: at this point the
+    // camera is on a placeholder view, and every cold load fetched fifteen
+    // tiles of it that were thrown away a moment later.
+    tilesRef.current = tiles
     layerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
     map.on('zoomend moveend', () => declutterLabels(containerRef.current))
@@ -327,10 +343,18 @@ export default function TripHome() {
     // Fit the route into the band that is actually clear: below the header
     // and any map note, above the zoom-out pill and the sheet. Measuring the
     // sheet beats guessing a fraction, which drifts as its content changes.
-    const sheetTop =
-      document.querySelector('.tripsheet')?.getBoundingClientRect().top ??
-      window.innerHeight * 0.68
-    const noteBottom = document.querySelector('.mapnote')?.getBoundingClientRect().bottom ?? 110
+    // Once the itinerary has been scrolled, the sheet's top is above the
+    // viewport and the band it leaves would be negative: adding a stop then
+    // framed the route against a band that did not exist and landed the
+    // camera on an empty patch of jungle. The sheet never sits higher than
+    // its resting position for the purpose of framing.
+    const resting = window.innerHeight * 0.5
+    const measured = document.querySelector('.tripsheet')?.getBoundingClientRect().top
+    const sheetTop = Math.max(measured ?? window.innerHeight * 0.68, resting)
+    const noteBottom = Math.max(
+      document.querySelector('.mapnote')?.getBoundingClientRect().bottom ?? 110,
+      110,
+    )
     map.invalidateSize({ animate: false })
     const padding = {
       paddingTopLeft: [40, Math.round(noteBottom) + 24] as [number, number],
@@ -343,13 +367,22 @@ export default function TripHome() {
       const bounds = inCountry.length
         ? L.latLngBounds(inCountry).pad(inCountry.length === 1 ? 2 : 0.5)
         : (boundsRef.current.get(focus) ?? null)
-      if (bounds) map.flyToBounds(bounds, { ...padding, maxZoom: 9, duration: 1.1 })
+      if (bounds) {
+        if (prefersReducedMotion()) map.fitBounds(bounds, { ...padding, maxZoom: 9, animate: false })
+        else map.flyToBounds(bounds, { ...padding, maxZoom: 9, duration: 1.1 })
+      }
       return
     }
     // The first framing is instant: an animated flight started before the map
     // has its real size lands on the wrong place. Later moves fly.
     if (!framedRef.current) {
       framedRef.current = true
+      map.fitBounds(L.latLngBounds(points), { ...padding, maxZoom: 9, animate: false })
+      // Street detail arrives for the view that will actually be looked at.
+      if (tilesRef.current && !map.hasLayer(tilesRef.current)) tilesRef.current.addTo(map)
+      return
+    }
+    if (prefersReducedMotion()) {
       map.fitBounds(L.latLngBounds(points), { ...padding, maxZoom: 9, animate: false })
       return
     }
@@ -396,6 +429,21 @@ export default function TripHome() {
       setRoute(updated.data)
     } catch (error) {
       setRouteError(error instanceof Error ? error.message : 'Could not move that stop.')
+    } finally {
+      setSaving(null)
+    }
+  }, [])
+
+  const removeStop = useCallback(async (destinationId: string) => {
+    setSaving(destinationId)
+    setRouteError(null)
+    try {
+      await api.removeDestination(destinationId)
+      // The stops after it move up and re-date, so take the whole route back.
+      const fresh = await api.route()
+      setRoute(fresh.data)
+    } catch (error) {
+      setRouteError(error instanceof Error ? error.message : 'Could not remove that stop.')
     } finally {
       setSaving(null)
     }
@@ -519,12 +567,15 @@ export default function TripHome() {
             {mode === 'plan' ? (
               <PlanPane
                 route={route}
+                loadError={loaded.error}
+                onRetry={loaded.reload}
                 saving={saving}
                 error={routeError}
                 onNights={setNights}
                 onAdd={addStop}
                 onFix={applyFix}
                 onOnRoute={setOnRoute}
+                onRemove={removeStop}
                 onAsk={() => openAsk({ surface: 'trip', contextLabel: 'your route' })}
                 onFocus={setFocus}
               />
@@ -542,22 +593,28 @@ export default function TripHome() {
 
 function PlanPane({
   route,
+  loadError,
+  onRetry,
   saving,
   error,
   onNights,
   onAdd,
   onFix,
   onOnRoute,
+  onRemove,
   onAsk,
   onFocus,
 }: {
   route: Route | null
+  loadError: string | null
+  onRetry: () => void
   saving: string | null
   error: string | null
   onNights: (stop: RouteStop, next: number | null) => void
   onAdd: (name: string, afterPosition: number | null) => Promise<void>
   onFix: (check: RouteCheck) => Promise<void>
   onOnRoute: (destinationId: string, onRoute: boolean) => Promise<void>
+  onRemove: (destinationId: string) => Promise<void>
   onAsk: () => void
   onFocus: (country: string) => void
 }) {
@@ -565,6 +622,11 @@ function PlanPane({
   // goes after (so inserting mid-route does not reorder what is there), and
   // 'end' is the append slot at the bottom.
   const [insertAfter, setInsertAfter] = useState<number | 'end' | null>(null)
+  // A route that could not be loaded is not an empty route. Saying "no stops
+  // yet" over a failed request tells the traveller their trip is gone.
+  if (!route && loadError) {
+    return <ErrorNote message={loadError} onRetry={onRetry} />
+  }
   if (!route || !route.stops.length) {
     return (
       <Note tone="neutral">
@@ -653,6 +715,7 @@ function PlanPane({
                 onNights={onNights}
                 onFocus={onFocus}
                 onSetAside={() => onOnRoute(stop.destination.id, false)}
+                onRemove={() => onRemove(stop.destination.id)}
               />
             </div>
           )
@@ -692,7 +755,7 @@ function PlanPane({
           {route.alternatives?.map((alt) => (
             <div key={alt.id} className="alt">
               <div className="alt__text">
-                <span className="alt__name">
+                <span className="alt__name" dir="auto">
                   {alt.name}
                   {alt.country && <span className="t-xs dim"> · {alt.country}</span>}
                 </span>
@@ -734,6 +797,9 @@ function AddStop({
 }) {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
+  // State lags a tap by a render, so two taps in one tick both saw `busy`
+  // as false and added the stop twice. A ref is set before anything waits.
+  const inFlight = useRef(false)
   const fieldRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -743,11 +809,13 @@ function AddStop({
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     const trimmed = name.trim()
-    if (!trimmed || busy) return
+    if (!trimmed || inFlight.current) return
+    inFlight.current = true
     setBusy(true)
     try {
       await onAdd(trimmed)
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
@@ -757,6 +825,7 @@ function AddStop({
       <input
         ref={fieldRef}
         className="addstop__field"
+        dir="auto"
         value={name}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => event.key === 'Escape' && onCancel()}
@@ -785,6 +854,7 @@ function Stop({
   onNights,
   onFocus,
   onSetAside,
+  onRemove,
 }: {
   stop: RouteStop
   index: number
@@ -792,8 +862,11 @@ function Stop({
   onNights: (stop: RouteStop, next: number | null) => void
   onFocus: (country: string) => void
   onSetAside: () => void
+  onRemove: () => void
 }) {
   const [ideas, setIdeas] = useState(false)
+  // Removing is the one route edit with no undo, so it asks once, in place.
+  const [confirming, setConfirming] = useState(false)
   const nights = stop.nights
   const arrive = stopDate(stop.arrive_on)
   const depart = stopDate(stop.depart_on)
@@ -806,7 +879,8 @@ function Stop({
       </span>
       <div className="stop__main">
         <button
-          className="stop__name stop__namebtn clamp-1"
+          className="stop__name stop__namebtn"
+          dir="auto"
           onClick={() => stop.destination.country && onFocus(stop.destination.country)}
           aria-label={`Fly to ${stop.destination.name}, ${stop.destination.country ?? ''}`}
         >
@@ -853,7 +927,34 @@ function Stop({
       <button className="stop__aside" disabled={busy} onClick={onSetAside}>
         Set aside as alternative
       </button>
+      <button
+        className="stop__remove"
+        disabled={busy}
+        aria-expanded={confirming}
+        onClick={() => setConfirming((on) => !on)}
+      >
+        Remove
+      </button>
     </div>
+    {confirming && (
+      <div className="stop__confirm" role="group" aria-label={`Remove ${stop.destination.name}?`}>
+        <span dir="auto">Remove {stop.destination.name} from the route? Its nights go with it.</span>
+        <button
+          type="button"
+          className="btn btn--sm btn--accent"
+          disabled={busy}
+          onClick={() => {
+            setConfirming(false)
+            onRemove()
+          }}
+        >
+          Remove
+        </button>
+        <button type="button" className="btn btn--sm btn--plain" onClick={() => setConfirming(false)}>
+          Keep
+        </button>
+      </div>
+    )}
     {ideas && <StopIdeas name={stop.destination.name} />}
     </>
   )

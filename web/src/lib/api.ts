@@ -101,7 +101,10 @@ async function request<T>(
   const response = await fetch(url.toString(), { ...init, headers })
   const fromCache = response.headers.get('x-tripstash-offline') === 'true'
 
-  if (response.status === 401) {
+  // A 401 while signed in means the session is over. A 401 from signing in
+  // means the password was wrong, and the server says so; calling that an
+  // expired session sends the traveller looking for the wrong problem.
+  if (response.status === 401 && !path.startsWith('/api/v1/auth/')) {
     token.clear()
     throw new ApiError(401, 'Your session expired. Sign in again.')
   }
@@ -145,6 +148,8 @@ export const api = {
   createTrip: (body: Record<string, unknown>) => post<Trip>('/api/v1/trips', body),
   addDestination: (body: Record<string, unknown>) =>
     post<unknown>('/api/v1/trips/current/destinations', body),
+  removeDestination: (destinationId: string) =>
+    del<void>(`/api/v1/trips/current/destinations/${destinationId}`),
 
   // The itinerary. Nights are sent; dates come back derived, because changing
   // one stop moves every stop after it and that sum belongs on the server.

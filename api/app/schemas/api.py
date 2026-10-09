@@ -256,6 +256,9 @@ class SourceResponse(ApiModel):
     stages: list[MediaStageResponse] = Field(default_factory=list)
     transcript_chars: int = 0
     ocr_chars: int = 0
+    #: The opening of what was pasted or written. A note or a place typed by
+    #: hand has no title, file or link, and a row with none of those is blank.
+    excerpt: str | None = None
 
 
 class EvidenceResponse(ApiModel):

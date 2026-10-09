@@ -264,3 +264,74 @@ def test_a_stored_page_is_never_served_back_as_a_page(client, auth, trip):
     assert served.status_code == 200, served.text
     assert served.headers["content-type"].startswith("text/plain")
     assert served.headers["x-content-type-options"] == "nosniff"
+
+
+def test_a_pdf_with_too_many_pages_is_read_only_so_far():
+    """One upload must not occupy the worker for minutes.
+
+    A plan is a few pages. A thousand-page PDF is a mistake or a weapon, and
+    either way the first pages are what the extraction reads.
+    """
+    pypdf = pytest.importorskip("pypdf")
+    from app.services.documents import MAX_PDF_PAGES, _read_pdf
+
+    writer = pypdf.PdfWriter()
+    for _ in range(MAX_PDF_PAGES + 20):
+        writer.add_blank_page(width=200, height=200)
+    import io
+
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    read = _read_pdf(buffer.getvalue())
+    # Blank pages carry no text, so the result is the honest "no text" one -
+    # and it came back without reading the pages past the cap.
+    assert read.engine == "pdf"
+    assert read.failure_reason and "selectable text" in read.failure_reason
+
+
+def test_retrying_a_plan_reads_the_file_again(client, auth, trip):
+    """A plan whose reading failed is read again on Retry, not just re-run.
+
+    Mimics a PDF uploaded while the reader was missing: the file is kept with
+    no text. Once the reader is there, Retry has to read it - re-running the
+    pipeline over empty text fails exactly as before.
+    """
+    import io
+    import zipfile
+
+    from app.db import SessionLocal
+    from app.models.capture import Source
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr(
+            "word/document.xml",
+            "<w:document><w:body><w:p><w:r><w:t>Antigua 4 days, Acatenango overnight "
+            "hike</w:t></w:r></w:p></w:body></w:document>",
+        )
+    docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    uploaded = client.post(
+        "/api/v1/sources/upload",
+        headers=auth,
+        files={"files": ("plan.docx", buffer.getvalue(), docx)},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    source_id = uploaded.json()[0]["id"]
+
+    # Forget what was read, as an upload with no reader would have.
+    session = SessionLocal()
+    source = session.get(Source, source_id)
+    source.raw_text = None
+    source.failure_reason = "Reading PDFs needs the optional docs extra."
+    session.commit()
+    session.close()
+
+    retried = client.post(f"/api/v1/sources/{source_id}/retry", headers=auth)
+    assert retried.status_code == 200, retried.text
+
+    session = SessionLocal()
+    source = session.get(Source, source_id)
+    assert "Acatenango" in (source.raw_text or "")
+    assert source.failure_reason is None
+    session.close()

@@ -223,7 +223,7 @@ export default function City() {
 
       {/* The clips rail leads: no guidebook can show you your own video. */}
       {playable.length > 0 && (
-        <section className="rail">
+        <section className="cliprail">
           <div className="rail__head pad">
             <h2 className="t-md">Your clips here</h2>
             <Link className="t-sm" to={`/clips/feed?scope=${encodeURIComponent(name)}`}>

@@ -19,7 +19,7 @@
 
 @font-face {
   font-family: 'Jakarta';
-  src: url('/fonts/PlusJakartaSans-var.woff2') format('woff2-variations');
+  src: url('/fonts/PlusJakartaSans-var.woff2') format('woff2');
   font-weight: 400 800;
   font-style: normal;
   font-display: swap;

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+from urllib.parse import urlsplit
 
 from fastapi import (
     APIRouter,
@@ -53,6 +54,13 @@ from app.services.extraction import (
 from app.services.finding import find_videos
 from app.worker import enqueue_source_processing
 
+
+def looks_like_a_link(url: str) -> bool:
+    """Whether a string could be fetched at all: a web scheme and a host."""
+    parts = urlsplit(url.strip())
+    return parts.scheme in ("http", "https") and "." in parts.netloc
+
+
 router = APIRouter(tags=["capture"])
 
 # Friendly names for the paths that can recover a caption, best first.
@@ -93,7 +101,16 @@ def _serialise_source(session: Session, source: Source) -> SourceResponse:
         stages=[MediaStageResponse.model_validate(stage) for stage in source.stages],
         transcript_chars=len(source.transcript or ""),
         ocr_chars=len(source.ocr_text or ""),
+        excerpt=_excerpt(source.raw_text),
     )
+
+
+def _excerpt(text: str | None, limit: int = 120) -> str | None:
+    """The first line of what was written, trimmed to a row's width."""
+    first = next((line.strip() for line in (text or "").splitlines() if line.strip()), "")
+    if not first:
+        return None
+    return first if len(first) <= limit else first[:limit].rsplit(" ", 1)[0] + "…"
 
 
 def _serialise_candidate(candidate: ExtractionCandidate) -> CandidateResponse:
@@ -135,6 +152,14 @@ def capture_link(
     trip: Trip = Depends(current_trip),
 ) -> SourceResponse:
     """Paste a link, article, message or note."""
+    if body.kind is SourceKind.LINK and body.url and not looks_like_a_link(body.url):
+        # Refused here rather than stored as a failed source: a source that
+        # could never have been fetched is a typo, and a typo wants a
+        # correction, not a row in Sources with Retry under it.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "That doesn't look like a web address. A link starts with http:// or https://.",
+        )
     try:
         source = create_source(
             session,
@@ -319,6 +344,15 @@ def retry_source(
 ) -> SourceResponse:
     """The recovery path a failed extraction must always have (spec 12)."""
     source = owned_or_404(session.get(Source, source_id), trip, "Source not found.")
+    # A plan (Word, PDF, a saved page) is read into text at upload; a retry
+    # that only re-ran the pipeline kept the old empty text, so a PDF that
+    # failed because the reader was missing failed again after it was
+    # installed. Read the file again before the pipeline runs.
+    if source.storage_key and is_document(source.media_type):
+        read = read_document(get_storage().get(source.storage_key), source.media_type)
+        if read.text and read.text not in (source.raw_text or ""):
+            source.raw_text = f"{source.raw_text}\n\n{read.text}" if source.raw_text else read.text
+            source.failure_reason = None
     session.commit()
     enqueue_source_processing(source.id, background)
     session.refresh(source)

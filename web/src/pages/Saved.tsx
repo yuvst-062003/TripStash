@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import type { MediaStage, PlaceSummary, SourceSummary } from '../lib/types'
 import { useApp, useScreenContext } from '../lib/context'
@@ -39,10 +39,17 @@ import {
 } from '../components/icons'
 
 type View = 'activity' | 'inbox' | 'places' | 'knowledge' | 'sources'
+const VIEWS: View[] = ['activity', 'inbox', 'places', 'knowledge', 'sources']
 
 /** The discovery library: what was collected, while Map answers where it is. */
 export default function Saved() {
-  const [view, setView] = useState<View>('activity')
+  // The tab lives in the URL, so "Saved → Sources" from Profile lands on
+  // Sources and a back press returns to the tab you left.
+  const [params, setParams] = useSearchParams()
+  const fromUrl = params.get('tab')
+  const view: View = VIEWS.includes(fromUrl as View) ? (fromUrl as View) : 'activity'
+  const setView = (next: View) =>
+    setParams(next === 'activity' ? {} : { tab: next }, { replace: false })
   const { openSave } = useApp()
   useScreenContext({ surface: 'saved' })
 
@@ -348,8 +355,12 @@ function KnowledgeView() {
       {knowledge.error && <ErrorNote message={knowledge.error} onRetry={knowledge.reload} />}
       {knowledge.data?.length === 0 && (
         <Empty
-          title="No saved knowledge yet"
-          body="Not everything is a map pin. Safety warnings, transport tips, prices and packing advice live here, each with its source."
+          title={type === null ? 'No saved knowledge yet' : `Nothing under ${KNOWLEDGE_LABEL[type] ?? type} yet`}
+          body={
+            type === null
+              ? 'Not everything is a map pin. Safety warnings, transport tips, prices and packing advice live here, each with its source.'
+              : 'Your other notes are under All. Save a link or write a note and anything of this kind lands here.'
+          }
         />
       )}
 
@@ -474,8 +485,8 @@ function SourcesView() {
             <div className="item" style={{ cursor: 'default' }}>
               <Glyph Icon={Icon} />
               <div className="item__body">
-                <p className="item__title clamp-2">
-                  {source.title || source.filename || source.url}
+                <p className="item__title clamp-2" dir="auto">
+                  {source.title || source.filename || source.url || source.excerpt || 'Untitled'}
                 </p>
                 <Meta
                   parts={[

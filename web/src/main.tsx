@@ -4,6 +4,8 @@ import { BrowserRouter } from 'react-router-dom'
 import 'leaflet/dist/leaflet.css'
 import './styles/app.css'
 import App from './App'
+import ErrorBoundary from './components/ErrorBoundary'
+import ScrollMemory from './components/ScrollMemory'
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
@@ -16,7 +18,10 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <ErrorBoundary>
+        <ScrollMemory />
+        <App />
+      </ErrorBoundary>
     </BrowserRouter>
   </React.StrictMode>,
 )
