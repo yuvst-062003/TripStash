@@ -357,6 +357,11 @@ def _fold(text: str) -> str:
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).casefold()
 
 
+#: How much of one section a card carries. A country's "Get in" runs to
+#: thousands of words; the card quotes the start and links to the rest.
+SECTION_CHARS = 2000
+
+
 def _split_sections(extract: str) -> list[GuideSection]:
     """Cut a plain-text extract at its own headings.
 
@@ -364,21 +369,47 @@ def _split_sections(extract: str) -> list[GuideSection]:
     that is simpler and far more predictable than asking for HTML and stripping
     tags, and it keeps the text exactly as written - which matters, because the
     text is what gets quoted.
+
+    Only a top-level heading starts a section. A country's visa rules sit
+    under `=== Visa requirements ===` inside `== Get in ==`, and cutting at
+    every heading left "Get in" empty and the rules under a heading nothing
+    maps - so the guide claimed to have nothing on borders while holding
+    five thousand words on them. Subheadings now stay in their section.
     """
     sections: list[GuideSection] = []
     heading = "Understand"
     body: list[str] = []
 
+    def close() -> None:
+        text = "\n".join(body).strip()
+        if text:
+            sections.append(GuideSection(heading=heading, text=_clip(text)))
+
     for line in extract.splitlines():
         stripped = line.strip()
         if stripped.startswith("==") and stripped.endswith("==") and len(stripped) > 4:
-            if body:
-                sections.append(GuideSection(heading=heading, text="\n".join(body).strip()))
+            level = len(stripped) - len(stripped.lstrip("="))
+            title = stripped.strip("=").strip()
+            if level <= 2:
+                close()
                 body = []
-            heading = stripped.strip("=").strip()
+                heading = title
+            else:
+                # A subheading reads as a line of its own section.
+                body.append(f"{title}:")
         else:
             body.append(line)
 
-    if body:
-        sections.append(GuideSection(heading=heading, text="\n".join(body).strip()))
+    close()
     return sections
+
+
+def _clip(text: str, limit: int = SECTION_CHARS) -> str:
+    """The start of a long section, cut at a sentence so it reads as one."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    cut = max(head.rfind(". "), head.rfind(".\n"))
+    if cut > limit // 2:
+        head = head[: cut + 1]
+    return head.rstrip() + " …"

@@ -153,3 +153,37 @@ def test_an_empty_extract_is_not_mistaken_for_a_real_article():
 
     assert looks_like_disambiguation("")
     assert looks_like_disambiguation("   ")
+
+
+
+# ---------------------------------------------------------------------------
+# Subheadings stay in their section
+# ---------------------------------------------------------------------------
+
+
+def test_a_subheading_stays_inside_its_section():
+    """A country's visa rules live under "Visa requirements" inside "Get in".
+
+    Cutting at every heading left "Get in" empty and the rules under a heading
+    nothing maps, so the guide said it had nothing on borders while holding
+    thousands of words on them.
+    """
+    from app.adapters.travel_wiki import _split_sections
+
+    extract = (
+        "Brazil is big.\n== Get in ==\n=== Visa requirements ===\nMost visitors need "
+        "no visa for 90 days.\n=== By plane ===\nFly to São Paulo.\n== Sleep ==\nHostels.\n"
+    )
+    sections = _split_sections(extract)
+    assert [s.heading for s in sections] == ["Understand", "Get in", "Sleep"]
+    get_in = sections[1].text
+    assert "Visa requirements:" in get_in and "90 days" in get_in and "Fly to" in get_in
+
+
+def test_a_very_long_section_is_cut_at_a_sentence_and_says_so():
+    from app.adapters.travel_wiki import SECTION_CHARS, _split_sections
+
+    long = ("A sentence about the border. " * 200).strip()
+    [section] = _split_sections("== Get in ==\n" + long)
+    assert len(section.text) <= SECTION_CHARS + 2
+    assert section.text.endswith(". …")
