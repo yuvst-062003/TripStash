@@ -1921,8 +1921,10 @@ a.trip__avatar { text-decoration: none; }
 .voice__snippet { font: var(--text-sm); color: var(--ink-2); }
 
 /* Alternatives: kept, not travelled */
-.stop__extras { display: flex; gap: var(--s-4); align-items: center; margin-left: 44px; }
+/* Each action stays on one line; a long stop name wraps the row, not the words. */
+.stop__extras { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); align-items: center; margin-left: 44px; }
 .stop__extras .stop__ideas { margin-left: 0; }
+.stop__extras > * { white-space: nowrap; }
 .stop__aside {
   padding: 2px 0;
   border: 0;
