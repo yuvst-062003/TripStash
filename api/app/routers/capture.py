@@ -344,6 +344,15 @@ def retry_source(
 ) -> SourceResponse:
     """The recovery path a failed extraction must always have (spec 12)."""
     source = owned_or_404(session.get(Source, source_id), trip, "Source not found.")
+    # A plan (Word, PDF, a saved page) is read into text at upload; a retry
+    # that only re-ran the pipeline kept the old empty text, so a PDF that
+    # failed because the reader was missing failed again after it was
+    # installed. Read the file again before the pipeline runs.
+    if source.storage_key and is_document(source.media_type):
+        read = read_document(get_storage().get(source.storage_key), source.media_type)
+        if read.text and read.text not in (source.raw_text or ""):
+            source.raw_text = f"{source.raw_text}\n\n{read.text}" if source.raw_text else read.text
+            source.failure_reason = None
     session.commit()
     enqueue_source_processing(source.id, background)
     session.refresh(source)
