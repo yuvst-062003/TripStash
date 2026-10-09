@@ -23,8 +23,8 @@ Create a short launch-style brag video for TripStash: "A backpacker's plan, read
   - `../icon.svg` — the app icon
 - Copy that must appear verbatim:
   - A backpacker's plan, / read back as a map.
-  - Six countries.
-  - Mexico City to Rio Carnival. / Every stop with its nights, dates derived.
+  - 21 stops. 6 countries.
+  - Mexico City to Rio Carnival. / Nov 7 2026 → Feb 16 2027
   - Every city carries your own sentence.
   - What travellers say about this stretch / Every claim with its source.
   - Notices you'd miss Carnival. Fixes it.
@@ -56,7 +56,7 @@ Use the storyboard in `brag-output/brag-plan.md` as the creative contract.
 
 Scene summary:
 1. Hook — 4.2s — two headline lines; the phone rises with the route map
-2. The itinerary — 4.2s — screen swaps to the stops on the strong cue; slow pan; "Six countries." then "Mexico City to Rio Carnival."
+2. The itinerary — 4.2s — screen swaps to the stops on the strong cue; slow pan; "21 stops. 6 countries." then "Mexico City to Rio Carnival." with the dates
 3. Your own sentence — 3.2s — three city cards one by one on the beat grid
 4. What travellers say — 3.7s — four source groups one by one; "Every claim with its source."
 5. The trip check — 2.1s — the Carnival card; the fix button highlighted; "Notices you'd miss Carnival. Fixes it."

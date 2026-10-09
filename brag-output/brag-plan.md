@@ -37,11 +37,11 @@ Open the trip (the route draws itself) → press into a country (city cards with
 - Body font: the same
 - Strongest visual element: the Trip screen's route map with numbered green pins and the dashed line; the city cards with photo + Hebrew sentence
 
-## Facts used (from the brief's allowed list)
-Only the allowed facts that are also true of the demo trip on screen: 6 countries, Mexico City to Rio Carnival, every claim carries its source, found clips are never counted as yours, works offline, no paid API. The stop count and the dates are the live trip's, not the demo's, so they are left out rather than shown over a screen that says otherwise.
+## Facts stated (the brief's allowed list)
+21 stops, 6 countries, Mexico City to Rio Carnival, Nov 7 2026 → Feb 16 2027; every claim carries its source; found clips are never counted as yours; works offline with country outlines carried in the app; no paid API. The screens are chosen so none shows a figure these contradict: the hero shows the map band only, and the itinerary was captured with the demo trip's departure moved to Nov 7 through the app's own trip editing.
 
 ## Share copy (draft)
-TripStash: a backpacker's plan, read back as a map. Six countries, Mexico City to Rio Carnival, every claim with its source. Works offline. No paid API.
+TripStash: a backpacker's plan, read back as a map. 21 stops, 6 countries, Mexico City to Rio Carnival, every claim with its source. Works offline. No paid API.
 
 ## Audio direction
 - Role: warm bed under a quiet product film; sparse motion-matched accents
@@ -56,7 +56,7 @@ TripStash: a backpacker's plan, read back as a map. Six countries, Mexico City t
 ## Storyboard
 
 ### Scene 1 — Hook — 4.2s (0.0–4.2)
-Night ground with a faint mint glow. "A backpacker's plan," fades up at 0.3s; "read back as a map." at 1.4s (mint). The phone rises from below at 2.65s showing the Trip screen's map: numbered pins, dashed route, "Zoom out to Explore" pill. Its lower part sits below the frame, so the map is the subject; the sheet's own summary line is the demo trip's, and the words never contradict it.
+Night ground with a faint mint glow. "A backpacker's plan," fades up at 0.3s; "read back as a map." at 1.4s (mint). The phone rises from below at 2.65s showing the Trip screen's map: numbered pins, dashed route, "Zoom out to Explore" pill. Its lower part sits below the frame, so the map is the subject; the capture stops at the sheet's handle, so no summary line is in the image.
 Sequential/interaction: the two lines arrive one after the other; the phone rises.
 Audio intent: the bed starts quietly; the phone's arrival is the first accent.
 Audio-coupled idea: soft drop on the phone's arrival (2.65, beat).
@@ -64,7 +64,7 @@ Music: warm bed
 Transition mood: soft → Scene 2
 
 ### Scene 2 — The itinerary — 4.2s (4.2–8.4)
-At 4.23 (strong cue) the phone's screen swaps to the itinerary: numbered stops, dates, nights steppers; it pans slowly upward for the whole scene. Top caption: "Six countries." (4.3–6.3), then "Mexico City to Rio Carnival." with the small line "Every stop with its nights, dates derived." (6.34–8.4).
+At 4.23 (strong cue) the phone's screen swaps to the itinerary: numbered stops, dates, nights steppers; it pans slowly upward for the whole scene. Top caption: "21 stops. 6 countries." (4.3–6.3), then "Mexico City to Rio Carnival." with the small date line "Nov 7 2026 → Feb 16 2027" (6.34–8.4).
 Sequential/interaction: the screen swap simulates the sheet being read; the pan is the scroll.
 Audio intent: settled, reading.
 Audio-coupled idea: select click on the swap (4.23, strong cue).
