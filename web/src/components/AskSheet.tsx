@@ -120,6 +120,7 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
               ref={inputRef}
               className="input"
               rows={2}
+              dir="auto"
               value={question}
               placeholder="What have I saved near me?"
               onChange={(event) => setQuestion(event.target.value)}
@@ -188,7 +189,9 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
       {answer && (
         <>
           <div className="pad" style={{ paddingTop: 'var(--s-4)' }}>
-            <p className="t">{answer.answer}</p>
+            <p className="t" dir="auto">
+              {answer.answer}
+            </p>
             {answer.disclaimers.map((note) => (
               <div key={note} style={{ marginTop: 'var(--s-2)' }}>
                 <Note tone="warn">{note}</Note>
