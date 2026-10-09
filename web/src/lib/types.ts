@@ -329,6 +329,10 @@ export interface AskResponse {
     provenance: string
     takeaway?: string | null
     quote?: string | null
+    // A page the assistant read on the web carries these instead of a
+    // source id: it is not yours and is never counted as something you saved.
+    title?: string | null
+    host?: string | null
   }[]
   disclaimers: string[]
   proposed_actions: ProposedAction[]

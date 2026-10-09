@@ -40,12 +40,26 @@ const STARTERS = [
 /** The first couple of source names, so "what it looked at" is concrete. */
 function sourceNames(citations: AskResponse['citations']): string {
   const labels = citations
-    .map((citation) => citation.label)
+    .map((citation) => citation.label || citation.title)
     .filter((label): label is string => Boolean(label))
     .slice(0, 2)
   if (!labels.length) return ''
   const more = citations.length - labels.length
   return labels.join(', ') + (more > 0 ? ` and ${more} more` : '')
+}
+
+/**
+ * "Read 2 sources you saved and 1 page from the web" - never "you saved" for
+ * a page the assistant read on its own. A citation with no source id is the
+ * web's, and the whole product rests on that difference being said.
+ */
+function readLine(citations: AskResponse['citations']): string {
+  const saved = citations.filter((c) => c.source_id).length
+  const web = citations.length - saved
+  const parts = []
+  if (saved) parts.push(`${saved} ${saved === 1 ? 'source' : 'sources'} you saved`)
+  if (web) parts.push(`${web} ${web === 1 ? 'page' : 'pages'} from the web`)
+  return `Read ${parts.join(' and ')}`
 }
 
 export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: () => void }) {
@@ -186,8 +200,7 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
               working is hidden is one you have to take on trust. */}
           {answer.citations.length > 0 && (
             <p className="pad lookedat">
-              Read {answer.citations.length}{' '}
-              {answer.citations.length === 1 ? 'source' : 'sources'} you saved
+              {readLine(answer.citations)}
               {sourceNames(answer.citations) && `: ${sourceNames(answer.citations)}`}
             </p>
           )}
@@ -341,8 +354,16 @@ export default function AskSheet({ seed, onClose }: { seed: AskSeed; onClose: ()
                   <li key={`${citation.source_id}-${index}`}>
                     <div className="item" style={{ cursor: 'default' }}>
                       <div className="item__body">
-                        <p className="t-sm clamp-1">{citation.label}</p>
-                        <Meta parts={[citation.provenance, citation.published_on]} />
+                        <p className="t-sm clamp-1" dir="auto">
+                          {citation.label || citation.title || citation.host}
+                        </p>
+                        <Meta
+                          parts={[
+                            citation.source_id ? citation.provenance : 'from the web',
+                            citation.host,
+                            citation.published_on,
+                          ]}
+                        />
                         {citation.quote && (
                           <blockquote className="quote" style={{ marginTop: 6 }}>
                             “{citation.quote}”
