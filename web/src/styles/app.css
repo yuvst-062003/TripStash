@@ -368,11 +368,6 @@ a { color: inherit; text-decoration: none; }
   font: var(--text-xs);
   text-transform: none;
   letter-spacing: 0;
-  /* Never wider than the map allows: a long name ends in an ellipsis
-     rather than pushing the page sideways. */
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   transition: color var(--dur) var(--ease);
 }
 .tabbar__item[aria-current='page'] { color: var(--ink); }
@@ -1038,6 +1033,11 @@ textarea.input { min-height: 76px; resize: vertical; }
   letter-spacing: 0;
   white-space: nowrap;
   pointer-events: none;
+  /* Never wider than the map allows: a long name ends in an ellipsis
+     rather than pushing the page sideways. */
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .stoppin--left .stoppin__label,
 .stoppin__label[data-flip] {
@@ -1964,3 +1964,7 @@ a.trip__avatar { text-decoration: none; }
 .stop__remove { padding: 2px 0; border: 0; background: none; color: var(--ink-3); font: var(--text-xs); cursor: pointer; }
 .stop__confirm { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; margin: 0 0 var(--s-2) 44px; font: var(--text-sm); color: var(--ink-2); }
 .stop__confirm .btn { min-height: 32px; }
+
+/* The offline note sits above the trip's fixed map, which otherwise painted
+   over it and left a blank band where the warning should be. */
+.offline { position: relative; z-index: 2; background: var(--bg); }

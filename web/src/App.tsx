@@ -117,7 +117,7 @@ export default function App() {
     <AppContext.Provider value={value}>
       <div className="app">
         {!online && (
-          <div className="pad" style={{ paddingBlock: 'var(--s-2)' }}>
+          <div className="pad offline" style={{ paddingBlock: 'var(--s-2)' }}>
             <Note tone="warn" Icon={Globe}>
               Offline. Showing what is cached — edits are queued until you reconnect.
             </Note>
