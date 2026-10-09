@@ -151,12 +151,8 @@ r = c.post("/find", json={"place": ""}); rec("E5", r.status_code == 422, f"{r.st
 # ---- 4. clips
 r = c.get("/reels/spots"); sp = r.json()
 rec("C1", r.status_code == 200 and all("found_count" in s for s in sp), f"{len(sp)} spots")
-playable = [s for s in sp if s["playable_count"]]
-if sp:
-    r = c.get("/reels", params={"trip_place_id": sp[0]["trip_place_id"]}); cl = r.json()
-    rec("C3", r.status_code == 200 and cl and "start_seconds" in cl[0] and "found" in cl[0], f"{len(cl)} clips; start={cl[0].get('start_seconds') if cl else None} moment={cl[0].get('moment_seconds') if cl else None} found={cl[0].get('found') if cl else None}")
-else:
-    rec("C3", False, "no spots in seed")
+# The demo plan holds no videos (the doc says so), so the feed is checked after
+# a clip has been saved: see C3 below, after V1.
 r = c.get("/reels"); rec("I2", r.status_code == 200 and sum(1 for x in r.json() if x.get("found")) == 0, f"found clips before any find: {sum(1 for x in r.json() if x.get('found'))}")
 
 # ---- 5. saved
@@ -179,6 +175,28 @@ r = fresh.get(f"/places/{pl['trip_place_id']}"); rec("X6", r.status_code == 404,
 
 # ---- 7. save
 r = c.post("/sources", json={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "text": "Go to Cerro de la Cruz at sunset in Antigua."}); rec("V1", r.status_code == 201, f"{r.status_code} {r.text[:60]}")
+clip_source = r.json().get("id") if r.status_code == 201 else None
+# C3: extraction runs after the response, so wait for the candidate, keep it,
+# and the clip appears in the feed at its saved second.
+cand = None
+for _ in range(20):
+    cand = next((x for x in c.get("/inbox").json() if x["source_id"] == clip_source and x.get("is_place_candidate")), None)
+    if cand:
+        break
+    time.sleep(0.25)
+if cand:
+    r = c.post(f"/candidates/{cand['id']}/approve", json={})
+    spot = next((x for x in c.get("/reels/spots").json() if x["place_id"] == (r.json().get("place_id") if r.status_code in (200, 201) else None)), None)
+    if spot is None:
+        spot = next((x for x in c.get("/reels/spots").json() if "cerro" in x["name"].lower()), None)
+    if spot:
+        r = c.get("/reels", params={"trip_place_id": spot["trip_place_id"]}); cl = r.json()
+        rec("C3", r.status_code == 200 and cl and "start_seconds" in cl[0] and "found" in cl[0] and cl[0]["found"] is False, f"{len(cl)} clips; start={cl[0].get('start_seconds') if cl else None} found={cl[0].get('found') if cl else None}")
+        rec("C1", spot["found_count"] == 0 and spot["clip_count"] >= 1, f"spot {spot['name']}: {spot['clip_count']} clips, {spot['found_count']} found")
+    else:
+        rec("C3", False, f"kept the candidate but no spot for it: {[x['name'] for x in c.get('/reels/spots').json()]}")
+else:
+    rec("C3", False, f"no place candidate extracted from the saved clip; inbox={[(x['title'], x['source_id'] == clip_source) for x in c.get('/inbox').json()][:5]}")
 r = c.post("/sources", json={"url": "not a url"}); rec("V2", r.status_code in (400, 422), f"{r.status_code} {r.text[:80]}")
 buf = io.BytesIO()
 with zipfile.ZipFile(buf, "w") as z:
@@ -204,8 +222,13 @@ def ask(q, **kw):
 r, a = ask("Is Antigua safe at night?"); rec("Q1", r.status_code == 200 and a.get("citations"), f"{a.get('text','')[:80]!r} cites={len(a.get('citations',[]))}")
 r, a = ask("Is Rio safe?"); rec("Q2", r.status_code == 200 and ("rio" in a.get("text","").lower()), f"{a.get('text','')[:80]!r}")
 r, a = ask("What should I know about Bogotá?"); rec("Q3", r.status_code == 200, f"{a.get('text','')[:80]!r} tools={a.get('tools_used')}")
-r, a = ask("What is near me right now?", lat=14.5586, lon=-90.7295); props = a.get("proposed_actions") or []
-rec("Q4", r.status_code == 200, f"{a.get('text','')[:60]!r} proposals={len(props)}")
+# A proposal comes from a practical question about one place: the place is
+# the focus, and "worth going today" is what makes it practical.
+focus = c.get("/places").json()[0]
+before_items = len(c.get("/itinerary").json()) if c.get("/itinerary").status_code == 200 else None
+r, a = ask(f"Is {focus['name']} worth going to today?", lat=14.5586, lon=-90.7295, trip_place_id=focus["trip_place_id"]); props = a.get("proposed_actions") or []
+after_items = len(c.get("/itinerary").json()) if c.get("/itinerary").status_code == 200 else None
+rec("Q4", r.status_code == 200 and len(props) == 1 and props[0]["type"] == "add_to_today" and before_items == after_items, f"{a.get('text','')[:60]!r} proposals={len(props)} items {before_items}->{after_items}")
 if props:
     r = c.post("/ask/confirm", json=props[0]); rec("Q5", r.status_code == 200, f"{r.status_code} {r.text[:60]}")
     r2 = c.post("/ask/confirm", json=props[0]); rec("Q5b", r2.status_code == 200 and r2.json().get("itinerary_item_id") == r.json().get("itinerary_item_id"), "second confirm is the same item")
