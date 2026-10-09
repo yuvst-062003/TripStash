@@ -51,7 +51,7 @@ function pin(index: number, stop: RouteStop, total: number): L.DivIcon {
       `${index % 2 ? ' stoppin--left' : ''}" ` +
       `aria-label="Stop ${index + 1} of ${total}: ${escapeHtml(label)}">` +
       `${index + 1}` +
-      `<span class="stoppin__label">${escapeHtml(label)}</span>` +
+      `<span class="stoppin__label" dir="auto">${escapeHtml(label)}</span>` +
       `</div>`,
     iconSize: [30, 30],
     iconAnchor: [15, 15],
@@ -409,6 +409,21 @@ export default function TripHome() {
     }
   }, [])
 
+  const removeStop = useCallback(async (destinationId: string) => {
+    setSaving(destinationId)
+    setRouteError(null)
+    try {
+      await api.removeDestination(destinationId)
+      // The stops after it move up and re-date, so take the whole route back.
+      const fresh = await api.route()
+      setRoute(fresh.data)
+    } catch (error) {
+      setRouteError(error instanceof Error ? error.message : 'Could not remove that stop.')
+    } finally {
+      setSaving(null)
+    }
+  }, [])
+
   const applyFix = useCallback(
     async (check: RouteCheck) => {
       const stop = route?.stops.find((s) => s.destination.id === check.fix?.payload.destination_id)
@@ -527,12 +542,15 @@ export default function TripHome() {
             {mode === 'plan' ? (
               <PlanPane
                 route={route}
+                loadError={loaded.error}
+                onRetry={loaded.reload}
                 saving={saving}
                 error={routeError}
                 onNights={setNights}
                 onAdd={addStop}
                 onFix={applyFix}
                 onOnRoute={setOnRoute}
+                onRemove={removeStop}
                 onAsk={() => openAsk({ surface: 'trip', contextLabel: 'your route' })}
                 onFocus={setFocus}
               />
@@ -550,22 +568,28 @@ export default function TripHome() {
 
 function PlanPane({
   route,
+  loadError,
+  onRetry,
   saving,
   error,
   onNights,
   onAdd,
   onFix,
   onOnRoute,
+  onRemove,
   onAsk,
   onFocus,
 }: {
   route: Route | null
+  loadError: string | null
+  onRetry: () => void
   saving: string | null
   error: string | null
   onNights: (stop: RouteStop, next: number | null) => void
   onAdd: (name: string, afterPosition: number | null) => Promise<void>
   onFix: (check: RouteCheck) => Promise<void>
   onOnRoute: (destinationId: string, onRoute: boolean) => Promise<void>
+  onRemove: (destinationId: string) => Promise<void>
   onAsk: () => void
   onFocus: (country: string) => void
 }) {
@@ -573,6 +597,11 @@ function PlanPane({
   // goes after (so inserting mid-route does not reorder what is there), and
   // 'end' is the append slot at the bottom.
   const [insertAfter, setInsertAfter] = useState<number | 'end' | null>(null)
+  // A route that could not be loaded is not an empty route. Saying "no stops
+  // yet" over a failed request tells the traveller their trip is gone.
+  if (!route && loadError) {
+    return <ErrorNote message={loadError} onRetry={onRetry} />
+  }
   if (!route || !route.stops.length) {
     return (
       <Note tone="neutral">
@@ -661,6 +690,7 @@ function PlanPane({
                 onNights={onNights}
                 onFocus={onFocus}
                 onSetAside={() => onOnRoute(stop.destination.id, false)}
+                onRemove={() => onRemove(stop.destination.id)}
               />
             </div>
           )
@@ -700,7 +730,7 @@ function PlanPane({
           {route.alternatives?.map((alt) => (
             <div key={alt.id} className="alt">
               <div className="alt__text">
-                <span className="alt__name">
+                <span className="alt__name" dir="auto">
                   {alt.name}
                   {alt.country && <span className="t-xs dim"> · {alt.country}</span>}
                 </span>
@@ -742,6 +772,9 @@ function AddStop({
 }) {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
+  // State lags a tap by a render, so two taps in one tick both saw `busy`
+  // as false and added the stop twice. A ref is set before anything waits.
+  const inFlight = useRef(false)
   const fieldRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -751,11 +784,13 @@ function AddStop({
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     const trimmed = name.trim()
-    if (!trimmed || busy) return
+    if (!trimmed || inFlight.current) return
+    inFlight.current = true
     setBusy(true)
     try {
       await onAdd(trimmed)
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
@@ -765,6 +800,7 @@ function AddStop({
       <input
         ref={fieldRef}
         className="addstop__field"
+        dir="auto"
         value={name}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => event.key === 'Escape' && onCancel()}
@@ -793,6 +829,7 @@ function Stop({
   onNights,
   onFocus,
   onSetAside,
+  onRemove,
 }: {
   stop: RouteStop
   index: number
@@ -800,8 +837,11 @@ function Stop({
   onNights: (stop: RouteStop, next: number | null) => void
   onFocus: (country: string) => void
   onSetAside: () => void
+  onRemove: () => void
 }) {
   const [ideas, setIdeas] = useState(false)
+  // Removing is the one route edit with no undo, so it asks once, in place.
+  const [confirming, setConfirming] = useState(false)
   const nights = stop.nights
   const arrive = stopDate(stop.arrive_on)
   const depart = stopDate(stop.depart_on)
@@ -814,7 +854,8 @@ function Stop({
       </span>
       <div className="stop__main">
         <button
-          className="stop__name stop__namebtn clamp-1"
+          className="stop__name stop__namebtn"
+          dir="auto"
           onClick={() => stop.destination.country && onFocus(stop.destination.country)}
           aria-label={`Fly to ${stop.destination.name}, ${stop.destination.country ?? ''}`}
         >
@@ -861,7 +902,34 @@ function Stop({
       <button className="stop__aside" disabled={busy} onClick={onSetAside}>
         Set aside as alternative
       </button>
+      <button
+        className="stop__remove"
+        disabled={busy}
+        aria-expanded={confirming}
+        onClick={() => setConfirming((on) => !on)}
+      >
+        Remove
+      </button>
     </div>
+    {confirming && (
+      <div className="stop__confirm" role="group" aria-label={`Remove ${stop.destination.name}?`}>
+        <span dir="auto">Remove {stop.destination.name} from the route? Its nights go with it.</span>
+        <button
+          type="button"
+          className="btn btn--sm btn--accent"
+          disabled={busy}
+          onClick={() => {
+            setConfirming(false)
+            onRemove()
+          }}
+        >
+          Remove
+        </button>
+        <button type="button" className="btn btn--sm btn--plain" onClick={() => setConfirming(false)}>
+          Keep
+        </button>
+      </div>
+    )}
     {ideas && <StopIdeas name={stop.destination.name} />}
     </>
   )

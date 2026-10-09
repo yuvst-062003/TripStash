@@ -148,6 +148,8 @@ export const api = {
   createTrip: (body: Record<string, unknown>) => post<Trip>('/api/v1/trips', body),
   addDestination: (body: Record<string, unknown>) =>
     post<unknown>('/api/v1/trips/current/destinations', body),
+  removeDestination: (destinationId: string) =>
+    del<void>(`/api/v1/trips/current/destinations/${destinationId}`),
 
   // The itinerary. Nights are sent; dates come back derived, because changing
   // one stop moves every stop after it and that sum belongs on the server.
