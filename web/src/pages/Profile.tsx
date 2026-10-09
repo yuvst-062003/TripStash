@@ -80,7 +80,7 @@ export default function Profile() {
         {failedSave && <ErrorNote message={failedSave} />}
       </section>
 
-      <Link to="/saved" className="card profile__card profile__link">
+      <Link to="/saved?tab=sources" className="card profile__card profile__link">
         <span className="item__body">
           <span className="t-md">Your sources</span>
           <span className="t-sm dim">

@@ -94,3 +94,15 @@ export function matchesCountry(feature: CountryFeature, name: string | null): bo
   const raw = (feature.properties?.name ?? '').toLowerCase()
   return raw === wanted || countryName(feature).toLowerCase() === wanted
 }
+
+/**
+ * Whether the camera may fly. Someone who asked their phone for less motion
+ * gets a cut instead of a flight: the same framing, no travel in between.
+ */
+export function prefersReducedMotion(): boolean {
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  } catch {
+    return false
+  }
+}

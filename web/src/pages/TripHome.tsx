@@ -19,7 +19,12 @@ import { api } from '../lib/api'
 import { useApp, useScreenContext } from '../lib/context'
 import { useAsync } from '../lib/hooks'
 import type { HomePayload, Route, RouteCheck, RouteStop } from '../lib/types'
-import { type CountryFeature, loadCountries, matchesCountry } from '../lib/basemap'
+import {
+  type CountryFeature,
+  loadCountries,
+  matchesCountry,
+  prefersReducedMotion,
+} from '../lib/basemap'
 import { CacheNote, ErrorNote, Note, SkeletonRows } from '../components/ui'
 import CityCards from '../components/CityCards'
 import { StopIdeas, StopSuggestions, TravellerVoices, TripChecks } from '../components/TripAdvice'
@@ -351,13 +356,20 @@ export default function TripHome() {
       const bounds = inCountry.length
         ? L.latLngBounds(inCountry).pad(inCountry.length === 1 ? 2 : 0.5)
         : (boundsRef.current.get(focus) ?? null)
-      if (bounds) map.flyToBounds(bounds, { ...padding, maxZoom: 9, duration: 1.1 })
+      if (bounds) {
+        if (prefersReducedMotion()) map.fitBounds(bounds, { ...padding, maxZoom: 9, animate: false })
+        else map.flyToBounds(bounds, { ...padding, maxZoom: 9, duration: 1.1 })
+      }
       return
     }
     // The first framing is instant: an animated flight started before the map
     // has its real size lands on the wrong place. Later moves fly.
     if (!framedRef.current) {
       framedRef.current = true
+      map.fitBounds(L.latLngBounds(points), { ...padding, maxZoom: 9, animate: false })
+      return
+    }
+    if (prefersReducedMotion()) {
       map.fitBounds(L.latLngBounds(points), { ...padding, maxZoom: 9, animate: false })
       return
     }

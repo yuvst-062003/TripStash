@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import type { MediaStage, PlaceSummary, SourceSummary } from '../lib/types'
 import { useApp, useScreenContext } from '../lib/context'
@@ -39,10 +39,17 @@ import {
 } from '../components/icons'
 
 type View = 'activity' | 'inbox' | 'places' | 'knowledge' | 'sources'
+const VIEWS: View[] = ['activity', 'inbox', 'places', 'knowledge', 'sources']
 
 /** The discovery library: what was collected, while Map answers where it is. */
 export default function Saved() {
-  const [view, setView] = useState<View>('activity')
+  // The tab lives in the URL, so "Saved → Sources" from Profile lands on
+  // Sources and a back press returns to the tab you left.
+  const [params, setParams] = useSearchParams()
+  const fromUrl = params.get('tab')
+  const view: View = VIEWS.includes(fromUrl as View) ? (fromUrl as View) : 'activity'
+  const setView = (next: View) =>
+    setParams(next === 'activity' ? {} : { tab: next }, { replace: false })
   const { openSave } = useApp()
   useScreenContext({ surface: 'saved' })
 
