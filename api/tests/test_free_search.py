@@ -72,3 +72,41 @@ def test_gringo_has_its_own_search_when_one_is_set(monkeypatch):
         assert get_gringo_search().name == "tavily"
     finally:
         get_web_search.cache_clear()
+
+
+def test_reddit_threads_come_through_search_without_an_approved_app(monkeypatch):
+    from app.adapters.web_search import WebResult
+    from app.config import get_settings
+    from app.models.core import Destination
+    from app.services import discover
+
+    class Engine:
+        name = "tavily"
+
+        def search(self, query, limit=5):
+            assert query.startswith("site:reddit.com ")
+            return [
+                WebResult(
+                    "https://www.reddit.com/r/backpacking/comments/abc/antigua_to_atitlan/",
+                    "Antigua to Atitlan?",
+                    "Take the shuttle, not the chicken bus.",
+                    "www.reddit.com",
+                ),
+                WebResult("https://www.reddit.com/r/travel/", "r/travel", "", "www.reddit.com"),
+            ]
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "web_search_provider", "tavily")
+    monkeypatch.setattr(discover, "get_web_search", Engine)
+    monkeypatch.setattr(discover, "get_gringo_search", Engine)
+
+    out = discover.discover_between(
+        Destination(name="Antigua", country="Guatemala"),
+        Destination(name="San Pedro La Laguna", country="Guatemala"),
+    )
+
+    assert out["live"]["reddit"] is True
+    # Threads only - a subreddit's front page is not something anyone said.
+    assert [(v["by"], v["snippet"]) for v in out["reddit"]] == [
+        ("r/backpacking", "Take the shuttle, not the chicken bus.")
+    ]
