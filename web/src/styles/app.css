@@ -1940,7 +1940,13 @@ a.trip__avatar { text-decoration: none; }
 /* Each action stays on one line; a long stop name wraps the row, not the words. */
 .stop__extras { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); align-items: center; margin-left: 44px; }
 .stop__extras .stop__ideas { margin-left: 0; }
-.stop__extras > * { white-space: nowrap; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.stop__extras > * { white-space: nowrap; min-width: 0; }
+/* The text actions keep their 20px look and pad out to a 44px hit area; the
+   negative margins give the padding back to the layout. */
+.stop__extras .stop__ideas,
+.stop__extras .stop__aside,
+.stop__extras .stop__remove { padding: 12px 0; margin-block: -10px; }
+.stop__extras .stop__ideas { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .stop__aside {
   padding: 2px 0;
   border: 0;
@@ -1983,10 +1989,7 @@ a.trip__avatar { text-decoration: none; }
 .mapbtn,
 .iconbtn,
 .tabs__item,
-.leaflet-marker-icon.stoppin,
-.stop__ideas,
-.stop__aside,
-.stop__remove {
+.leaflet-marker-icon.stoppin {
   position: relative;
 }
 .btn--sm::after,
@@ -2000,11 +2003,4 @@ a.trip__avatar { text-decoration: none; }
   content: '';
   position: absolute;
   inset: -5px;
-}
-.stop__ideas::after,
-.stop__aside::after,
-.stop__remove::after {
-  content: '';
-  position: absolute;
-  inset: -12px -6px;
 }
