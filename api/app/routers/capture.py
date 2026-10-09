@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+from urllib.parse import urlsplit
 
 from fastapi import (
     APIRouter,
@@ -52,6 +53,13 @@ from app.services.extraction import (
 )
 from app.services.finding import find_videos
 from app.worker import enqueue_source_processing
+
+
+def looks_like_a_link(url: str) -> bool:
+    """Whether a string could be fetched at all: a web scheme and a host."""
+    parts = urlsplit(url.strip())
+    return parts.scheme in ("http", "https") and "." in parts.netloc
+
 
 router = APIRouter(tags=["capture"])
 
@@ -135,6 +143,14 @@ def capture_link(
     trip: Trip = Depends(current_trip),
 ) -> SourceResponse:
     """Paste a link, article, message or note."""
+    if body.kind is SourceKind.LINK and body.url and not looks_like_a_link(body.url):
+        # Refused here rather than stored as a failed source: a source that
+        # could never have been fetched is a typo, and a typo wants a
+        # correction, not a row in Sources with Retry under it.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "That doesn't look like a web address. A link starts with http:// or https://.",
+        )
     try:
         source = create_source(
             session,
